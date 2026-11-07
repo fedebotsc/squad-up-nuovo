@@ -13,10 +13,20 @@ import {
   AlertTriangle,
   Zap,
   Flame,
+  MessageSquare,
+  Radio,
+  Award,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
+import { CreateClanModal } from "./CreateClanModal";
+import { ClanChatTab } from "./ClanChatTab";
+import { ClanVoiceTab } from "./ClanVoiceTab";
+import { ClanRolesTab } from "./ClanRolesTab";
+import { ClanLoyaltyTab } from "./ClanLoyaltyTab";
 
 export const ClanSection: React.FC = () => {
   const {
@@ -25,9 +35,12 @@ export const ClanSection: React.FC = () => {
     sCoinBalance,
     donateToClan,
     currentUser,
+    userProfile,
     refreshUserData,
     openAuthModal,
   } = useSquad();
+
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "loyalty">("overview");
 
   const [selectedDonation, setSelectedDonation] = useState<number>(50);
   const [customDonation, setCustomDonation] = useState<string>("");
@@ -42,10 +55,6 @@ export const ClanSection: React.FC = () => {
 
   // Create Clan Modal
   const [showCreateClan, setShowCreateClan] = useState(false);
-  const [newClanName, setNewClanName] = useState("");
-  const [newClanTag, setNewClanTag] = useState("");
-  const [newClanDescription, setNewClanDescription] = useState("");
-  const [isCreatingClan, setIsCreatingClan] = useState(false);
 
   const handleDonate = async () => {
     if (!currentUser) {
@@ -105,66 +114,6 @@ export const ClanSection: React.FC = () => {
     }
   };
 
-  const handleCreateClanSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) {
-      openAuthModal("signup");
-      return;
-    }
-
-    if (!newClanName.trim() || !newClanTag.trim()) {
-      toast({
-        title: "Dati mancanti",
-        description: "Nome e Tag del clan sono obbligatori.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsCreatingClan(true);
-    try {
-      const cleanTag = newClanTag.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
-
-      const { data, error } = await supabase
-        .from("clans")
-        .insert({
-          name: newClanName.trim(),
-          tag: cleanTag,
-          description: newClanDescription.trim() || "Squad competitiva COD Warzone",
-          game_mode: "Warzone",
-          region: "EU",
-          owner_id: currentUser.id,
-          is_recruiting: true,
-          subscription_tier: "free",
-          clan_treasury_sc: 0,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await refreshUserData();
-      setShowCreateClan(false);
-      setNewClanName("");
-      setNewClanTag("");
-      setNewClanDescription("");
-
-      toast({
-        title: "Clan Fondato con Successo! 🛡️",
-        description: `Il clan [${cleanTag}] è ora attivo su Supabase.`,
-      });
-    } catch (err: any) {
-      console.error("[ClanSection] Errore creazione clan:", err);
-      toast({
-        title: "Errore creazione clan",
-        description: err.message || "Impossibile creare il clan. Tag già in uso?",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreatingClan(false);
-    }
-  };
-
   // EMPTY STATE (NOT IN A CLAN)
   if (!clanData) {
     return (
@@ -177,7 +126,7 @@ export const ClanSection: React.FC = () => {
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white">Nessun Clan Trovato</h3>
             <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
-              Non fai ancora parte di un clan attivo su SquadUP. Crea la tua squadra o richiedi l'ingresso in una legione esistente!
+              Non fai ancora parte di un clan attivo su SquadUP. Fonda la tua squadra con scelta livello (Base, Pro, Elite) o unisciti a una legione!
             </p>
           </div>
 
@@ -190,125 +139,94 @@ export const ClanSection: React.FC = () => {
                   setShowCreateClan(true);
                 }
               }}
-              className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+              className="w-full py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5 text-cyan-300" />
-              <span>Fonda un Nuovo Clan</span>
+              <span>Fonda un Nuovo Clan (Base, Pro o Elite)</span>
             </button>
           </div>
         </div>
 
         {/* Modal Fonda Clan */}
-        {showCreateClan && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-            <div className="w-full max-w-sm bg-[#0f1322] border border-purple-500/40 rounded-3xl p-5 shadow-2xl space-y-3.5">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-cyan-400" />
-                  Fonda il Tuo Clan
-                </h4>
-                <button
-                  onClick={() => setShowCreateClan(false)}
-                  className="p-1 rounded-full text-zinc-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateClanSubmit} className="space-y-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                    Nome Clan <span className="text-purple-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="es. Cyber Knights"
-                    value={newClanName}
-                    onChange={(e) => setNewClanName(e.target.value)}
-                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                    Tag Clan (max 5 lettere) <span className="text-purple-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={5}
-                    placeholder="es. CYBER"
-                    value={newClanTag}
-                    onChange={(e) => setNewClanTag(e.target.value.toUpperCase())}
-                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 uppercase focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                    Descrizione & Obiettivi
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Clan competitivo Warzone e tornei community..."
-                    value={newClanDescription}
-                    onChange={(e) => setNewClanDescription(e.target.value)}
-                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl p-2 text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isCreatingClan}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-                >
-                  {isCreatingClan ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Shield className="w-4 h-4" />
-                  )}
-                  <span>Crea Clan Ufficiale</span>
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
+        <CreateClanModal
+          isOpen={showCreateClan}
+          onClose={() => setShowCreateClan(false)}
+          currentUser={currentUser}
+          sCoinBalance={sCoinBalance}
+          onSuccess={refreshUserData}
+        />
       </div>
     );
   }
 
+  const isProOrElite =
+    clanData.tier === "pro" ||
+    clanData.tier === "elite" ||
+    clanData.subscriptionTier === "pro" ||
+    clanData.subscriptionTier === "elite";
+
   // AUTHENTIC CLAN VIEW
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
       {/* Clan Hero Card */}
       <div className="relative rounded-2xl overflow-hidden border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-[#13172e] to-[#0c0f1c] p-4 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 p-0.5 shadow-[0_0_15px_rgba(139,92,246,0.5)] shrink-0">
-              <div className="w-full h-full bg-[#0d1120] rounded-[14px] flex items-center justify-center overflow-hidden">
-                {clanData.avatarUrl ? (
-                  <img src={clanData.avatarUrl} alt={clanData.name} className="w-full h-full object-cover" />
-                ) : (
-                  <Shield className="w-7 h-7 text-cyan-400" />
-                )}
+            <div className="relative shrink-0">
+              {/* Equipped Clan Frame from Loyalty or Custom */}
+              {clanData.clanFrameUrl && (
+                <div
+                  className="absolute -inset-1.5 rounded-2xl pointer-events-none z-10 border-2"
+                  style={{
+                    borderColor: clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4",
+                    boxShadow: `0 0 12px ${clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4"}80`,
+                  }}
+                />
+              )}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 p-0.5 shadow-[0_0_15px_rgba(139,92,246,0.5)]">
+                <div className="w-full h-full bg-[#0d1120] rounded-[14px] flex items-center justify-center overflow-hidden">
+                  {clanData.avatarUrl ? (
+                    <img src={clanData.avatarUrl} alt={clanData.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Shield className="w-7 h-7 text-cyan-400" />
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h2 className="text-base font-extrabold text-white tracking-wide truncate max-w-[150px]">
+                <h2 className="text-base font-extrabold text-white tracking-wide truncate max-w-[140px]">
                   {clanData.name}
                 </h2>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
                   [{clanData.tag}]
                 </span>
+
+                {/* Tier Badge */}
+                {clanData.tier === "elite" || clanData.subscriptionTier === "elite" ? (
+                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/50 flex items-center gap-0.5">
+                    <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                    ELITE
+                  </span>
+                ) : clanData.tier === "pro" || clanData.subscriptionTier === "pro" ? (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-400/50 flex items-center gap-0.5">
+                    <Crown className="w-2.5 h-2.5 text-purple-400" />
+                    PRO
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                    BASE
+                  </span>
+                )}
+
                 {isOwner && (
                   <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
                     LEADER
                   </span>
                 )}
               </div>
+
               <div className="flex items-center gap-2 text-xs text-zinc-300 mt-0.5">
                 <span className="font-semibold text-purple-300">{clanData.gameMode}</span>
                 <span>•</span>
@@ -334,167 +252,314 @@ export const ClanSection: React.FC = () => {
           </p>
         )}
 
-        {/* Upgrade Clan Tier Banner Button */}
-        <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
-            <Crown className="w-4 h-4 text-amber-400" />
-            <span>Potenzia a Clan Pro o Elite</span>
-          </div>
-          <button
-            onClick={() => setShowSubModal(true)}
-            className="py-1 px-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-[11px] font-bold rounded-lg shadow-sm cursor-pointer"
-          >
-            Upgrade Clan
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Donation Card */}
-      <section
-        aria-label="Donazione SCoin Clan"
-        className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Gift className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              Dona SCoin alla Cassaforte
-            </h3>
-          </div>
-          <span className="text-[10px] text-zinc-400">
-            Tuo saldo: <strong className="text-amber-300">{sCoinBalance} SCoin</strong>
-          </span>
-        </div>
-
-        {/* Donation chip presets */}
-        <div className="grid grid-cols-4 gap-2">
-          {[25, 50, 100, 200].map((amount) => (
+        {/* Upgrade / Tier info banner */}
+        {!isProOrElite ? (
+          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span>Sblocca ruoli e premi con Clan Pro o Elite</span>
+            </div>
             <button
-              key={amount}
-              type="button"
-              onClick={() => {
-                setSelectedDonation(amount);
-                setCustomDonation("");
-              }}
-              className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                selectedDonation === amount && !customDonation
-                  ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                  : "bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:text-white"
-              }`}
+              onClick={() => setShowSubModal(true)}
+              className="py-1 px-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-[11px] font-bold rounded-lg shadow-sm cursor-pointer"
             >
-              +{amount}
+              Upgrade Clan
             </button>
-          ))}
-        </div>
-
-        {/* Custom amount input + donate button */}
-        <div className="flex items-center gap-2 pt-1">
-          <input
-            type="number"
-            min="1"
-            max={sCoinBalance}
-            placeholder="Altro importo..."
-            value={customDonation}
-            onChange={(e) => setCustomDonation(e.target.value)}
-            className="flex-1 bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-zinc-700/60 focus:outline-none focus:border-amber-400"
-          />
-
-          <button
-            type="button"
-            onClick={handleDonate}
-            disabled={isSubmitting || sCoinBalance <= 0}
-            className="py-2 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Invio...</span>
-              </>
-            ) : (
-              <>
-                <Heart className="w-3.5 h-3.5 fill-black" />
-                <span>Dona</span>
-              </>
-            )}
-          </button>
-        </div>
-      </section>
-
-      {/* Real Clan Members Roster */}
-      <section
-        aria-label="Membri del Clan"
-        className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
-      >
-        <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-          <div className="flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-purple-400" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              Roster Clan ({clanMembers.length})
-            </h3>
-          </div>
-          <span className="text-[10px] text-zinc-400">Attivi su Supabase</span>
-        </div>
-
-        {clanMembers.length > 0 ? (
-          <div className="space-y-2">
-            {clanMembers.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/70"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative shrink-0">
-                    {member.avatar ? (
-                      <img
-                        src={member.avatar}
-                        alt={member.name}
-                        className="w-9 h-9 rounded-xl object-cover border border-purple-500/40"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs">
-                        {member.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white block truncate max-w-[140px]">
-                      {member.name}
-                    </span>
-                    <span className="text-[10px] font-semibold text-purple-400">
-                      {member.role}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         ) : (
-          <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
-            Nessun membro trovato nel clan.
+          <div className="mt-3 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+            <span className="flex items-center gap-1 text-purple-300">
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              Abbonamento {clanData.tier?.toUpperCase()} attivo
+            </span>
+            <span className="text-zinc-300 font-medium">
+              Durata: {clanData.subscriptionMonths || 1} Mesi
+            </span>
           </div>
         )}
-      </section>
+      </div>
 
-      {/* CLAN OWNER MANAGEMENT & DELETION SECTION */}
-      {isOwner && (
-        <section className="bg-rose-950/20 border border-rose-500/30 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
-            <AlertTriangle className="w-4 h-4" />
-            <span>Zona Amministrativa Owner Clan</span>
+      {/* Modern Navigation Tabs */}
+      <div className="grid grid-cols-5 gap-1 bg-[#101426] p-1 rounded-2xl border border-purple-900/30">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "overview"
+              ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Roster</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "chat"
+              ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-cyan-300" />
+          <span>Chat</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("voice")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "voice"
+              ? "bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Radio className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Vocale</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("roles")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "roles"
+              ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-amber-300" />
+          <span>Ruoli</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("loyalty")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "loyalty"
+              ? "bg-amber-600 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]"
+              : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Award className="w-3.5 h-3.5 text-amber-400" />
+          <span>Premi</span>
+        </button>
+      </div>
+
+      {/* TAB CONTENT: OVERVIEW */}
+      {activeTab === "overview" && (
+        <div className="space-y-4">
+          {/* Quick Voice Access Banner */}
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#151a32] to-cyan-950/40 border border-emerald-500/30 flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
+                <Radio className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white block">Stanza Vocale Clan Agora</span>
+                <span className="text-[10px] text-zinc-400">Canale crittografato a 24ms per i compagni</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab("voice")}
+              className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+            >
+              <span>Entra</span>
+            </button>
           </div>
-          <p className="text-[11px] text-zinc-400 leading-snug">
-            In qualità di fondatore del clan, hai il controllo totale delle impostazioni. Se desideri sciogliere la squadra, puoi eliminare il clan.
-          </p>
 
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="w-full py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          {/* Quick Donation Card */}
+          <section
+            aria-label="Donazione SCoin Clan"
+            className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
           >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span>Elimina Clan Definitivamente</span>
-          </button>
-        </section>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Gift className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Dona SCoin alla Cassaforte
+                </h3>
+              </div>
+              <span className="text-[10px] text-zinc-400">
+                Tuo saldo: <strong className="text-amber-300">{sCoinBalance} SCoin</strong>
+              </span>
+            </div>
+
+            {/* Donation chip presets */}
+            <div className="grid grid-cols-4 gap-2">
+              {[25, 50, 100, 200].map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDonation(amount);
+                    setCustomDonation("");
+                  }}
+                  className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                    selectedDonation === amount && !customDonation
+                      ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                      : "bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:text-white"
+                  }`}
+                >
+                  +{amount}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom amount input + donate button */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="number"
+                min="1"
+                max={sCoinBalance}
+                placeholder="Altro importo..."
+                value={customDonation}
+                onChange={(e) => setCustomDonation(e.target.value)}
+                className="flex-1 bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-zinc-700/60 focus:outline-none focus:border-amber-400"
+              />
+
+              <button
+                type="button"
+                onClick={handleDonate}
+                disabled={isSubmitting || sCoinBalance <= 0}
+                className="py-2 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Invio...</span>
+                  </>
+                ) : (
+                  <>
+                    <Heart className="w-3.5 h-3.5 fill-black" />
+                    <span>Dona</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+
+          {/* Real Clan Members Roster */}
+          <section
+            aria-label="Membri del Clan"
+            className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-purple-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Roster Clan ({clanMembers.length})
+                </h3>
+              </div>
+              <span className="text-[10px] text-zinc-400">Attivi su Supabase</span>
+            </div>
+
+            {clanMembers.length > 0 ? (
+              <div className="space-y-2">
+                {clanMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/70"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative shrink-0">
+                        {member.avatar ? (
+                          <img
+                            src={member.avatar}
+                            alt={member.name}
+                            className="w-9 h-9 rounded-xl object-cover border border-purple-500/40"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs">
+                            {member.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-white block truncate max-w-[140px]">
+                          {member.name}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold text-purple-400">
+                            {member.role}
+                          </span>
+                          {member.customRoleTitle && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40">
+                              ★ {member.customRoleTitle}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
+                Nessun membro trovato nel clan.
+              </div>
+            )}
+          </section>
+
+          {/* CLAN OWNER MANAGEMENT & DELETION SECTION */}
+          {isOwner && (
+            <section className="bg-rose-950/20 border border-rose-500/30 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Zona Amministrativa Owner Clan</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                In qualità di fondatore del clan, hai il controllo totale delle impostazioni. Se desideri sciogliere la squadra, puoi eliminare il clan definitivamente.
+              </p>
+
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>Elimina Clan Definitivamente</span>
+              </button>
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* TAB CONTENT: CHAT */}
+      {activeTab === "chat" && (
+        <ClanChatTab
+          clanId={clanData.id}
+          clanTag={clanData.tag}
+          currentUser={currentUser}
+          clanMembers={clanMembers}
+        />
+      )}
+
+      {/* TAB CONTENT: VOICE */}
+      {activeTab === "voice" && (
+        <ClanVoiceTab
+          clanData={clanData}
+          clanMembers={clanMembers}
+          currentUser={currentUser}
+        />
+      )}
+
+      {/* TAB CONTENT: ROLES */}
+      {activeTab === "roles" && (
+        <ClanRolesTab
+          clanData={clanData}
+          clanMembers={clanMembers}
+          currentUser={currentUser}
+          onRefresh={refreshUserData}
+          onOpenUpgrade={() => setShowSubModal(true)}
+        />
+      )}
+
+      {/* TAB CONTENT: LOYALTY */}
+      {activeTab === "loyalty" && (
+        <ClanLoyaltyTab
+          clanData={clanData}
+          currentUser={currentUser}
+          userProfile={userProfile}
+          onRefresh={refreshUserData}
+          onOpenUpgrade={() => setShowSubModal(true)}
+        />
       )}
 
       {/* Clan Deletion Modal Confirmation */}

@@ -82,7 +82,7 @@ interface SquadContextType {
   activeStory: Story | null;
   setActiveStory: (story: Story | null) => void;
   toggleLikePost: (postId: string) => void;
-  createPost: (content: string, game: string, imageFile?: File) => Promise<boolean>;
+  createPost: (content: string, game: string, imageFile?: File, asClan?: boolean) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
   createStory: (file: File, caption?: string) => Promise<boolean>;
 
@@ -289,6 +289,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               isRecruiting: rawClan.is_recruiting ?? true,
               ownerId: rawClan.owner_id,
               level: Math.max(1, Math.floor((rawClan.clan_treasury_sc || 0) / 1000)),
+              tier: (rawClan.tier as any) || (rawClan.subscription_tier === "elite" ? "elite" : rawClan.subscription_tier === "pro" ? "pro" : "base"),
+              subscriptionTier: (rawClan.subscription_tier as any) || "free",
+              subscriptionMonths: rawClan.subscription_months || 1,
+              subscriptionExpiresAt: rawClan.subscription_expires_at,
+              clanFrameUrl: rawClan.clan_frame_url,
+              clanBannerUrl: rawClan.clan_banner_url,
             });
 
             // Fetch members of this clan
@@ -302,9 +308,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               setClanMembers(
                 membersList.map((m: any) => ({
                   id: m.user_id,
+                  userId: m.user_id,
                   name: m.profiles?.display_name || m.profiles?.username || "Membro",
                   avatar: m.profiles?.avatar_url || "",
                   role: m.role === "founder" ? "Leader" : m.role === "admin" ? "Co-Leader" : "Membro",
+                  customRoleId: m.custom_role_id,
+                  customRoleTitle: m.custom_role_title,
                   donatedSCoin: 0,
                   isOnline: false,
                   joinedAt: m.joined_at,
@@ -377,6 +386,17 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           content,
           media_url,
           created_at,
+          clan_id,
+          posted_as_clan,
+          clans:clan_id (
+            id,
+            name,
+            tag,
+            avatar_url,
+            banner_url,
+            clan_frame_url,
+            tier
+          ),
           profiles:user_id (
             id,
             username,
@@ -408,15 +428,30 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const authorProf = p.profiles;
             const authorName = authorProf?.display_name || authorProf?.username || "Giocatore";
             const authorHandle = authorProf?.username ? `@${authorProf.username}` : "@gamer";
+            const clanObj = p.clans;
+
             return {
               id: p.id,
               userId: p.user_id,
+              clanId: p.clan_id || undefined,
+              postedAsClan: Boolean(p.posted_as_clan && p.clan_id),
+              clan: clanObj
+                ? {
+                    id: clanObj.id,
+                    name: clanObj.name,
+                    tag: clanObj.tag,
+                    avatarUrl: clanObj.avatar_url,
+                    bannerUrl: clanObj.banner_url,
+                    clanFrameUrl: clanObj.clan_frame_url,
+                    tier: clanObj.tier,
+                  }
+                : undefined,
               author: {
                 id: p.user_id,
                 name: authorName,
                 handle: authorHandle,
                 avatar: authorProf?.avatar_url || "",
-                clanTag: undefined,
+                clanTag: clanObj?.tag || undefined,
                 verified: false,
                 activisionId: authorProf?.activision_id,
               },
@@ -603,7 +638,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Create post on Supabase `posts` table
-  const createPost = async (content: string, game: string, imageFile?: File): Promise<boolean> => {
+  const createPost = async (
+    content: string,
+    game: string,
+    imageFile?: File,
+    asClan?: boolean
+  ): Promise<boolean> => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
 
@@ -653,12 +693,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     try {
+      const isPublishingAsClan = Boolean(asClan && clanData?.id);
+
       const { data: insertedPost, error } = await supabase
         .from("posts")
         .insert({
           user_id: user.id,
           content: content.trim(),
           media_url: mediaUrl || null,
+          clan_id: isPublishingAsClan ? clanData?.id : null,
+          posted_as_clan: isPublishingAsClan,
         })
         .select(`
           id,
@@ -666,6 +710,17 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           content,
           media_url,
           created_at,
+          clan_id,
+          posted_as_clan,
+          clans:clan_id (
+            id,
+            name,
+            tag,
+            avatar_url,
+            banner_url,
+            clan_frame_url,
+            tier
+          ),
           profiles:user_id (
             id,
             username,
@@ -682,16 +737,31 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (insertedPost) {
         const authorProf = insertedPost.profiles as any;
+        const clanObj = insertedPost.clans as any;
+
         const newPost: Post = {
           id: insertedPost.id,
           userId: insertedPost.user_id,
+          clanId: insertedPost.clan_id || undefined,
+          postedAsClan: Boolean(insertedPost.posted_as_clan && insertedPost.clan_id),
+          clan: clanObj
+            ? {
+                id: clanObj.id,
+                name: clanObj.name,
+                tag: clanObj.tag,
+                avatarUrl: clanObj.avatar_url,
+                bannerUrl: clanObj.banner_url,
+                clanFrameUrl: clanObj.clan_frame_url,
+                tier: clanObj.tier,
+              }
+            : undefined,
           author: {
             id: user.id,
             name: authorProf?.display_name || authorProf?.username || userProfile.name,
             handle: authorProf?.username ? `@${authorProf.username}` : `@${userProfile.name}`,
             avatar: authorProf?.avatar_url || userProfile.avatar,
-            clanTag: clanData?.tag,
-            verified: false,
+            clanTag: clanObj?.tag || clanData?.tag,
+            verified: isPublishingAsClan,
             activisionId: authorProf?.activision_id,
           },
           timeAgo: "Adesso",
@@ -705,8 +775,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
         setPosts((prev) => [newPost, ...prev]);
         toast({
-          title: "Post pubblicato! 🚀",
-          description: "Il post è ora visibile a tutta la community.",
+          title: isPublishingAsClan ? "Post Clan Pubblicato! 🛡️" : "Post pubblicato! 🚀",
+          description: isPublishingAsClan
+            ? `Pubblicato con successo a nome del clan [${clanData?.tag}] ${clanData?.name}.`
+            : "Il post è ora visibile a tutta la community.",
         });
         return true;
       }

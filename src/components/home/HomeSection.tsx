@@ -19,6 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   Smile,
+  Shield,
+  Crown,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +44,7 @@ export const HomeSection: React.FC = () => {
     currentUser,
     openAuthModal,
     clanData,
+    clanMembers,
   } = useSquad();
 
   const [selectedGameFilter, setSelectedGameFilter] = useState<string>("Tutti");
@@ -50,6 +53,18 @@ export const HomeSection: React.FC = () => {
   const [isComposing, setIsComposing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [publishAsClan, setPublishAsClan] = useState(false);
+
+  const isClanAdminOrOwner = Boolean(
+    currentUser &&
+      clanData &&
+      (clanData.ownerId === currentUser.id ||
+        clanMembers.some(
+          (m) =>
+            (m.userId === currentUser.id || m.id === currentUser.id) &&
+            (m.role === "Leader" || m.role === "Co-Leader" || m.role === "admin" || m.role === "founder")
+        ))
+  );
 
   // Comments state
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -190,13 +205,15 @@ export const HomeSection: React.FC = () => {
     const success = await createPost(
       newPostContent.trim(),
       selectedPostGame,
-      selectedFile || undefined
+      selectedFile || undefined,
+      publishAsClan && isClanAdminOrOwner
     );
     setIsSubmitting(false);
     if (success) {
       setNewPostContent("");
       setSelectedFile(null);
       setIsComposing(false);
+      setPublishAsClan(false);
     }
   };
 
@@ -422,12 +439,48 @@ export const HomeSection: React.FC = () => {
                 onClick={() => {
                   setIsComposing(false);
                   setSelectedFile(null);
+                  setPublishAsClan(false);
                 }}
                 className="text-xs text-zinc-400 hover:text-white"
               >
                 Annulla
               </button>
             </div>
+
+            {/* Clan Authorship Selector (Admin / Owner) */}
+            {isClanAdminOrOwner && clanData && (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs">
+                <div className="flex items-center gap-1.5 text-zinc-300 font-semibold text-[11px]">
+                  <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Pubblica come:</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPublishAsClan(false)}
+                    className={`px-2 py-1 rounded-lg font-bold text-[10px] transition-all cursor-pointer ${
+                      !publishAsClan
+                        ? "bg-purple-600 text-white shadow-sm"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    👤 Personale
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPublishAsClan(true)}
+                    className={`px-2 py-1 rounded-lg font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer ${
+                      publishAsClan
+                        ? "bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]"
+                        : "text-zinc-400 hover:text-cyan-300"
+                    }`}
+                  >
+                    <Shield className="w-3 h-3 text-cyan-300" />
+                    <span>Clan [{clanData.tag}]</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <textarea
               rows={3}
@@ -549,46 +602,107 @@ export const HomeSection: React.FC = () => {
             return (
               <article
                 key={post.id}
-                className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-4 shadow-md space-y-3 transition-all hover:border-purple-700/40"
+                className={`border rounded-2xl p-4 shadow-md space-y-3 transition-all ${
+                  post.postedAsClan && post.clan
+                    ? "bg-gradient-to-b from-[#141830] to-[#0f1224] border-cyan-500/40 shadow-[0_4px_20px_rgba(6,182,212,0.12)]"
+                    : "bg-[#121628]/90 border-purple-900/30 hover:border-purple-700/40"
+                }`}
               >
-                {/* Author Header */}
+                {/* Author Header (Clan vs Personal) */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    {post.author.avatar ? (
-                      <img
-                        src={post.author.avatar}
-                        alt={post.author.name}
-                        className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0">
-                        {post.author.name.slice(0, 2).toUpperCase()}
+                  {post.postedAsClan && post.clan ? (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative shrink-0">
+                        {post.clan.clanFrameUrl && (
+                          <div
+                            className="absolute -inset-1 rounded-xl pointer-events-none z-10 border-2"
+                            style={{
+                              borderColor:
+                                post.clan.tier === "elite"
+                                  ? "#F59E0B"
+                                  : post.clan.tier === "pro"
+                                  ? "#A855F7"
+                                  : "#06B6D4",
+                              boxShadow:
+                                post.clan.tier === "elite"
+                                  ? "0 0 10px rgba(245,158,11,0.5)"
+                                  : "0 0 8px rgba(6,182,212,0.4)",
+                            }}
+                          />
+                        )}
+                        {post.clan.avatarUrl ? (
+                          <img
+                            src={post.clan.avatarUrl}
+                            alt={post.clan.name}
+                            className="w-10 h-10 rounded-xl object-cover border-2 border-cyan-400/70 shadow-sm"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-800 via-indigo-700 to-cyan-600 flex items-center justify-center border-2 border-cyan-400/60 text-white shadow-sm">
+                            <Shield className="w-5 h-5 text-cyan-200" />
+                          </div>
+                        )}
                       </div>
-                    )}
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-zinc-100 truncate max-w-[130px]">
-                          {post.author.name}
-                        </span>
-                        {post.author.activisionId && (
-                          <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
-                            COD: {post.author.activisionId}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-black text-white tracking-wide truncate max-w-[130px]">
+                            {post.clan.name}
                           </span>
-                        )}
-                        {post.author.clanTag && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40">
-                            [{post.author.clanTag}]
+                          <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/50">
+                            [{post.clan.tag}]
                           </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-zinc-400 flex items-center gap-1">
-                        <span className="truncate max-w-[90px]">{post.author.handle}</span>
-                        <span>•</span>
-                        <span className="shrink-0">{post.timeAgo}</span>
+                          <span className="text-[8px] font-extrabold px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-cyan-500/20 text-amber-300 border border-amber-400/40 uppercase tracking-wider flex items-center gap-0.5">
+                            <Crown className="w-2.5 h-2.5 text-amber-400" />
+                            CLAN UFFICIALE
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                          <span className="text-purple-300 truncate max-w-[110px]">
+                            di {post.author.name} (Admin)
+                          </span>
+                          <span>•</span>
+                          <span className="shrink-0">{post.timeAgo}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {post.author.avatar ? (
+                        <img
+                          src={post.author.avatar}
+                          alt={post.author.name}
+                          className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0">
+                          {post.author.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-zinc-100 truncate max-w-[130px]">
+                            {post.author.name}
+                          </span>
+                          {post.author.activisionId && (
+                            <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
+                              COD: {post.author.activisionId}
+                            </span>
+                          )}
+                          {post.author.clanTag && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40">
+                              [{post.author.clanTag}]
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                          <span className="truncate max-w-[90px]">{post.author.handle}</span>
+                          <span>•</span>
+                          <span className="shrink-0">{post.timeAgo}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 shrink-0">

@@ -27,6 +27,17 @@ export interface PostComment {
 export interface Post {
   id: string;
   userId: string;
+  clanId?: string;
+  postedAsClan?: boolean;
+  clan?: {
+    id: string;
+    name: string;
+    tag: string;
+    avatarUrl?: string;
+    bannerUrl?: string;
+    clanFrameUrl?: string;
+    tier?: string;
+  };
   author: {
     id: string;
     name: string;
@@ -119,13 +130,22 @@ export interface ClanData {
   isRecruiting: boolean;
   ownerId: string;
   level?: number;
+  tier?: "base" | "pro" | "elite";
+  subscriptionTier?: "free" | "plus" | "pro" | "elite";
+  subscriptionMonths?: number;
+  subscriptionExpiresAt?: string | null;
+  clanFrameUrl?: string;
+  clanBannerUrl?: string;
 }
 
 export interface ClanMember {
   id: string;
+  userId?: string;
   name: string;
   avatar?: string;
   role: string;
+  customRoleId?: string;
+  customRoleTitle?: string;
   donatedSCoin?: number;
   isOnline: boolean;
   joinedAt?: string;
