@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   X,
   Sparkles,
   Check,
   Palette,
-  Image as ImageIcon,
+  UploadCloud,
   Crown,
   Shield,
   Loader2,
   Lock,
+  Image as ImageIcon,
+  CheckCircle2,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,39 +21,45 @@ interface ProfileCustomizerModalProps {
   onClose: () => void;
 }
 
-export const BANNER_PRESETS = [
+// Tactical SVG / CSS Gradients (No external placeholder links)
+export const BANNER_THEMES = [
   {
-    id: "banner-cyber",
-    name: "Cyber Grid",
-    url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
+    id: "theme-void",
+    name: "Void Obsidian",
+    gradient: "from-[#0a0d18] via-[#1a1136] to-[#0b0c16]",
+    accent: "purple",
     costSC: 0,
     isFree: true,
   },
   {
-    id: "banner-neon",
-    name: "Neon Tokyo",
-    url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&auto=format&fit=crop&q=80",
+    id: "theme-cyber",
+    name: "Cyber Neon",
+    gradient: "from-[#06202e] via-[#093548] to-[#05111e]",
+    accent: "cyan",
     costSC: 50,
     isFree: false,
   },
   {
-    id: "banner-warzone",
-    name: "Tactical Recon",
-    url: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&auto=format&fit=crop&q=80",
+    id: "theme-recon",
+    name: "Emerald Recon",
+    gradient: "from-[#061e14] via-[#093322] to-[#04130d]",
+    accent: "emerald",
     costSC: 50,
     isFree: false,
   },
   {
-    id: "banner-gold",
-    name: "Golden Legend",
-    url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80",
+    id: "theme-gold",
+    name: "Champion Gold",
+    gradient: "from-[#2a1e05] via-[#4d370b] to-[#1c1404]",
+    accent: "amber",
     costSC: 50,
     isFree: false,
   },
   {
-    id: "banner-nebula",
-    name: "Deep Void",
-    url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=800&auto=format&fit=crop&q=80",
+    id: "theme-inferno",
+    name: "Inferno Crimson",
+    gradient: "from-[#29070c] via-[#4d0d17] to-[#180306]",
+    accent: "rose",
     costSC: 50,
     isFree: false,
   },
@@ -104,128 +112,184 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { userProfile, sCoinBalance, refreshUserData, currentUser } = useSquad();
-  const [activeTab, setActiveTab] = useState<"banners" | "frames" | "themes">("banners");
-  const [selectedBanner, setSelectedBanner] = useState<string>(
-    userProfile.bannerUrl || BANNER_PRESETS[0].url
-  );
-  const [selectedFrame, setSelectedFrame] = useState<string>(
-    userProfile.avatarFrame || "base"
-  );
-  const [selectedTheme, setSelectedTheme] = useState<"gold" | "neon">(
-    userProfile.proTheme || "gold"
-  );
-  const [customBannerUrl, setCustomBannerUrl] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const { userProfile, sCoinBalance, refreshUserData, currentUser, openAuthModal } = useSquad();
+  const [activeTab, setActiveTab] = useState<"upload" | "themes" | "frames">("upload");
+  const [selectedFrame, setSelectedFrame] = useState<string>(userProfile.avatarFrame || "base");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
   const isPro = userProfile.subscriptionTier === "pro";
   const unlockedBanners = userProfile.unlockedBanners || [];
 
-  const handleApplyBanner = async (preset: typeof BANNER_PRESETS[0]) => {
-    if (!currentUser) return;
-    setIsSaving(true);
+  // Direct File Upload for Banner to Supabase bucket 'social-media'
+  const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress("Caricamento banner su storage protetto...");
+
     try {
-      const isAlreadyUnlocked =
-        preset.isFree || unlockedBanners.includes(preset.id) || isPro;
+      const ext = file.name.split(".").pop() || "jpg";
+      const filePath = `${currentUser.id}/banner_${Date.now()}.${ext}`;
 
-      if (!isAlreadyUnlocked) {
-        if (sCoinBalance < preset.costSC) {
-          toast({
-            title: "Saldo SCoin insufficiente",
-            description: `Servono ${preset.costSC} SCoin per sbloccare questo banner (hai ${sCoinBalance} SCoin).`,
-            variant: "destructive",
-          });
-          setIsSaving(false);
-          return;
-        }
+      const { error: uploadError } = await supabase.storage
+        .from("social-media")
+        .upload(filePath, file, { upsert: true });
 
-        // Try RPC buy_profile_banner
-        const { error: rpcErr } = await supabase.rpc("buy_profile_banner", {
-          p_banner_id: preset.id,
-          p_banner_url: preset.url,
-          p_pay_with_coins: true,
-        });
+      if (uploadError) throw uploadError;
 
-        if (rpcErr) {
-          // Fallback direct update
-          await supabase
-            .from("profiles")
-            .update({
-              banner_url: preset.url,
-              unlocked_banners: [...unlockedBanners, preset.id],
-              coins: Math.max(0, sCoinBalance - preset.costSC),
-              balance: Math.max(0, sCoinBalance - preset.costSC),
-            })
-            .eq("id", currentUser.id);
-        }
-      } else {
-        // Equip banner
-        await supabase
-          .from("profiles")
-          .update({ banner_url: preset.url })
-          .eq("id", currentUser.id);
-      }
+      const publicUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data.publicUrl;
 
-      setSelectedBanner(preset.url);
+      // Update in profiles table
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          banner_url: publicUrl,
+        })
+        .eq("id", currentUser.id);
+
+      if (updateError) throw updateError;
+
       await refreshUserData();
       toast({
-        title: "Banner equipaggiato!",
-        description: `Il banner "${preset.name}" è ora attivo sul tuo profilo.`,
+        title: "Banner Profilo Aggiornato! 🎨",
+        description: "Il nuovo file immagine è stato salvato con successo nel tuo profilo.",
       });
+
+      if (bannerFileInputRef.current) bannerFileInputRef.current.value = "";
     } catch (err: any) {
-      console.error("[Customizer] Errore salvataggio banner:", err);
+      console.error("[Customizer] Errore upload banner:", err);
       toast({
-        title: "Errore salvataggio",
-        description: err.message || "Impossibile aggiornare il banner.",
+        title: "Errore caricamento banner",
+        description: err.message || "Impossibile salvare il file.",
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
+      setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
-  const handleApplyCustomUrl = async () => {
-    if (!customBannerUrl.trim() || !currentUser) return;
-    setIsSaving(true);
+  // Direct File Upload for Avatar to Supabase bucket 'social-media'
+  const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress("Caricamento avatar su storage protetto...");
+
     try {
-      await supabase
+      const ext = file.name.split(".").pop() || "jpg";
+      const filePath = `${currentUser.id}/avatar_${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("social-media")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const publicUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data.publicUrl;
+
+      // Update in profiles table
+      const { error: updateError } = await supabase
         .from("profiles")
-        .update({ banner_url: customBannerUrl.trim() })
+        .update({
+          avatar_url: publicUrl,
+        })
         .eq("id", currentUser.id);
-      setSelectedBanner(customBannerUrl.trim());
+
+      if (updateError) throw updateError;
+
       await refreshUserData();
       toast({
-        title: "Banner personalizzato applicato",
-        description: "Il nuovo URL del banner è stato salvato.",
+        title: "Avatar Profilo Aggiornato! 👤",
+        description: "La tua nuova immagine avatar è attiva su SquadUP.",
       });
-      setCustomBannerUrl("");
+
+      if (avatarFileInputRef.current) avatarFileInputRef.current.value = "";
+    } catch (err: any) {
+      console.error("[Customizer] Errore upload avatar:", err);
+      toast({
+        title: "Errore caricamento avatar",
+        description: err.message || "Impossibile salvare il file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  };
+
+  // Select Preset Theme
+  const handleApplyTheme = async (theme: typeof BANNER_THEMES[0]) => {
+    if (!currentUser) return;
+    setIsUploading(true);
+    try {
+      const isUnlocked = theme.isFree || unlockedBanners.includes(theme.id) || isPro;
+
+      if (!isUnlocked && sCoinBalance < theme.costSC) {
+        toast({
+          title: "Saldo SCoin insufficiente",
+          description: `Servono ${theme.costSC} SCoin per sbloccare questo stile (hai ${sCoinBalance} SCoin).`,
+          variant: "destructive",
+        });
+        setIsUploading(false);
+        return;
+      }
+
+      await supabase
+        .from("profiles")
+        .update({
+          pro_theme: theme.id === "theme-gold" ? "gold" : "neon",
+        })
+        .eq("id", currentUser.id);
+
+      await refreshUserData();
+      toast({
+        title: "Stema Tema Equipaggiato",
+        description: `Lo stile "${theme.name}" è ora attivo.`,
+      });
     } catch (err: any) {
       toast({
-        title: "Errore",
+        title: "Errore salvataggio tema",
         description: err.message,
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
+      setIsUploading(false);
     }
   };
 
+  // Equip Avatar Frame
   const handleApplyFrame = async (frameId: string) => {
     if (!currentUser) return;
     const target = AVATAR_FRAMES.find((f) => f.id === frameId);
     if (target?.requiresPro && !isPro) {
       toast({
-        title: "Vantaggio Esclusivo Pro 👑",
+        title: "Vantaggio Esclusivo Player Pro 👑",
         description: "La cornice Golden Champion richiede un abbonamento Player Pro attivo.",
       });
       return;
     }
 
-    setIsSaving(true);
+    setIsUploading(true);
     try {
-      // Store in profiles (bio or custom columns)
       await supabase
         .from("profiles")
         .update({
@@ -237,7 +301,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
       await refreshUserData();
       toast({
         title: "Cornice Avatar Aggiornata",
-        description: `Stile ${target?.name} equipaggiato con successo.`,
+        description: `Cornice ${target?.name} equipaggiata con successo.`,
       });
     } catch (err: any) {
       toast({
@@ -246,317 +310,256 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
         variant: "destructive",
       });
     } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleApplyTheme = async (theme: "gold" | "neon") => {
-    if (!currentUser) return;
-    setIsSaving(true);
-    try {
-      await supabase
-        .from("profiles")
-        .update({ pro_theme: theme })
-        .eq("id", currentUser.id);
-      setSelectedTheme(theme);
-      await refreshUserData();
-      toast({
-        title: "Tema Pro Aggiornato",
-        description: `Tema ${theme === "gold" ? "Oro Tattico" : "Neon Cyber"} attivato.`,
-      });
-    } catch (err: any) {
-      toast({ title: "Errore tema", description: err.message, variant: "destructive" });
-    } finally {
-      setIsSaving(false);
+      setIsUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-purple-500/40 p-5 shadow-[0_0_35px_rgba(139,92,246,0.3)] overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-cyan-500/40 p-5 shadow-[0_0_35px_rgba(6,182,212,0.25)] overflow-hidden max-h-[92vh] flex flex-col">
+        {/* Ambient Top Glow */}
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-gradient-to-r from-cyan-500/30 via-purple-600/30 to-amber-500/20 blur-2xl pointer-events-none" />
+
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-full text-zinc-400 hover:text-white bg-zinc-900 transition-colors cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-purple-900/50 text-purple-300 border border-purple-500/30">
-              <Palette className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-extrabold text-white">Personalizza Profilo</h3>
-              <p className="text-[10px] text-zinc-400">Banner, cornici avatar ed estetica</p>
-            </div>
+        <div className="text-center pb-3 border-b border-zinc-800">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-extrabold text-cyan-300 uppercase tracking-wider mb-1">
+            <Palette className="w-3.5 h-3.5 text-cyan-400" />
+            Personalizzazione Profilo
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full text-zinc-400 hover:text-white bg-zinc-900 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <h3 className="text-base font-extrabold text-white">Caricamento Media & Stile</h3>
+          <p className="text-[11px] text-zinc-400">
+            Carica file diretti salvati su Supabase Storage e seleziona cornici avatar
+          </p>
         </div>
 
-        {/* Live Preview Box */}
-        <div className="my-3 rounded-2xl overflow-hidden border border-purple-500/30 relative h-28 bg-zinc-950">
-          <img
-            src={selectedBanner}
-            alt="Banner preview"
-            className="w-full h-full object-cover opacity-80"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-          <div className="absolute bottom-2 left-3 flex items-center gap-2.5">
-            <div
-              className={`w-12 h-12 rounded-xl overflow-hidden bg-purple-950 border-2 ${
-                AVATAR_FRAMES.find((f) => f.id === selectedFrame)?.borderClass || "border-purple-500"
-              } ${
-                AVATAR_FRAMES.find((f) => f.id === selectedFrame)?.glowClass || ""
-              }`}
-            >
-              {userProfile.avatar ? (
-                <img src={userProfile.avatar} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center font-bold text-xs text-white">
-                  {userProfile.name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-extrabold text-white">{userProfile.name}</span>
-                {isPro && (
-                  <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    PRO
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] text-zinc-400 block">{userProfile.tag}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Subtabs */}
-        <div className="grid grid-cols-3 p-1 bg-[#14182a] rounded-xl border border-zinc-800 mb-3">
+        {/* Tabs */}
+        <div className="grid grid-cols-3 gap-1 bg-[#121628] p-1 rounded-2xl border border-zinc-800 my-3">
           <button
-            onClick={() => setActiveTab("banners")}
-            className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
-              activeTab === "banners"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-white"
+            onClick={() => setActiveTab("upload")}
+            className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "upload"
+                ? "bg-gradient-to-r from-cyan-600 to-purple-600 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Banner
+            Upload File
           </button>
           <button
             onClick={() => setActiveTab("frames")}
-            className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "frames"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-gradient-to-r from-cyan-600 to-purple-600 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             Cornici
           </button>
           <button
             onClick={() => setActiveTab("themes")}
-            className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === "themes"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-gradient-to-r from-cyan-600 to-purple-600 text-white shadow-md"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Temi Pro
+            Temi Colore
           </button>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-          {activeTab === "banners" && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-2.5">
-                {BANNER_PRESETS.map((preset) => {
-                  const isCurrent = selectedBanner === preset.url;
-                  const isUnlocked =
-                    preset.isFree || unlockedBanners.includes(preset.id) || isPro;
+        {/* TAB 1: DIRECT FILE UPLOADS (BANNER & AVATAR) */}
+        {activeTab === "upload" && (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+            {/* Hidden file inputs */}
+            <input
+              type="file"
+              ref={bannerFileInputRef}
+              onChange={handleBannerFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={avatarFileInputRef}
+              onChange={handleAvatarFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
 
-                  return (
+            {/* Banner Upload Box */}
+            <div className="bg-[#121629] p-3.5 rounded-2xl border border-zinc-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-cyan-400" />
+                  Banner Personale (File Diretto)
+                </span>
+                <span className="text-[10px] text-cyan-400 font-medium">social-media</span>
+              </div>
+
+              {userProfile.bannerUrl && (
+                <div className="w-full h-18 rounded-xl overflow-hidden border border-zinc-700 bg-black/60 relative">
+                  <img
+                    src={userProfile.bannerUrl}
+                    alt="Banner Attuale"
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-1 right-1.5 text-[9px] bg-black/75 px-1.5 py-0.5 rounded text-zinc-300">
+                    Attualmente Attivo
+                  </span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => bannerFileInputRef.current?.click()}
+                className="w-full py-2.5 px-3 rounded-xl border border-dashed border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/30 text-cyan-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <UploadCloud className="w-4 h-4 text-cyan-400" />
+                <span>Carica Nuovo Banner (JPG, PNG)</span>
+              </button>
+            </div>
+
+            {/* Avatar Upload Box */}
+            <div className="bg-[#121629] p-3.5 rounded-2xl border border-zinc-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                  <UploadCloud className="w-4 h-4 text-purple-400" />
+                  Foto Profilo Avatar (File Diretto)
+                </span>
+                <span className="text-[10px] text-purple-400 font-medium">social-media</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl overflow-hidden border border-purple-500/50 shrink-0 bg-purple-950">
+                  {userProfile.avatar ? (
+                    <img
+                      src={userProfile.avatar}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-purple-300">
+                      {userProfile.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => avatarFileInputRef.current?.click()}
+                  className="flex-1 py-2 px-3 rounded-xl border border-dashed border-purple-500/50 hover:border-purple-400 bg-purple-950/20 hover:bg-purple-950/30 text-purple-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4 text-purple-400" />
+                  <span>Scegli Foto Avatar</span>
+                </button>
+              </div>
+            </div>
+
+            {isUploading && (
+              <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/40 text-center space-y-1">
+                <Loader2 className="w-5 h-5 text-cyan-400 animate-spin mx-auto" />
+                <span className="text-xs font-bold text-white block">
+                  {uploadProgress || "Salvataggio in corso..."}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: AVATAR FRAMES */}
+        {activeTab === "frames" && (
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+            {AVATAR_FRAMES.map((frame) => {
+              const isSelected = selectedFrame === frame.id;
+              const isLocked = frame.requiresPro && !isPro;
+
+              return (
+                <div
+                  key={frame.id}
+                  onClick={() => !isLocked && handleApplyFrame(frame.id)}
+                  className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                    isSelected
+                      ? "border-cyan-400 bg-cyan-950/30 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
+                      : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                  } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  <div className="flex items-center gap-3">
                     <div
-                      key={preset.id}
-                      className={`relative rounded-xl overflow-hidden border p-2 flex items-center justify-between gap-3 transition-all ${
-                        isCurrent
-                          ? "border-cyan-400 bg-cyan-950/30"
-                          : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
-                      }`}
+                      className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${frame.previewColor} border-2 ${frame.borderClass} ${frame.glowClass} flex items-center justify-center font-extrabold text-black text-xs shrink-0`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={preset.url}
-                          alt={preset.name}
-                          className="w-16 h-10 rounded-lg object-cover border border-zinc-700 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-white truncate">{preset.name}</h4>
-                          <span className="text-[10px] text-zinc-400 block">
-                            {preset.isFree
-                              ? "Gratuito"
-                              : isPro
-                              ? "Incluso con Pro"
-                              : `${preset.costSC} SCoin`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleApplyBanner(preset)}
-                        disabled={isSaving}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                          isCurrent
-                            ? "bg-emerald-600 text-white"
-                            : isUnlocked
-                            ? "bg-purple-600 hover:bg-purple-500 text-white"
-                            : "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40"
-                        }`}
-                      >
-                        {isCurrent ? (
-                          <span className="flex items-center gap-1">
-                            <Check className="w-3 h-3" /> Attivo
-                          </span>
-                        ) : isUnlocked ? (
-                          "Equipaggia"
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <Lock className="w-3 h-3" /> Sblocca
+                      ★
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs">{frame.name}</span>
+                        {frame.requiresPro && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            PRO
                           </span>
                         )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Custom Banner URL */}
-              <div className="pt-2 border-t border-zinc-800 space-y-1.5">
-                <label className="text-[11px] font-semibold text-zinc-300">
-                  Oppure inserisci URL immagine personalizzato:
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    value={customBannerUrl}
-                    onChange={(e) => setCustomBannerUrl(e.target.value)}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleApplyCustomUrl}
-                    disabled={!customBannerUrl.trim() || isSaving}
-                    className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 text-white text-xs font-bold rounded-xl disabled:opacity-40"
-                  >
-                    Applica
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "frames" && (
-            <div className="space-y-2.5">
-              {AVATAR_FRAMES.map((frame) => {
-                const isCurrent = selectedFrame === frame.id;
-                const locked = frame.requiresPro && !isPro;
-
-                return (
-                  <div
-                    key={frame.id}
-                    onClick={() => !locked && handleApplyFrame(frame.id)}
-                    className={`rounded-xl border p-2.5 flex items-center justify-between gap-3 cursor-pointer transition-all ${
-                      isCurrent
-                        ? "border-cyan-400 bg-cyan-950/30"
-                        : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
-                    } ${locked ? "opacity-60" : ""}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-xl border-2 ${frame.borderClass} ${frame.glowClass} bg-gradient-to-br ${frame.previewColor} flex items-center justify-center text-black font-extrabold text-[10px]`}
-                      >
-                        {frame.name.slice(0, 2).toUpperCase()}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="text-xs font-bold text-white">{frame.name}</h4>
-                          {frame.requiresPro && (
-                            <span className="text-[9px] font-extrabold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                              PRO
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-zinc-400">
-                          {frame.requiresPro ? "Richiede Player Pro" : "Disponibile per tutti"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0">
-                      {isCurrent ? (
-                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-black flex items-center justify-center">
-                          <Check className="w-3.5 h-3.5" />
-                        </div>
-                      ) : locked ? (
-                        <div className="p-1 rounded-lg text-amber-400 bg-amber-500/10 border border-amber-500/30">
-                          <Crown className="w-4 h-4" />
-                        </div>
-                      ) : (
-                        <span className="text-xs text-purple-400 font-bold hover:underline">
-                          Scegli
-                        </span>
-                      )}
+                      <span className="text-[10px] text-zinc-400">
+                        {frame.requiresPro ? "Riservato agli abbonati Pro" : "Disponibile per tutti"}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
 
-          {activeTab === "themes" && (
-            <div className="space-y-3">
-              <div
-                onClick={() => handleApplyTheme("gold")}
-                className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                  selectedTheme === "gold"
-                    ? "border-amber-400 bg-amber-950/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-                    : "border-zinc-800 bg-zinc-900/60"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-extrabold text-amber-300 flex items-center gap-1.5">
-                    <Crown className="w-4 h-4 text-amber-400" />
-                    Tema Gold Champion
-                  </span>
-                  {selectedTheme === "gold" && <Check className="w-4 h-4 text-amber-400" />}
+                  <div>
+                    {isSelected ? (
+                      <span className="w-5 h-5 rounded-full bg-cyan-400 text-black flex items-center justify-center text-[11px] font-black">
+                        ✓
+                      </span>
+                    ) : isLocked ? (
+                      <Lock className="w-4 h-4 text-zinc-500" />
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 hover:text-white">Equipaggia</span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[11px] text-zinc-400 leading-snug">
-                  Accenti dorati, badge imperiale e riflessi caldi sul profilo e sulle card dei tornei.
-                </p>
-              </div>
+              );
+            })}
+          </div>
+        )}
 
-              <div
-                onClick={() => handleApplyTheme("neon")}
-                className={`p-3 rounded-2xl border cursor-pointer transition-all ${
-                  selectedTheme === "neon"
-                    ? "border-cyan-400 bg-cyan-950/20 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
-                    : "border-zinc-800 bg-zinc-900/60"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-extrabold text-cyan-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-cyan-400" />
-                    Tema Cyber Neon
-                  </span>
-                  {selectedTheme === "neon" && <Check className="w-4 h-4 text-cyan-400" />}
+        {/* TAB 3: THEMES */}
+        {activeTab === "themes" && (
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
+            {BANNER_THEMES.map((theme) => {
+              return (
+                <div
+                  key={theme.id}
+                  onClick={() => handleApplyTheme(theme)}
+                  className="p-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 hover:border-zinc-700 flex items-center justify-between gap-3 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-12 h-8 rounded-lg bg-gradient-to-r ${theme.gradient} border border-zinc-700 shrink-0`}
+                    />
+                    <div>
+                      <span className="font-bold text-white text-xs block">{theme.name}</span>
+                      <span className="text-[10px] text-zinc-400">
+                        {theme.isFree ? "Gratuito" : `${theme.costSC} SCoin`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button className="text-[10px] font-bold text-cyan-400 hover:underline">
+                    Equipaggia
+                  </button>
                 </div>
-                <p className="text-[11px] text-zinc-400 leading-snug">
-                  Accenti ciano luminescenti, glow futuristico e badge sintetico cyberpunk.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,9 +17,12 @@ import {
   Target,
   Medal,
   Check,
+  Image as ImageIcon,
+  X,
+  FileCheck,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { analyzeMatchScoreboard } from "@/services/geminiVisionService";
+import { analyzeDualMatchScreenshots } from "@/services/geminiVisionService";
 import { supabase } from "@/integrations/supabase/client";
 
 export const MatchRoomTab: React.FC = () => {
@@ -35,7 +38,14 @@ export const MatchRoomTab: React.FC = () => {
 
   const [chatInput, setChatInput] = useState("");
   const [scanStatus, setScanStatus] = useState<"idle" | "uploading" | "analyzing" | "verified">("idle");
-  const [scanImage, setScanImage] = useState<string | null>(null);
+
+  // Separate screenshots: Placement & Squad Kills
+  const [placementFile, setPlacementFile] = useState<File | null>(null);
+  const [placementPreview, setPlacementPreview] = useState<string | null>(null);
+
+  const [killsFile, setKillsFile] = useState<File | null>(null);
+  const [killsPreview, setKillsPreview] = useState<string | null>(null);
+
   const [scanResult, setScanResult] = useState<{
     kills: number;
     placement: number;
@@ -45,7 +55,8 @@ export const MatchRoomTab: React.FC = () => {
   } | null>(null);
 
   const [liveMessages, setLiveMessages] = useState<any[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const placementInputRef = useRef<HTMLInputElement>(null);
+  const killsInputRef = useRef<HTMLInputElement>(null);
 
   // Load tournament messages from Supabase
   useEffect(() => {
@@ -92,10 +103,10 @@ export const MatchRoomTab: React.FC = () => {
     const text = chatInput.trim();
     setChatInput("");
 
-    // Add locally to matchChat
+    // Add locally
     sendMatchMessage(text);
 
-    // Save to Supabase tournament_messages if match_chat exists
+    // Save to Supabase tournament_messages
     try {
       const { data: chats } = await supabase
         .from("tournament_match_chats")
@@ -116,9 +127,31 @@ export const MatchRoomTab: React.FC = () => {
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSelectPlacement = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) {
+      setPlacementFile(file);
+      setPlacementPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSelectKills = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setKillsFile(file);
+      setKillsPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleStartVerification = async () => {
+    if (!placementFile && !killsFile) {
+      toast({
+        title: "Screenshot mancante",
+        description: "Carica almeno uno screenshot del posizionamento o delle kill di squadra.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!currentUser) {
       openAuthModal("signup");
@@ -126,32 +159,40 @@ export const MatchRoomTab: React.FC = () => {
     }
 
     setScanStatus("uploading");
-    const previewUrl = URL.createObjectURL(file);
-    setScanImage(previewUrl);
 
     try {
-      // 1. Upload to Supabase bucket 'social-media' with path `${userId}/${Date.now()}.${ext}`
-      const fileExt = file.name.split(".").pop() || "jpg";
-      const filePath = `${currentUser.id}/match_${selectedTournament?.id || "cod"}_${Date.now()}.${fileExt}`;
+      let uploadedPlacementUrl = "";
+      let uploadedKillsUrl = "";
 
-      let uploadedUrl = previewUrl;
-      const { data: uploadRes, error: uploadErr } = await supabase.storage
-        .from("social-media")
-        .upload(filePath, file, { upsert: true });
+      // 1. Upload placement file if provided
+      if (placementFile) {
+        const ext = placementFile.name.split(".").pop() || "jpg";
+        const path = `${currentUser.id}/placement_${selectedTournament?.id || "match"}_${Date.now()}.${ext}`;
+        const { error: err } = await supabase.storage.from("social-media").upload(path, placementFile, { upsert: true });
+        if (!err) {
+          uploadedPlacementUrl = supabase.storage.from("social-media").getPublicUrl(path).data.publicUrl;
+        }
+      }
 
-      if (!uploadErr && uploadRes) {
-        uploadedUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data.publicUrl;
+      // 2. Upload kills file if provided
+      if (killsFile) {
+        const ext = killsFile.name.split(".").pop() || "jpg";
+        const path = `${currentUser.id}/kills_${selectedTournament?.id || "match"}_${Date.now()}.${ext}`;
+        const { error: err } = await supabase.storage.from("social-media").upload(path, killsFile, { upsert: true });
+        if (!err) {
+          uploadedKillsUrl = supabase.storage.from("social-media").getPublicUrl(path).data.publicUrl;
+        }
       }
 
       setScanStatus("analyzing");
 
-      // 2. Call Gemini Vision Analyzer
+      // 3. Gemini Vision Dual Analysis
       const rules = (selectedTournament as any)?.leaderboard_settings || {
         kill_points: 1,
-        placement_points: { "1": 15, "2": 10, "3": 7, "top5": 4 },
+        placement_points: { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3, top10: 1 },
       };
 
-      const visionData = await analyzeMatchScoreboard(file, rules);
+      const visionData = await analyzeDualMatchScreenshots(placementFile, killsFile, rules);
 
       setScanResult({
         kills: visionData.kills,
@@ -161,7 +202,7 @@ export const MatchRoomTab: React.FC = () => {
         notes: visionData.notes,
       });
 
-      // 3. Insert into Supabase tournament_messages
+      // 4. Save to tournament_messages
       let chatId = null;
       const { data: chats } = await supabase
         .from("tournament_match_chats")
@@ -185,11 +226,12 @@ export const MatchRoomTab: React.FC = () => {
       }
 
       if (chatId) {
+        const primaryImage = uploadedPlacementUrl || uploadedKillsUrl;
         await supabase.from("tournament_messages").insert({
           match_chat_id: chatId,
           sender_id: currentUser.id,
-          message: `Tabellone Match convalidato da Gemini Vision: ${visionData.kills} Kill, Piazzamento #${visionData.placement} (+${visionData.scoreAwarded} pt).`,
-          image_url: uploadedUrl,
+          message: `Verifica IA completata: Piazzamento #${visionData.placement}, ${visionData.kills} Kill (+${visionData.scoreAwarded} pt).`,
+          image_url: primaryImage,
           is_screenshot: true,
           ai_status: "verified",
           detected_kills: visionData.kills,
@@ -199,7 +241,7 @@ export const MatchRoomTab: React.FC = () => {
         });
       }
 
-      // 4. Update tournament_leaderboards
+      // 5. Update tournament_leaderboards
       if (selectedTournament?.id) {
         const teamId = `team_${currentUser.id.slice(0, 8)}`;
         const teamName = userProfile.clanTag
@@ -237,14 +279,14 @@ export const MatchRoomTab: React.FC = () => {
 
       setScanStatus("verified");
       toast({
-        title: "Punteggio Convalidato con Successo! 🎯",
-        description: `+${visionData.scoreAwarded} Punti e ${visionData.kills} Kill aggiornati nella classifica live.`,
+        title: "Screenshot Convalidati con Successo! 🎯",
+        description: `Posizione #${visionData.placement} e ${visionData.kills} Kill accreditate alla squadra (+${visionData.scoreAwarded} pt).`,
       });
     } catch (err: any) {
       console.error("[MatchRoom] Errore verifica screenshot:", err);
       toast({
-        title: "Errore scansione screenshot",
-        description: err.message || "Impossibile completare l'analisi dell'immagine.",
+        title: "Errore durante la scansione",
+        description: err.message || "Impossibile completare la verifica delle immagini.",
         variant: "destructive",
       });
       setScanStatus("idle");
@@ -253,12 +295,15 @@ export const MatchRoomTab: React.FC = () => {
 
   const handleResetScan = () => {
     setScanStatus("idle");
-    setScanImage(null);
+    setPlacementFile(null);
+    setPlacementPreview(null);
+    setKillsFile(null);
+    setKillsPreview(null);
     setScanResult(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (placementInputRef.current) placementInputRef.current.value = "";
+    if (killsInputRef.current) killsInputRef.current.value = "";
   };
 
-  // CLEAN EMPTY STATE IF NO TOURNAMENT SELECTED
   if (!selectedTournament) {
     return (
       <div className="space-y-4">
@@ -270,7 +315,7 @@ export const MatchRoomTab: React.FC = () => {
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white">Nessun match attivo selezionato</h3>
             <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
-              Per entrare in una Stanza Match e caricare gli screenshot delle kill con verifica IA, seleziona prima un torneo attivo.
+              Per entrare in una Stanza Match e caricare gli screenshot delle kill e del piazzamento, seleziona prima un torneo attivo.
             </p>
           </div>
 
@@ -305,7 +350,7 @@ export const MatchRoomTab: React.FC = () => {
             </h3>
           </div>
           <div className="text-right shrink-0">
-            <span className="text-[10px] text-zinc-400 block">Stato Arbitrale</span>
+            <span className="text-[10px] text-zinc-400 block">Arbitro IA</span>
             <span className="text-xs font-bold text-cyan-400 flex items-center justify-end gap-1">
               <ShieldCheck className="w-3.5 h-3.5" />
               Gemini Vision
@@ -319,31 +364,38 @@ export const MatchRoomTab: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 1: GEMINI VISION SCREENSHOT VERIFIER */}
+      {/* SECTION 1: GEMINI VISION DUAL SCREENSHOT VERIFIER */}
       <section
-        aria-label="Verifica Screenshot Kill Gemini Vision"
+        aria-label="Verifica Screenshot Posizionamento e Kill Gemini Vision"
         className="bg-gradient-to-b from-[#141a33] to-[#0e1324] border-2 border-cyan-500/40 rounded-2xl p-4 shadow-[0_0_20px_rgba(6,182,212,0.15)] space-y-4"
       >
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/50 text-[10px] font-bold text-cyan-300 uppercase tracking-wider mb-1">
               <Cpu className="w-3 h-3 text-cyan-400 animate-pulse" />
-              Arbitro Digitale (Gemini Vision)
+              Arbitraggio Automatico Gemini Vision
             </div>
             <h3 className="text-sm font-extrabold text-white">
-              Verifica Kill & Score Screenshot
+              Verifica Posizionamento & Kill di Squadra
             </h3>
             <p className="text-[11px] text-zinc-300 mt-0.5 break-words">
-              Carica lo screenshot del tabellone di fine partita. L'IA convalida kill e piazzamento aggiornando la classifica live.
+              Carica separatamente la foto della schermata di posizionamento finale e la foto della tabella kill di squadra.
             </p>
           </div>
         </div>
 
-        {/* Real file input */}
+        {/* Hidden inputs */}
         <input
           type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
+          ref={placementInputRef}
+          onChange={handleSelectPlacement}
+          accept="image/*"
+          className="hidden"
+        />
+        <input
+          type="file"
+          ref={killsInputRef}
+          onChange={handleSelectKills}
           accept="image/*"
           className="hidden"
         />
@@ -351,27 +403,89 @@ export const MatchRoomTab: React.FC = () => {
         {/* State: IDLE */}
         {scanStatus === "idle" && (
           <div className="space-y-3">
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/30 rounded-xl p-6 text-center cursor-pointer transition-all group"
-            >
-              <div className="w-12 h-12 mx-auto mb-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform">
-                <UploadCloud className="w-6 h-6" />
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Dropzone 1: Posizionamento */}
+              <div
+                onClick={() => placementInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[120px] ${
+                  placementPreview
+                    ? "border-emerald-500 bg-emerald-950/20"
+                    : "border-cyan-500/40 hover:border-cyan-400 bg-cyan-950/20"
+                }`}
+              >
+                {placementPreview ? (
+                  <div className="space-y-1.5 w-full">
+                    <img
+                      src={placementPreview}
+                      alt="Posizionamento"
+                      className="w-full h-16 object-cover rounded-lg border border-emerald-500/40"
+                    />
+                    <span className="text-[10px] font-extrabold text-emerald-300 flex items-center justify-center gap-1">
+                      <Check className="w-3 h-3" /> Foto Posizionamento
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-300 mb-1.5">
+                      <Trophy className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <span className="text-[11px] font-bold text-white block">
+                      1. Foto Posizione
+                    </span>
+                    <span className="text-[9px] text-zinc-400 block">
+                      Vittoria / Piazzamento (#1, #2...)
+                    </span>
+                  </>
+                )}
               </div>
-              <span className="text-xs font-bold text-zinc-200 block">
-                Seleziona o scatta lo screenshot del tabellone COD
-              </span>
-              <span className="text-[10px] text-zinc-400 mt-1 block">
-                Supporta JPG, PNG • Analisi Gemini Vision & Aggiornamento Live
-              </span>
+
+              {/* Dropzone 2: Kill di Squadra */}
+              <div
+                onClick={() => killsInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[120px] ${
+                  killsPreview
+                    ? "border-purple-500 bg-purple-950/20"
+                    : "border-purple-500/40 hover:border-purple-400 bg-purple-950/20"
+                }`}
+              >
+                {killsPreview ? (
+                  <div className="space-y-1.5 w-full">
+                    <img
+                      src={killsPreview}
+                      alt="Kill di Squadra"
+                      className="w-full h-16 object-cover rounded-lg border border-purple-500/40"
+                    />
+                    <span className="text-[10px] font-extrabold text-purple-300 flex items-center justify-center gap-1">
+                      <Check className="w-3 h-3" /> Foto Kill Squadra
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-300 mb-1.5">
+                      <Target className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <span className="text-[11px] font-bold text-white block">
+                      2. Foto Kill Squadra
+                    </span>
+                    <span className="text-[9px] text-zinc-400 block">
+                      Tabellone con Kills e Danni
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2.5 bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all cursor-pointer"
+              onClick={handleStartVerification}
+              disabled={!placementFile && !killsFile}
+              className={`w-full py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                placementFile || killsFile
+                  ? "bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.35)]"
+                  : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+              }`}
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
-              Carica Immagine Scoreboard
+              <span>Avvia Convalida Arbitrale con Gemini Vision</span>
             </button>
           </div>
         )}
@@ -387,11 +501,11 @@ export const MatchRoomTab: React.FC = () => {
             <div>
               <span className="text-xs font-bold text-white block">
                 {scanStatus === "uploading"
-                  ? "Caricamento screenshot nei bucket Supabase..."
-                  : "Analisi Gemini Vision in corso..."}
+                  ? "Caricamento screenshot nei bucket protetti..."
+                  : "Analisi IA Gemini Vision in corso..."}
               </span>
               <span className="text-[11px] text-cyan-300/80 block mt-1">
-                Riconoscimento OCR delle kill, del danno e del piazzamento finale...
+                Verifica incrociata di piazzamento finale, danni e totale kill squadra...
               </span>
             </div>
 
@@ -416,15 +530,29 @@ export const MatchRoomTab: React.FC = () => {
                 </span>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-200 border border-emerald-500/40">
-                Verificato
+                Punteggio Confermato
               </span>
             </div>
 
-            {scanImage && (
-              <div className="w-full h-36 rounded-xl overflow-hidden bg-black/50 border border-emerald-500/30">
-                <img src={scanImage} alt="Scoreboard" className="w-full h-full object-contain" />
-              </div>
-            )}
+            {/* Thumbnail previews */}
+            <div className="grid grid-cols-2 gap-2">
+              {placementPreview && (
+                <div className="h-24 rounded-lg overflow-hidden bg-black/60 border border-emerald-500/40 relative">
+                  <img src={placementPreview} alt="Posizione" className="w-full h-full object-cover" />
+                  <span className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.2 rounded text-[9px] font-bold text-emerald-300">
+                    Posizione #{scanResult.placement}
+                  </span>
+                </div>
+              )}
+              {killsPreview && (
+                <div className="h-24 rounded-lg overflow-hidden bg-black/60 border border-purple-500/40 relative">
+                  <img src={killsPreview} alt="Kill" className="w-full h-full object-cover" />
+                  <span className="absolute bottom-1 left-1 bg-black/70 px-1.5 py-0.2 rounded text-[9px] font-bold text-purple-300">
+                    Kill Squadra: {scanResult.kills}
+                  </span>
+                </div>
+              )}
+            </div>
 
             {/* Stats badges */}
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -451,7 +579,7 @@ export const MatchRoomTab: React.FC = () => {
               className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-zinc-800 cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Carica Altro Tabellone
+              <span>Verifica Nuova Partita</span>
             </button>
           </div>
         )}
@@ -459,44 +587,40 @@ export const MatchRoomTab: React.FC = () => {
 
       {/* SECTION 2: MATCH ROOM CHAT & TOURNAMENT MESSAGES */}
       <section
-        aria-label="Chat della Stanza Match"
+        aria-label="Chat Match e Arbitraggio Live"
         className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
       >
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
           <div className="flex items-center gap-1.5">
             <Swords className="w-4 h-4 text-purple-400" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              Chat della Stanza Match ({liveMessages.length + matchChat.length})
-            </h3>
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+              Registro Chat Stanza Match
+            </h4>
           </div>
-          <span className="text-[10px] text-cyan-400 font-semibold">Canale Supabase</span>
+          <span className="text-[10px] text-zinc-400">
+            {liveMessages.length + matchChat.length} messaggi
+          </span>
         </div>
 
-        {/* Live Messages Log */}
-        <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+        {/* Messages container */}
+        <div className="h-48 overflow-y-auto space-y-2 pr-1">
           {liveMessages.map((msg) => (
             <div
               key={msg.id}
-              className={`p-2.5 rounded-xl text-xs space-y-1 border ${
-                msg.is_screenshot
-                  ? "bg-cyan-950/20 border-cyan-500/40"
-                  : "bg-zinc-900/80 border-zinc-800"
-              }`}
+              className="bg-zinc-900/70 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-zinc-200 truncate max-w-[130px]">
+                <span className="font-bold text-cyan-400">
                   {msg.profiles?.display_name || msg.profiles?.username || "Operatore"}
                 </span>
                 <span className="text-[10px] text-zinc-500">
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
               </div>
-              <p className="text-zinc-300 text-xs leading-relaxed break-words">
-                {msg.message}
-              </p>
+              <p className="text-zinc-200 text-xs">{msg.message}</p>
               {msg.image_url && (
-                <div className="w-24 h-16 rounded-lg overflow-hidden border border-zinc-700 mt-1">
-                  <img src={msg.image_url} alt="Screenshot" className="w-full h-full object-cover" />
+                <div className="mt-1 max-w-[200px] rounded-lg overflow-hidden border border-zinc-700">
+                  <img src={msg.image_url} alt="Screenshot tabellone" className="w-full h-auto object-cover" />
                 </div>
               )}
             </div>
@@ -505,40 +629,35 @@ export const MatchRoomTab: React.FC = () => {
           {matchChat.map((msg) => (
             <div
               key={msg.id}
-              className="p-2.5 rounded-xl text-xs space-y-1 bg-zinc-900/80 border border-zinc-800"
+              className="bg-zinc-900/70 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1"
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-zinc-200 truncate max-w-[130px]">
-                  {msg.sender}
-                </span>
+                <span className="font-bold text-purple-300">{msg.sender}</span>
                 <span className="text-[10px] text-zinc-500">{msg.time}</span>
               </div>
-              <p className="text-zinc-300 text-xs leading-relaxed break-words">
-                {msg.text}
-              </p>
+              <p className="text-zinc-200 text-xs">{msg.text}</p>
             </div>
           ))}
 
           {liveMessages.length === 0 && matchChat.length === 0 && (
-            <div className="py-4 text-center text-xs text-zinc-400">
-              Nessun messaggio nella stanza match. Invia un messaggio per coordinarti o carica uno screenshot!
+            <div className="py-8 text-center text-xs text-zinc-500">
+              Nessun messaggio nella stanza match. Scrivi o carica gli screenshot per iniziare.
             </div>
           )}
         </div>
 
         {/* Chat input */}
-        <form onSubmit={handleSendMessage} className="flex items-center gap-2 pt-1">
+        <form onSubmit={handleSendMessage} className="flex gap-2 pt-1">
           <input
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Scrivi nella chat del match..."
+            placeholder="Comunica con l'arbitro o gli avversari..."
             className="flex-1 bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-purple-500"
           />
           <button
             type="submit"
-            disabled={!chatInput.trim()}
-            className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 disabled:opacity-40 text-white rounded-xl transition-colors cursor-pointer"
+            className="py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center justify-center transition-colors cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>

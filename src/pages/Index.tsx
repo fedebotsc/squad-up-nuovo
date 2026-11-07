@@ -5,6 +5,7 @@ import { BottomNavbar } from "@/components/layout/BottomNavbar";
 import { HomeSection } from "@/components/home/HomeSection";
 import { TournamentsSection } from "@/components/tournaments/TournamentsSection";
 import { VoiceSection } from "@/components/voice/VoiceSection";
+import { DirectMessagesSection } from "@/components/chat/DirectMessagesSection";
 import { ClanSection } from "@/components/clan/ClanSection";
 import { ProfileSection } from "@/components/profile/ProfileSection";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -32,6 +33,7 @@ const MainContent: React.FC = () => {
         {activeTab === "home" && <HomeSection />}
         {activeTab === "tournaments" && <TournamentsSection />}
         {activeTab === "voice" && <VoiceSection />}
+        {activeTab === "messages" && <DirectMessagesSection />}
         {activeTab === "clan" && <ClanSection />}
         {activeTab === "profile" && <ProfileSection />}
       </div>

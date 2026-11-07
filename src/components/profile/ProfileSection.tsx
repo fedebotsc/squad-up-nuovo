@@ -51,21 +51,24 @@ export const ProfileSection: React.FC = () => {
       id: "rw-1",
       title: "PlayStation Store Card 10€",
       cost: 1000,
-      image: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=300&auto=format&fit=crop&q=80",
+      iconType: "psn",
+      brandColor: "bg-blue-600/20 border-blue-500/50 text-blue-400",
       tag: "Codice Digitale Istantaneo",
     },
     {
       id: "rw-2",
       title: "Xbox Game Pass Ultimate 1 Mese",
       cost: 1200,
-      image: "https://images.unsplash.com/photo-1621259182978-fbf93132d53d?w=300&auto=format&fit=crop&q=80",
+      iconType: "xbox",
+      brandColor: "bg-emerald-600/20 border-emerald-500/50 text-emerald-400",
       tag: "Abbonamento Gaming",
     },
     {
       id: "rw-3",
       title: "Battle Pass Call of Duty",
       cost: 1100,
-      image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=300&auto=format&fit=crop&q=80",
+      iconType: "cod",
+      brandColor: "bg-amber-600/20 border-amber-500/50 text-amber-400",
       tag: "1.100 COD Points",
     },
   ];
@@ -487,11 +490,23 @@ export const ProfileSection: React.FC = () => {
               className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={rw.image}
-                  alt={rw.title}
-                  className="w-14 h-14 rounded-xl object-cover border border-purple-500/30 shrink-0"
-                />
+                <div
+                  className={`w-14 h-14 rounded-2xl border flex items-center justify-center font-black text-xs shrink-0 shadow-inner ${rw.brandColor}`}
+                >
+                  {rw.iconType === "psn" ? (
+                    <span className="text-center font-black tracking-tight leading-none">
+                      PSN<br /><span className="text-[9px]">10€</span>
+                    </span>
+                  ) : rw.iconType === "xbox" ? (
+                    <span className="text-center font-black tracking-tight leading-none">
+                      XBOX<br /><span className="text-[9px]">PASS</span>
+                    </span>
+                  ) : (
+                    <span className="text-center font-black tracking-tight leading-none text-amber-300">
+                      COD<br /><span className="text-[9px]">CP</span>
+                    </span>
+                  )}
+                </div>
                 <div className="min-w-0">
                   <span className="text-[10px] font-bold text-cyan-400 block uppercase">
                     {rw.tag}

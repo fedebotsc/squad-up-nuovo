@@ -1,6 +1,6 @@
 import React from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2, UserPlus, User } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle } from "lucide-react";
 
 export const TopHeader: React.FC = () => {
   const {
@@ -54,6 +54,15 @@ export const TopHeader: React.FC = () => {
               <span className="text-[10px] hidden sm:inline">Agora</span>
             </button>
           )}
+
+          {/* Direct Messages Shortcut (Instagram style) */}
+          <button
+            onClick={() => setActiveTab("messages")}
+            title="Direct Messages"
+            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative"
+          >
+            <Send className="w-4 h-4 rotate-12 text-cyan-400" />
+          </button>
 
           {/* SCoin Wallet Chip */}
           <button

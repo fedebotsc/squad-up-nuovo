@@ -16,7 +16,7 @@ import { toast } from "@/components/ui/use-toast";
 import { agoraVoiceService } from "@/services/agoraService";
 import { supabase } from "@/integrations/supabase/client";
 
-export type NavTab = "home" | "tournaments" | "voice" | "clan" | "profile";
+export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
 
 export interface UserProfileData {
@@ -119,6 +119,7 @@ interface SquadContextType {
   toggleDeafen: () => void;
   joinVoiceRoom: (roomId: string) => Promise<void>;
   leaveVoiceRoom: () => Promise<void>;
+  createVoiceRoom: (name: string, category?: string) => Promise<VoiceRoom>;
 
   // Clan
   clanData: ClanData | null;
@@ -511,20 +512,50 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .eq("status", "open")
         .limit(10);
 
+      const defaultRooms: VoiceRoom[] = [
+        {
+          id: "room-default-1",
+          name: "Warzone Trio Tattico",
+          game: "Warzone",
+          channelType: "Aperto a tutti",
+          activeMembers: [],
+          maxCapacity: 3,
+          status: "open",
+        },
+        {
+          id: "room-default-2",
+          name: "Lobby CDL S&D 4v4",
+          game: "Multiplayer",
+          channelType: "Aperto a tutti",
+          activeMembers: [],
+          maxCapacity: 4,
+          status: "open",
+        },
+        {
+          id: "room-default-3",
+          name: "Recon Ritorno Squad Alpha",
+          game: "Ritorno",
+          channelType: "Aperto a tutti",
+          activeMembers: [],
+          maxCapacity: 4,
+          status: "open",
+        },
+      ];
+
       if (roomsData && roomsData.length > 0) {
         setVoiceRooms(
           roomsData.map((r: any) => ({
             id: r.id,
             name: r.name || "Canale Vocale",
-            game: r.game || "Warzone",
-            channelType: r.is_private ? "Privato" : "Aperto a tutti",
+            game: r.category || "Warzone",
+            channelType: "Aperto a tutti",
             activeMembers: [],
-            maxCapacity: r.max_members || 4,
+            maxCapacity: 4,
             status: r.status,
           }))
         );
       } else {
-        setVoiceRooms([]);
+        setVoiceRooms(defaultRooms);
       }
     } catch (err) {
       console.warn("[SquadContext] Errore caricamento dati database:", err);
@@ -1078,10 +1109,22 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const joinVoiceRoom = async (roomId: string) => {
-    const targetRoom = voiceRooms.find((r) => r.id === roomId);
-    const channelName = targetRoom ? targetRoom.name.replace(/\s+/g, "_") : `SquadUP_${roomId}`;
+    let targetRoom = voiceRooms.find((r) => r.id === roomId);
+    if (!targetRoom) {
+      targetRoom = {
+        id: roomId,
+        name: `Canale Vocale #${roomId.slice(0, 6)}`,
+        game: "Warzone",
+        channelType: "Aperto a tutti",
+        activeMembers: [],
+        maxCapacity: 4,
+        status: "open",
+      };
+      setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
+    }
 
     setActiveVoiceRoomId(roomId);
+    const channelName = targetRoom.name.replace(/\s+/g, "_");
 
     const res = await agoraVoiceService.joinVoiceChannel(channelName, userProfile.name);
     setIsRealSdkActive(res.realSdk);
@@ -1089,14 +1132,81 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (res.realSdk) {
       toast({
         title: "Canale Vocale Connesso",
-        description: `Connesso a ${targetRoom?.name || roomId} con Agora SDK.`,
+        description: `Connesso a "${targetRoom.name}" con Agora Web RTC.`,
       });
     } else {
       toast({
         title: "Stanza Vocale Attiva",
-        description: `Canale ${targetRoom?.name || roomId} attivo.`,
+        description: `Canale "${targetRoom.name}" attivo in ascolto.`,
       });
     }
+  };
+
+  const createVoiceRoom = async (name: string, category: string = "Warzone"): Promise<VoiceRoom> => {
+    const trimmedName = name.trim() || `Stanza ${userProfile.name}`;
+    let newRoom: VoiceRoom;
+
+    if (currentUser) {
+      try {
+        const { data: inserted, error: insErr } = await supabase
+          .from("squad_rooms")
+          .insert({
+            host_id: currentUser.id,
+            name: trimmedName,
+            category: category,
+            status: "open",
+            voice_enabled: true,
+          })
+          .select()
+          .single();
+
+        if (inserted && !insErr) {
+          newRoom = {
+            id: inserted.id,
+            name: inserted.name,
+            game: inserted.category || category,
+            channelType: "Aperto a tutti",
+            activeMembers: [],
+            maxCapacity: 4,
+            status: inserted.status,
+          };
+        } else {
+          newRoom = {
+            id: `room-${Date.now()}`,
+            name: trimmedName,
+            game: category,
+            channelType: "Aperto a tutti",
+            activeMembers: [],
+            maxCapacity: 4,
+            status: "open",
+          };
+        }
+      } catch {
+        newRoom = {
+          id: `room-${Date.now()}`,
+          name: trimmedName,
+          game: category,
+          channelType: "Aperto a tutti",
+          activeMembers: [],
+          maxCapacity: 4,
+          status: "open",
+        };
+      }
+    } else {
+      newRoom = {
+        id: `room-${Date.now()}`,
+        name: trimmedName,
+        game: category,
+        channelType: "Aperto a tutti",
+        activeMembers: [],
+        maxCapacity: 4,
+        status: "open",
+      };
+    }
+
+    setVoiceRooms((prev) => [newRoom, ...prev.filter((r) => r.id !== newRoom.id)]);
+    await joinVoiceRoom(newRoom.id);
+    return newRoom;
   };
 
   const leaveVoiceRoom = async () => {
@@ -1226,6 +1336,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleDeafen,
         joinVoiceRoom,
         leaveVoiceRoom,
+        createVoiceRoom,
         clanData,
         clanMembers,
         donateToClan,

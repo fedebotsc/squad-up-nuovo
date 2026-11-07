@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useSquad } from "@/context/SquadContext";
 import { Post, PostComment } from "@/data/mockData";
 import { StoryViewerModal } from "./StoryViewerModal";
@@ -18,8 +18,12 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Smile,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+
+const EMOJI_OPTIONS = ["🔥", "🎯", "👑", "💀", "👏", "🏆"];
 
 export const HomeSection: React.FC = () => {
   const {
@@ -62,6 +66,100 @@ export const HomeSection: React.FC = () => {
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploadingStory, setIsUploadingStory] = useState(false);
+
+  // Post Reactions State (Supabase post_reactions)
+  const [reactionsMap, setReactionsMap] = useState<Record<string, Record<string, number>>>({});
+  const [userReactionsMap, setUserReactionsMap] = useState<Record<string, string>>({});
+  const [activeReactionPickerPostId, setActiveReactionPickerPostId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadReactions = async () => {
+      try {
+        const { data } = await supabase.from("post_reactions").select("post_id, user_id, emoji");
+        if (!data) return;
+
+        const rMap: Record<string, Record<string, number>> = {};
+        const uMap: Record<string, string> = {};
+
+        data.forEach((row: { post_id: string; user_id: string; emoji: string }) => {
+          if (!rMap[row.post_id]) rMap[row.post_id] = {};
+          rMap[row.post_id][row.emoji] = (rMap[row.post_id][row.emoji] || 0) + 1;
+
+          if (currentUser && row.user_id === currentUser.id) {
+            uMap[row.post_id] = row.emoji;
+          }
+        });
+
+        setReactionsMap(rMap);
+        setUserReactionsMap(uMap);
+      } catch (err) {
+        console.warn("[Reactions] Errore caricamento reazioni:", err);
+      }
+    };
+
+    loadReactions();
+  }, [posts, currentUser]);
+
+  const handleToggleReaction = async (postId: string, emoji: string) => {
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
+    const currentSelected = userReactionsMap[postId];
+    const isRemoving = currentSelected === emoji;
+
+    // Optimistic update
+    setUserReactionsMap((prev) => {
+      const next = { ...prev };
+      if (isRemoving) {
+        delete next[postId];
+      } else {
+        next[postId] = emoji;
+      }
+      return next;
+    });
+
+    setReactionsMap((prev) => {
+      const next = { ...prev };
+      const postReactions = { ...(next[postId] || {}) };
+
+      if (currentSelected && postReactions[currentSelected]) {
+        postReactions[currentSelected] = Math.max(0, postReactions[currentSelected] - 1);
+        if (postReactions[currentSelected] === 0) delete postReactions[currentSelected];
+      }
+
+      if (!isRemoving) {
+        postReactions[emoji] = (postReactions[emoji] || 0) + 1;
+      }
+
+      next[postId] = postReactions;
+      return next;
+    });
+
+    setActiveReactionPickerPostId(null);
+
+    try {
+      if (isRemoving) {
+        await supabase
+          .from("post_reactions")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", currentUser.id);
+      } else {
+        await supabase.from("post_reactions").upsert(
+          {
+            post_id: postId,
+            user_id: currentUser.id,
+            emoji,
+          },
+          { onConflict: "post_id,user_id" }
+        );
+      }
+    } catch (err) {
+      console.error("[Reactions] Errore salvataggio reazione:", err);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyInputRef = useRef<HTMLInputElement>(null);
@@ -526,48 +624,115 @@ export const HomeSection: React.FC = () => {
                   </div>
                 )}
 
+                {/* Active Emoji Reactions Chips */}
+                {reactionsMap[post.id] && Object.keys(reactionsMap[post.id]).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {Object.entries(reactionsMap[post.id]).map(([emoji, count]) => {
+                      const isMyReaction = userReactionsMap[post.id] === emoji;
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={() => handleToggleReaction(post.id, emoji)}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                            isMyReaction
+                              ? "bg-purple-600/30 border-purple-400 text-purple-200 shadow-[0_0_8px_rgba(168,85,247,0.3)]"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          <span className="text-[10px] text-zinc-400">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Quick Emoji Reaction Selector Popover */}
+                {activeReactionPickerPostId === post.id && (
+                  <div className="flex items-center gap-2 p-1.5 bg-[#0f1325] border border-purple-500/40 rounded-2xl shadow-xl animate-fade-in w-fit">
+                    {EMOJI_OPTIONS.map((emoji) => {
+                      const isSelected = userReactionsMap[post.id] === emoji;
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={() => handleToggleReaction(post.id, emoji)}
+                          className={`p-1.5 rounded-xl hover:bg-zinc-800 transition-transform hover:scale-125 text-base cursor-pointer ${
+                            isSelected ? "bg-purple-500/20 border border-purple-500/50" : ""
+                          }`}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Actions Footer */}
                 <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-zinc-400 text-xs">
-                  <button
-                    onClick={() => toggleLikePost(post.id)}
-                    className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer ${
-                      post.isLiked
-                        ? "text-rose-400 bg-rose-500/10 font-medium"
-                        : "hover:text-zinc-200 hover:bg-zinc-800/50"
-                    }`}
-                  >
-                    <Heart
-                      className={`w-4 h-4 transition-transform ${
-                        post.isLiked ? "fill-rose-400 scale-110" : ""
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => toggleLikePost(post.id)}
+                      className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer ${
+                        post.isLiked
+                          ? "text-rose-400 bg-rose-500/10 font-medium"
+                          : "hover:text-zinc-200 hover:bg-zinc-800/50"
                       }`}
-                    />
-                    <span>{post.likes}</span>
-                  </button>
+                    >
+                      <Heart
+                        className={`w-4 h-4 transition-transform ${
+                          post.isLiked ? "fill-rose-400 scale-110" : ""
+                        }`}
+                      />
+                      <span>{post.likes}</span>
+                    </button>
 
-                  <button
-                    onClick={() => handleToggleComments(post.id)}
-                    className={`flex items-center gap-1.5 py-1 px-2.5 rounded-lg transition-colors cursor-pointer ${
-                      isCommentsExpanded
-                        ? "text-purple-300 bg-purple-500/20 font-semibold"
-                        : "hover:text-zinc-200 hover:bg-zinc-800/50"
-                    }`}
-                  >
-                    <MessageSquare className="w-4 h-4 text-purple-400" />
-                    <span>{post.comments}</span>
-                    {isCommentsExpanded ? (
-                      <ChevronUp className="w-3 h-3 text-purple-400" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3 text-zinc-500" />
-                    )}
-                  </button>
+                    {/* Emoji Reaction Trigger */}
+                    <button
+                      onClick={() =>
+                        setActiveReactionPickerPostId(
+                          activeReactionPickerPostId === post.id ? null : post.id
+                        )
+                      }
+                      title="Aggiungi reazione"
+                      className={`flex items-center gap-1 py-1 px-2 rounded-lg transition-colors cursor-pointer ${
+                        userReactionsMap[post.id]
+                          ? "text-amber-400 bg-amber-500/10"
+                          : "hover:text-zinc-200 hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <Smile className="w-4 h-4 text-amber-400" />
+                      {userReactionsMap[post.id] && (
+                        <span className="text-xs">{userReactionsMap[post.id]}</span>
+                      )}
+                    </button>
+                  </div>
 
-                  <button
-                    onClick={() => handleShare(post)}
-                    className="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors cursor-pointer"
-                  >
-                    <Share2 className="w-4 h-4 text-cyan-400" />
-                    <span>{post.shares}</span>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleToggleComments(post.id)}
+                      className={`flex items-center gap-1.5 py-1 px-2.5 rounded-lg transition-colors cursor-pointer ${
+                        isCommentsExpanded
+                          ? "text-purple-300 bg-purple-500/20 font-semibold"
+                          : "hover:text-zinc-200 hover:bg-zinc-800/50"
+                      }`}
+                    >
+                      <MessageSquare className="w-4 h-4 text-purple-400" />
+                      <span>{post.comments}</span>
+                      {isCommentsExpanded ? (
+                        <ChevronUp className="w-3 h-3 text-purple-400" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3 text-zinc-500" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleShare(post)}
+                      className="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                    >
+                      <Share2 className="w-4 h-4 text-cyan-400" />
+                      <span>{post.shares}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Collapsible Comments Section */}

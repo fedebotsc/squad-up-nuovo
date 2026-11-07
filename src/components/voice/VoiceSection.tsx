@@ -27,6 +27,7 @@ export const VoiceSection: React.FC = () => {
     voiceRooms,
     joinVoiceRoom,
     leaveVoiceRoom,
+    createVoiceRoom,
     isMuted,
     toggleMute,
     isDeafened,
@@ -55,11 +56,10 @@ export const VoiceSection: React.FC = () => {
     });
   };
 
-  const handleCreateRoom = (e: React.FormEvent) => {
+  const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomName.trim()) return;
-    const customId = `room-${Date.now()}`;
-    joinVoiceRoom(customId);
+    await createVoiceRoom(newRoomName.trim(), "Warzone");
     setNewRoomName("");
     setIsCreatingRoom(false);
   };
@@ -444,10 +444,14 @@ export const VoiceSection: React.FC = () => {
                       <h4 className="text-xs font-bold text-white truncate max-w-[150px]">
                         {room.name}
                       </h4>
-                      {room.isPrivate && <Lock className="w-3 h-3 text-zinc-500" />}
+                      {room.channelType?.toLowerCase().includes("privat") && (
+                        <Lock className="w-3 h-3 text-zinc-500" />
+                      )}
                     </div>
                     <span className="text-[10px] text-zinc-400">
-                      {room.members.length}/{room.maxMembers} operatori connessi
+                      {isCurrent ? 1 : (room.activeMembers?.length || 0)}/{room.maxCapacity || 4} operatori connessi • {room.game || "Warzone"}
+                    </span>
+                  </div>
                     </span>
                   </div>
                 </div>
