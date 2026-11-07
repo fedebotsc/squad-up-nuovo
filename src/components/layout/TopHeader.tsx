@@ -1,9 +1,16 @@
 import React from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2 } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, User } from "lucide-react";
 
 export const TopHeader: React.FC = () => {
-  const { sCoinBalance, setActiveTab, activeVoiceRoomId } = useSquad();
+  const {
+    sCoinBalance,
+    setActiveTab,
+    activeVoiceRoomId,
+    currentUser,
+    userProfile,
+    openAuthModal,
+  } = useSquad();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">
@@ -30,14 +37,14 @@ export const TopHeader: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Voice & SCoin Wallet Badge */}
+        {/* Quick Voice, SCoin Wallet Badge & Auth */}
         <div className="flex items-center gap-2">
           {/* Active Voice Pill */}
           {activeVoiceRoomId && (
             <button
               onClick={() => setActiveTab("voice")}
               title="Canale Vocale Connesso"
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-emerald-950/50 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50 transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-emerald-950/50 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50 transition-colors cursor-pointer"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -51,13 +58,42 @@ export const TopHeader: React.FC = () => {
           {/* SCoin Wallet Chip */}
           <button
             onClick={() => setActiveTab("profile")}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
           >
             <Coins className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
             <span className="text-xs font-bold tracking-wide">
               {sCoinBalance.toLocaleString()}
             </span>
           </button>
+
+          {/* User Status / Login Button */}
+          {currentUser ? (
+            <button
+              onClick={() => setActiveTab("profile")}
+              title={userProfile.name}
+              className="w-8 h-8 rounded-full overflow-hidden border border-purple-500/60 bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform"
+            >
+              {userProfile.avatar ? (
+                <img
+                  src={userProfile.avatar}
+                  alt={userProfile.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-xs font-bold">
+                  {userProfile.name.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => openAuthModal("signup")}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-[0_0_10px_rgba(139,92,246,0.4)] transition-all cursor-pointer"
+            >
+              <UserPlus className="w-3 h-3" />
+              <span className="text-[11px]">Accedi</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

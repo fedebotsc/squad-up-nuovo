@@ -10,11 +10,24 @@ import {
   CreditCard,
   User,
   Gamepad2,
+  LogOut,
+  UserPlus,
+  LogIn,
+  Shield,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
 export const ProfileSection: React.FC = () => {
-  const { userProfile, sCoinBalance, transactions, clanData } = useSquad();
+  const {
+    userProfile,
+    sCoinBalance,
+    transactions,
+    clanData,
+    currentUser,
+    openAuthModal,
+    signOut,
+  } = useSquad();
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
 
   const rewards = [
@@ -42,6 +55,15 @@ export const ProfileSection: React.FC = () => {
   ];
 
   const handleRedeem = (rewardTitle: string, cost: number) => {
+    if (!currentUser) {
+      openAuthModal("signup");
+      toast({
+        title: "Accesso Richiesto",
+        description: "Accedi o registrati per riscattare i premi dal catalogo.",
+      });
+      return;
+    }
+
     if (sCoinBalance < cost) {
       toast({
         title: "Saldo insufficiente",
@@ -64,44 +86,98 @@ export const ProfileSection: React.FC = () => {
 
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+      {/* Unauthenticated Guest Banner */}
+      {!currentUser && (
+        <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/90 via-[#161a32] to-cyan-950/70 p-4 shadow-xl space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-400/40 flex items-center justify-center text-cyan-300 shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Unisciti a SquadUP</h3>
+              <p className="text-xs text-zinc-300 mt-0.5 leading-relaxed">
+                Registrati con Email, Password, Username e Activision ID per pubblicare post, commentare e partecipare ai tornei con montepremi!
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              onClick={() => openAuthModal("signup")}
+              className="py-2 px-3 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Registrati</span>
+            </button>
+            <button
+              onClick={() => openAuthModal("login")}
+              className="py-2 px-3 rounded-xl bg-[#14182a] hover:bg-[#1a2038] border border-purple-500/30 text-purple-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Accedi</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Player Profile Card */}
       <div className="relative rounded-2xl overflow-hidden border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-[#13172e] to-[#0d1022] p-4 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="relative">
-            {userProfile.avatar ? (
-              <img
-                src={userProfile.avatar}
-                alt={userProfile.name}
-                className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-[0_0_15px_rgba(139,92,246,0.5)]"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-purple-950/80 border-2 border-purple-500 flex items-center justify-center text-purple-300">
-                <User className="w-8 h-8" />
-              </div>
-            )}
-            <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black">
-              {userProfile.level}
-            </span>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="relative shrink-0">
+              {userProfile.avatar ? (
+                <img
+                  src={userProfile.avatar}
+                  alt={userProfile.name}
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-[0_0_15px_rgba(139,92,246,0.5)]"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-purple-950/80 border-2 border-purple-500 flex items-center justify-center text-purple-300">
+                  <User className="w-8 h-8" />
+                </div>
+              )}
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black">
+                {userProfile.level}
+              </span>
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h2 className="text-base font-extrabold text-white truncate max-w-[150px]">
-                {userProfile.name}
-              </h2>
-              {clanData?.tag && (
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
-                  [{clanData.tag}]
-                </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-base font-extrabold text-white truncate max-w-[140px]">
+                  {userProfile.name}
+                </h2>
+                {clanData?.tag && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
+                    [{clanData.tag}]
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-1 flex-wrap">
+                <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
+                <span>•</span>
+                <span className="text-zinc-400">{userProfile.tag}</span>
+              </div>
+
+              {userProfile.activisionName && (
+                <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1.5 w-fit">
+                  <Gamepad2 className="w-3 h-3 text-cyan-400" />
+                  <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
+                </div>
               )}
             </div>
-
-            <div className="flex items-center gap-2 text-xs text-zinc-300 mt-1">
-              <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
-              <span>•</span>
-              <span className="text-zinc-400">{userProfile.tag}</span>
-            </div>
           </div>
+
+          {/* Logout button if authenticated */}
+          {currentUser && (
+            <button
+              onClick={signOut}
+              title="Disconnetti"
+              className="p-2 rounded-xl bg-zinc-900/80 hover:bg-rose-500/20 border border-zinc-800 hover:border-rose-500/40 text-zinc-400 hover:text-rose-300 transition-colors cursor-pointer shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Dynamic stat highlights or placeholder */}
@@ -137,7 +213,7 @@ export const ProfileSection: React.FC = () => {
       <div className="bg-[#121628] p-1 rounded-2xl border border-purple-900/40 grid grid-cols-3 gap-1 shadow-inner">
         <button
           onClick={() => setActiveTab("wallet")}
-          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "wallet"
               ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
               : "text-zinc-400 hover:text-zinc-200"
@@ -148,7 +224,7 @@ export const ProfileSection: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab("rewards")}
-          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "rewards"
               ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
               : "text-zinc-400 hover:text-zinc-200"
@@ -159,7 +235,7 @@ export const ProfileSection: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab("stats")}
-          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+          className={`py-2 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === "stats"
               ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
               : "text-zinc-400 hover:text-zinc-200"
@@ -197,20 +273,24 @@ export const ProfileSection: React.FC = () => {
 
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={() =>
+                onClick={() => {
+                  if (!currentUser) {
+                    openAuthModal("signup");
+                    return;
+                  }
                   toast({
                     title: "Ricarica SCoin",
                     description: "Seleziona un pacchetto di SCoin per ricaricare il tuo wallet.",
-                  })
-                }
-                className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow transition-all"
+                  });
+                }}
+                className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow transition-all cursor-pointer"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 Ricarica Saldo
               </button>
               <button
                 onClick={() => setActiveTab("rewards")}
-                className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Gift className="w-3.5 h-3.5 text-purple-400" />
                 Spendi nei Premi
@@ -313,7 +393,7 @@ export const ProfileSection: React.FC = () => {
 
                 <button
                   onClick={() => handleRedeem(reward.title, reward.cost)}
-                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-bold rounded-xl shrink-0 shadow-sm transition-all"
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-bold rounded-xl shrink-0 shadow-sm transition-all cursor-pointer"
                 >
                   Riscatta
                 </button>

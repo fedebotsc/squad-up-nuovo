@@ -10,15 +10,31 @@ export interface Story {
   userId?: string;
 }
 
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  author: {
+    id: string;
+    name: string;
+    handle: string;
+    avatar: string;
+  };
+  content: string;
+  createdAt: string;
+}
+
 export interface Post {
   id: string;
+  userId: string;
   author: {
+    id: string;
     name: string;
     handle: string;
     avatar: string;
     clanTag?: string;
     verified?: boolean;
-    id?: string;
+    activisionId?: string;
   };
   timeAgo: string;
   game: string;
@@ -124,12 +140,12 @@ export interface Transaction {
   isPositive: boolean;
 }
 
-// All initial arrays are completely empty (no fake/mock data)
-export const INITIAL_STORIES: Story[] = [];
-export const INITIAL_POSTS: Post[] = [];
-export const INITIAL_TOURNAMENTS: Tournament[] = [];
-export const INITIAL_LEADERBOARD: LeaderboardEntry[] = [];
-export const INITIAL_MATCH_CHAT: MatchChatMessage[] = [];
-export const INITIAL_VOICE_ROOMS: VoiceRoom[] = [];
-export const INITIAL_CLAN_MEMBERS: ClanMember[] = [];
-export const INITIAL_TRANSACTIONS: Transaction[] = [];
+// Initial empty collections - dynamic Supabase data source
+export const initialStories: Story[] = [];
+export const initialPosts: Post[] = [];
+export const initialTournaments: Tournament[] = [];
+export const initialLeaderboard: LeaderboardEntry[] = [];
+export const initialMatchChat: MatchChatMessage[] = [];
+export const initialVoiceRooms: VoiceRoom[] = [];
+export const initialClanMembers: ClanMember[] = [];
+export const initialTransactions: Transaction[] = [];

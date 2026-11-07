@@ -7,9 +7,16 @@ import { TournamentsSection } from "@/components/tournaments/TournamentsSection"
 import { VoiceSection } from "@/components/voice/VoiceSection";
 import { ClanSection } from "@/components/clan/ClanSection";
 import { ProfileSection } from "@/components/profile/ProfileSection";
+import { AuthModal } from "@/components/auth/AuthModal";
 
 const MainContent: React.FC = () => {
-  const { activeTab } = useSquad();
+  const {
+    activeTab,
+    isAuthModalOpen,
+    closeAuthModal,
+    authModalTab,
+    refreshUserData,
+  } = useSquad();
 
   return (
     <main className="min-h-screen bg-[#0b0e17] text-white flex flex-col relative overflow-x-hidden">
@@ -31,6 +38,14 @@ const MainContent: React.FC = () => {
 
       {/* Mobile-first Bottom Navigation Bar */}
       <BottomNavbar />
+
+      {/* Authentication & Registration Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        defaultTab={authModalTab}
+        onSuccess={refreshUserData}
+      />
     </main>
   );
 };

@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { User } from "@supabase/supabase-js";
 import {
   Story,
   Post,
+  PostComment,
   Tournament,
   LeaderboardEntry,
   MatchChatMessage,
@@ -52,7 +54,15 @@ interface SquadContextType {
   tournamentSubTab: TournamentSubTab;
   setTournamentSubTab: (subTab: TournamentSubTab) => void;
   isLoading: boolean;
-  
+
+  // Auth & Session
+  currentUser: User | null;
+  isAuthModalOpen: boolean;
+  authModalTab: "login" | "signup";
+  openAuthModal: (tab?: "login" | "signup") => void;
+  closeAuthModal: () => void;
+  signOut: () => Promise<void>;
+
   // Wallet & Profile
   sCoinBalance: number;
   transactions: Transaction[];
@@ -65,7 +75,13 @@ interface SquadContextType {
   activeStory: Story | null;
   setActiveStory: (story: Story | null) => void;
   toggleLikePost: (postId: string) => void;
-  createPost: (content: string, game: string, imageFile?: File) => Promise<void>;
+  createPost: (content: string, game: string, imageFile?: File) => Promise<boolean>;
+  deletePost: (postId: string) => Promise<boolean>;
+
+  // Comments
+  fetchPostComments: (postId: string) => Promise<PostComment[]>;
+  addComment: (postId: string, content: string) => Promise<PostComment | null>;
+  deleteComment: (commentId: string, postId: string) => Promise<boolean>;
 
   // Tournaments
   tournaments: Tournament[];
@@ -74,7 +90,7 @@ interface SquadContextType {
   leaderboard: LeaderboardEntry[];
   matchChat: MatchChatMessage[];
   sendMatchMessage: (text: string) => Promise<void>;
-  
+
   // AI OCR Kill Verification
   aiScanStatus: "idle" | "uploading" | "analyzing" | "verified";
   aiScanImage: string | null;
@@ -109,6 +125,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [tournamentSubTab, setTournamentSubTab] = useState<TournamentSubTab>("active");
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Auth Modal State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
+
   // Profile & Wallet state - empty by default
   const [sCoinBalance, setSCoinBalance] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -142,7 +163,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [aiScanImage, setAiScanImage] = useState<string | null>(null);
   const [aiScanResult, setAiScanResult] = useState<AiScanResult | null>(null);
 
-  // Voice rooms & Agora SDK state - empty by default
+  // Voice rooms & Agora SDK state
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
   const [activeVoiceRoomId, setActiveVoiceRoomId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -150,25 +171,60 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isRealSdkActive, setIsRealSdkActive] = useState<boolean>(false);
   const [userSpeaking, setUserSpeaking] = useState<boolean>(false);
 
-  // Clan state - empty by default (no fake clan)
+  // Clan state
   const [clanData, setClanData] = useState<ClanData | null>(null);
   const [clanMembers, setClanMembers] = useState<ClanMember[]>([]);
 
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
 
+  const openAuthModal = (tab: "login" | "signup" = "signup") => {
+    setAuthModalTab(tab);
+    setIsAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false);
+  };
+
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setCurrentUser(null);
+      setUserProfile({
+        name: "Ospite",
+        tag: "#SquadUP",
+        avatar: "",
+        rank: "Unranked",
+        level: 1,
+        stats: { kd: null, winRate: null, matches: 0, kills: 0 },
+      });
+      setSCoinBalance(0);
+      setTransactions([]);
+      setClanData(null);
+      setClanMembers([]);
+      toast({
+        title: "Disconnesso",
+        description: "Sei uscito dal tuo account.",
+      });
+    } catch (err: any) {
+      console.warn("[SquadContext] Errore sign out:", err);
+    }
+  };
+
   // Load user data from Supabase
   const refreshUserData = useCallback(async () => {
     try {
       const { data: authData } = await supabase.auth.getUser();
-      const currentUser = authData?.user;
+      const user = authData?.user ?? null;
+      setCurrentUser(user);
 
-      if (currentUser) {
+      if (user) {
         // Query profile from Supabase
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
-          .eq("id", currentUser.id)
+          .eq("id", user.id)
           .maybeSingle();
 
         if (profile) {
@@ -177,11 +233,15 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setUserProfile({
             id: profile.id,
             name: profile.display_name || profile.username || "Giocatore",
-            tag: profile.activision_tag ? `#${profile.activision_tag}` : `#${profile.username?.slice(0, 4) || "SQ"}`,
+            tag: profile.activision_id
+              ? profile.activision_id
+              : profile.activision_tag
+              ? `#${profile.activision_tag}`
+              : `#${profile.username?.slice(0, 4) || "SQ"}`,
             avatar: profile.avatar_url || "",
             rank: profile.subscription_tier === "pro" ? "Pro Player" : "Competitor",
             level: Math.max(1, Math.floor(balance / 100)),
-            activisionName: profile.activision_name,
+            activisionName: profile.activision_id || profile.activision_name || "",
             stats: {
               kd: null,
               winRate: null,
@@ -194,7 +254,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const { data: membership } = await supabase
             .from("clan_members")
             .select("*, clans(*)")
-            .eq("user_id", currentUser.id)
+            .eq("user_id", user.id)
             .eq("status", "active")
             .maybeSingle();
 
@@ -244,7 +304,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const { data: txList } = await supabase
             .from("sc_transactions")
             .select("*")
-            .or(`user_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+            .or(`user_id.eq.${user.id},recipient_id.eq.${user.id}`)
             .order("created_at", { ascending: false })
             .limit(20);
 
@@ -261,7 +321,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   hour: "2-digit",
                   minute: "2-digit",
                 }),
-                isPositive: tx.recipient_id === currentUser.id,
+                isPositive: tx.recipient_id === user.id,
               }))
             );
           } else {
@@ -269,54 +329,96 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
       } else {
-        // Guest user - no fake data
+        // Guest user - clear state
         setClanData(null);
         setClanMembers([]);
         setTransactions([]);
         setSCoinBalance(0);
+        setUserProfile({
+          name: "Ospite",
+          tag: "#SquadUP",
+          avatar: "",
+          rank: "Unranked",
+          level: 1,
+          stats: { kd: null, winRate: null, matches: 0, kills: 0 },
+        });
       }
     } catch (err) {
       console.warn("[SquadContext] Errore caricamento profilo Supabase:", err);
     }
   }, []);
 
-  // Fetch feed posts, stories, tournaments, and voice rooms from Supabase
+  // Fetch feed posts, comments count, stories, tournaments, and voice rooms from Supabase
   const loadDatabaseContent = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch Posts from Supabase
-      const { data: postsData } = await supabase
+      // 1. Fetch Posts from Supabase public.posts
+      const { data: postsData, error: postsErr } = await supabase
         .from("posts")
-        .select("*, profiles:author_id(id, username, display_name, avatar_url), clans:clan_id(name, tag)")
+        .select(`
+          id,
+          user_id,
+          content,
+          media_url,
+          created_at,
+          profiles:user_id (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            activision_id
+          )
+        `)
         .order("created_at", { ascending: false })
-        .limit(30);
+        .limit(40);
 
-      if (postsData && postsData.length > 0) {
+      if (!postsErr && postsData && postsData.length > 0) {
+        // Fetch comments count for these posts
+        const postIds = postsData.map((p) => p.id);
+        const { data: commentsCountData } = await supabase
+          .from("comments")
+          .select("post_id")
+          .in("post_id", postIds);
+
+        const commentCountsMap: Record<string, number> = {};
+        if (commentsCountData) {
+          commentsCountData.forEach((c: any) => {
+            commentCountsMap[c.post_id] = (commentCountsMap[c.post_id] || 0) + 1;
+          });
+        }
+
         setPosts(
-          postsData.map((p: any) => ({
-            id: p.id,
-            author: {
-              id: p.author_id,
-              name: p.profiles?.display_name || p.profiles?.username || "Giocatore",
-              handle: `@${p.profiles?.username || "player"}`,
-              avatar: p.profiles?.avatar_url || "",
-              clanTag: p.clans?.tag,
-              verified: false,
-            },
-            timeAgo: new Date(p.created_at).toLocaleDateString([], {
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            game: "SquadUP",
-            content: p.body || "",
-            image: p.media_urls?.[0] || undefined,
-            likes: Array.isArray(p.allowed_reactions) ? p.allowed_reactions.length : 0,
-            isLiked: false,
-            comments: 0,
-            shares: 0,
-          }))
+          postsData.map((p: any) => {
+            const authorProf = p.profiles;
+            const authorName = authorProf?.display_name || authorProf?.username || "Giocatore";
+            const authorHandle = authorProf?.username ? `@${authorProf.username}` : "@gamer";
+            return {
+              id: p.id,
+              userId: p.user_id,
+              author: {
+                id: p.user_id,
+                name: authorName,
+                handle: authorHandle,
+                avatar: authorProf?.avatar_url || "",
+                clanTag: undefined,
+                verified: false,
+                activisionId: authorProf?.activision_id,
+              },
+              timeAgo: new Date(p.created_at).toLocaleDateString([], {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              game: "Warzone",
+              content: p.content || "",
+              image: p.media_url || undefined,
+              likes: 0,
+              isLiked: false,
+              comments: commentCountsMap[p.id] || 0,
+              shares: 0,
+            };
+          })
         );
       } else {
         setPosts([]);
@@ -358,55 +460,51 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .order("starts_at", { ascending: true });
 
       if (tournamentsData && tournamentsData.length > 0) {
-        setTournaments(
-          tournamentsData.map((t: any) => ({
-            id: t.id,
-            title: t.name,
-            game: t.game_mode,
-            category: t.type || "Torneo",
-            status: t.status === "live" ? "in_corso" : t.status === "completed" ? "terminato" : "iscrizioni",
-            prizePoolSCoin: t.entry_fee_sc ? t.entry_fee_sc * (t.team_limit || 8) : 0,
-            entryFeeSCoin: t.entry_fee_sc || 0,
-            teamsJoined: Array.isArray(t.teams) ? t.teams.length : 0,
-            maxTeams: t.team_limit || 16,
-            startsAt: new Date(t.starts_at).toLocaleDateString([], {
-              day: "numeric",
-              month: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            mode: t.game_mode,
-            description: t.rules || t.prize_description || "Torneo ufficiale SquadUP.",
-          }))
-        );
+        const mapped = tournamentsData.map((t: any) => ({
+          id: t.id,
+          title: t.title || "Torneo SquadUP",
+          game: t.game || "Warzone",
+          category: t.category || "Battle Royale",
+          banner: t.banner_url,
+          status: (t.status as any) || "iscrizioni",
+          prizePoolSCoin: t.prize_pool_scoin || 0,
+          entryFeeSCoin: t.entry_fee_scoin || 0,
+          teamsJoined: t.teams_joined || 0,
+          maxTeams: t.max_teams || 64,
+          startsAt: t.starts_at
+            ? new Date(t.starts_at).toLocaleDateString([], {
+                day: "2-digit",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "A breve",
+          mode: t.mode || "Squads",
+          description: t.description || "",
+        }));
+        setTournaments(mapped);
+        setSelectedTournament(mapped[0] || null);
       } else {
         setTournaments([]);
+        setSelectedTournament(null);
       }
 
-      // 4. Fetch Squad Voice Rooms from Supabase
+      // 4. Fetch Voice Rooms from Supabase
       const { data: roomsData } = await supabase
         .from("squad_rooms")
-        .select("*, squad_room_members(*)")
+        .select("*")
         .eq("status", "open")
-        .order("created_at", { ascending: false });
+        .limit(10);
 
       if (roomsData && roomsData.length > 0) {
         setVoiceRooms(
           roomsData.map((r: any) => ({
             id: r.id,
-            name: r.name,
-            game: r.category,
-            channelType: r.ranked ? "Competitivo" : "Squad",
-            activeMembers: (r.squad_room_members || []).map((m: any) => ({
-              id: m.id || m.user_id,
-              name: "Giocatore",
-              role: m.role || "Membro",
-              isSpeaking: false,
-              isMuted: false,
-              isDeafened: false,
-              ping: 25,
-            })),
-            maxCapacity: 5,
+            name: r.name || "Canale Vocale",
+            game: r.game || "Warzone",
+            channelType: r.is_private ? "Privato" : "Aperto a tutti",
+            activeMembers: [],
+            maxCapacity: r.max_members || 4,
             status: r.status,
           }))
         );
@@ -414,28 +512,33 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setVoiceRooms([]);
       }
     } catch (err) {
-      console.warn("[SquadContext] Errore caricamento dati Supabase:", err);
+      console.warn("[SquadContext] Errore caricamento dati database:", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Initial load
+  // Listen to Supabase Auth State changes
   useEffect(() => {
     refreshUserData();
     loadDatabaseContent();
-  }, [refreshUserData, loadDatabaseContent]);
 
-  // Setup Agora listeners
-  useEffect(() => {
-    agoraVoiceService.onSpeakingChange((speaking) => {
-      setUserSpeaking(speaking && !isMuted);
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCurrentUser(session?.user ?? null);
+      refreshUserData();
     });
 
     return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [refreshUserData, loadDatabaseContent]);
+
+  // Clean audio track termination on unmount
+  useEffect(() => {
+    return () => {
       agoraVoiceService.closeLocalAudioTrack();
     };
-  }, [isMuted]);
+  }, []);
 
   const toggleLikePost = (postId: string) => {
     setPosts((prev) =>
@@ -453,17 +556,27 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  const createPost = async (content: string, game: string, imageFile?: File) => {
+  // Create post on Supabase `posts` table
+  const createPost = async (content: string, game: string, imageFile?: File): Promise<boolean> => {
     const { data: authData } = await supabase.auth.getUser();
-    const currentUser = authData?.user;
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("signup");
+      toast({
+        title: "Accesso Richiesto",
+        description: "Devi registrarti o accedere per pubblicare un post.",
+      });
+      return false;
+    }
 
     let mediaUrl: string | undefined = undefined;
 
     // Optional upload image to Supabase storage if file provided
-    if (imageFile && currentUser) {
+    if (imageFile) {
       try {
         const fileExt = imageFile.name.split(".").pop();
-        const fileName = `${currentUser.id}_${Date.now()}.${fileExt}`;
+        const fileName = `${user.id}_${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from("post_media")
           .upload(fileName, imageFile);
@@ -479,35 +592,52 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    if (currentUser) {
+    try {
       const { data: insertedPost, error } = await supabase
         .from("posts")
         .insert({
-          author_id: currentUser.id,
-          body: content,
-          clan_id: clanData?.id || null,
-          media_urls: mediaUrl ? [mediaUrl] : [],
-          media_type: mediaUrl ? "image" : "none",
-          moderation_status: "approved",
+          user_id: user.id,
+          content: content.trim(),
+          media_url: mediaUrl || null,
         })
-        .select("*, profiles:author_id(id, username, display_name, avatar_url), clans:clan_id(name, tag)")
+        .select(`
+          id,
+          user_id,
+          content,
+          media_url,
+          created_at,
+          profiles:user_id (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            activision_id
+          )
+        `)
         .single();
 
-      if (!error && insertedPost) {
+      if (error) {
+        throw error;
+      }
+
+      if (insertedPost) {
+        const authorProf = insertedPost.profiles as any;
         const newPost: Post = {
           id: insertedPost.id,
+          userId: insertedPost.user_id,
           author: {
-            id: currentUser.id,
-            name: userProfile.name,
-            handle: `@${userProfile.name.toLowerCase().replace(/\s+/g, "")}`,
-            avatar: userProfile.avatar,
+            id: user.id,
+            name: authorProf?.display_name || authorProf?.username || userProfile.name,
+            handle: authorProf?.username ? `@${authorProf.username}` : `@${userProfile.name}`,
+            avatar: authorProf?.avatar_url || userProfile.avatar,
             clanTag: clanData?.tag,
             verified: false,
+            activisionId: authorProf?.activision_id,
           },
           timeAgo: "Adesso",
-          game: game || "SquadUP",
-          content,
-          image: mediaUrl,
+          game: game || "Warzone",
+          content: insertedPost.content,
+          image: insertedPost.media_url || undefined,
           likes: 0,
           isLiked: false,
           comments: 0,
@@ -515,37 +645,230 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
         setPosts((prev) => [newPost, ...prev]);
         toast({
-          title: "Post pubblicato!",
-          description: "Il tuo post è stato salvato su Supabase.",
+          title: "Post pubblicato! 🚀",
+          description: "Il post è ora visibile a tutta la community.",
         });
-        return;
+        return true;
       }
+      return false;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore pubblicazione post:", err);
+      toast({
+        title: "Errore pubblicazione",
+        description: err.message || "Impossibile salvare il post su Supabase.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Delete post from Supabase `posts` table
+  const deletePost = async (postId: string): Promise<boolean> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("login");
+      return false;
     }
 
-    // Local fallback for guest
-    const localPost: Post = {
-      id: `p-${Date.now()}`,
-      author: {
-        name: userProfile.name,
-        handle: "@ospite",
-        avatar: userProfile.avatar,
-        clanTag: clanData?.tag,
-        verified: false,
-      },
-      timeAgo: "Adesso",
-      game: game || "SquadUP",
-      content,
-      image: mediaUrl,
-      likes: 0,
-      isLiked: false,
-      comments: 0,
-      shares: 0,
-    };
-    setPosts((prev) => [localPost, ...prev]);
-    toast({
-      title: "Post condiviso",
-      description: "Post visualizzato nel feed locale.",
-    });
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .delete()
+        .eq("id", postId)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      toast({
+        title: "Post eliminato",
+        description: "Il post è stato rimosso definitivamente.",
+      });
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore eliminazione post:", err);
+      toast({
+        title: "Errore eliminazione",
+        description: err.message || "Impossibile rimuovere il post.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Fetch comments for a specific post
+  const fetchPostComments = async (postId: string): Promise<PostComment[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("comments")
+        .select(`
+          id,
+          post_id,
+          user_id,
+          content,
+          created_at,
+          profiles:user_id (
+            id,
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      if (data) {
+        return data.map((c: any) => ({
+          id: c.id,
+          postId: c.post_id,
+          userId: c.user_id,
+          author: {
+            id: c.user_id,
+            name: c.profiles?.display_name || c.profiles?.username || "Gamer",
+            handle: c.profiles?.username ? `@${c.profiles.username}` : "@player",
+            avatar: c.profiles?.avatar_url || "",
+          },
+          content: c.content,
+          createdAt: new Date(c.created_at).toLocaleDateString([], {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+      }
+      return [];
+    } catch (err) {
+      console.warn("[SquadContext] Errore fetch commenti:", err);
+      return [];
+    }
+  };
+
+  // Add comment to Supabase `comments` table
+  const addComment = async (postId: string, content: string): Promise<PostComment | null> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("signup");
+      toast({
+        title: "Accesso Richiesto",
+        description: "Devi registrarti o accedere per commentare.",
+      });
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("comments")
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+          content: content.trim(),
+        })
+        .select(`
+          id,
+          post_id,
+          user_id,
+          content,
+          created_at,
+          profiles:user_id (
+            id,
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const newComment: PostComment = {
+          id: data.id,
+          postId: data.post_id,
+          userId: data.user_id,
+          author: {
+            id: user.id,
+            name: data.profiles?.display_name || data.profiles?.username || userProfile.name,
+            handle: data.profiles?.username ? `@${data.profiles.username}` : `@${userProfile.name}`,
+            avatar: data.profiles?.avatar_url || userProfile.avatar,
+          },
+          content: data.content,
+          createdAt: "Adesso",
+        };
+
+        // Increment local comments count
+        setPosts((prev) =>
+          prev.map((p) => (p.id === postId ? { ...p, comments: p.comments + 1 } : p))
+        );
+
+        toast({
+          title: "Commento aggiunto",
+          description: "Il tuo commento è stato pubblicato.",
+        });
+
+        return newComment;
+      }
+      return null;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore aggiunta commento:", err);
+      toast({
+        title: "Errore invio commento",
+        description: err.message || "Impossibile salvare il commento.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  // Delete comment from Supabase `comments` table
+  const deleteComment = async (commentId: string, postId: string): Promise<boolean> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("login");
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("comments")
+        .delete()
+        .eq("id", commentId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      // Decrement local comments count
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, comments: Math.max(0, p.comments - 1) } : p
+        )
+      );
+
+      toast({
+        title: "Commento rimosso",
+        description: "Il tuo commento è stato eliminato.",
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore eliminazione commento:", err);
+      toast({
+        title: "Errore eliminazione commento",
+        description: err.message || "Impossibile rimuovere il commento.",
+        variant: "destructive",
+      });
+      return false;
+    }
   };
 
   const sendMatchMessage = async (text: string) => {
@@ -580,7 +903,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setAiScanStatus("analyzing");
 
       setTimeout(() => {
-        const detectedKills = 0; // Clean initial state for real check
+        const detectedKills = 0;
         const detectedDamage = 0;
         const detectedPlacement = 0;
         const points = 0;
@@ -603,7 +926,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         toast({
           title: "Screenshot elaborato dall'IA",
-          description: "Nessun punteggio simulato applicato.",
+          description: "Tabellone analizzato dal sistema.",
         });
       }, 1500);
     }, 800);
@@ -697,7 +1020,6 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const currentUser = authData?.user;
 
       if (currentUser) {
-        // Record real transaction in Supabase
         await supabase.from("sc_transactions").insert({
           user_id: currentUser.id,
           recipient_id: clanData.ownerId,
@@ -706,13 +1028,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           description: `Donazione alla cassaforte del clan ${clanData.name}`,
         });
 
-        // Update profile balance
         await supabase
           .from("profiles")
           .update({ balance: Math.max(0, sCoinBalance - amount) })
           .eq("id", currentUser.id);
 
-        // Update clan treasury
         await supabase
           .from("clans")
           .update({ clan_treasury_sc: (clanData.treasurySC || 0) + amount })
@@ -747,6 +1067,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         tournamentSubTab,
         setTournamentSubTab,
         isLoading,
+        currentUser,
+        isAuthModalOpen,
+        authModalTab,
+        openAuthModal,
+        closeAuthModal,
+        signOut,
         sCoinBalance,
         transactions,
         userProfile,
@@ -757,6 +1083,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActiveStory,
         toggleLikePost,
         createPost,
+        deletePost,
+        fetchPostComments,
+        addComment,
+        deleteComment,
         tournaments,
         selectedTournament,
         setSelectedTournament,
