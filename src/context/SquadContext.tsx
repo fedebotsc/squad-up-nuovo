@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   INITIAL_STORIES,
   INITIAL_POSTS,
@@ -20,6 +20,7 @@ import {
   Transaction,
 } from "@/data/mockData";
 import { toast } from "@/components/ui/use-toast";
+import { agoraVoiceService } from "@/services/agoraService";
 
 export type NavTab = "home" | "tournaments" | "voice" | "clan" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
@@ -81,15 +82,19 @@ interface SquadContextType {
   startAiKillScan: (customImage?: string) => void;
   resetAiKillScan: () => void;
 
-  // Voice Rooms
+  // Voice Rooms & Agora SDK
   voiceRooms: VoiceRoom[];
   activeVoiceRoomId: string | null;
   isMuted: boolean;
   isDeafened: boolean;
+  agoraAppId: string;
+  isAgoraPlaceholder: boolean;
+  isRealSdkActive: boolean;
+  userSpeaking: boolean;
   toggleMute: () => void;
   toggleDeafen: () => void;
-  joinVoiceRoom: (roomId: string) => void;
-  leaveVoiceRoom: () => void;
+  joinVoiceRoom: (roomId: string) => Promise<void>;
+  leaveVoiceRoom: () => Promise<void>;
 
   // Clan
   clanVault: number;
@@ -120,11 +125,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [aiScanImage, setAiScanImage] = useState<string | null>(null);
   const [aiScanResult, setAiScanResult] = useState<AiScanResult | null>(null);
 
-  // Voice rooms state
+  // Voice rooms & Agora SDK state
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(INITIAL_VOICE_ROOMS);
   const [activeVoiceRoomId, setActiveVoiceRoomId] = useState<string | null>("vr-1");
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isDeafened, setIsDeafened] = useState<boolean>(false);
+  const [isRealSdkActive, setIsRealSdkActive] = useState<boolean>(false);
+  const [userSpeaking, setUserSpeaking] = useState<boolean>(false);
+
+  const agoraAppId = agoraVoiceService.getAppId();
+  const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
 
   // Clan state
   const [clanVault, setClanVault] = useState<number>(42650);
@@ -145,6 +155,18 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       kills: 2450,
     },
   };
+
+  // Setup Agora listeners
+  useEffect(() => {
+    agoraVoiceService.onSpeakingChange((speaking) => {
+      setUserSpeaking(speaking && !isMuted);
+    });
+
+    // Cleanup always closes audio tracks
+    return () => {
+      agoraVoiceService.closeLocalAudioTrack();
+    };
+  }, [isMuted]);
 
   const toggleLikePost = (postId: string) => {
     setPosts((prev) =>
@@ -215,7 +237,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const detectedKills = 19;
         const detectedDamage = 6420;
         const detectedPlacement = 1;
-        const points = 25; // 19 kills + 6 placement points
+        const points = 25;
         const rewardSCoin = 250;
 
         const result: AiScanResult = {
@@ -278,9 +300,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleMute = () => {
     setIsMuted((prev) => {
       const next = !prev;
+      agoraVoiceService.setMuted(next);
       toast({
         title: next ? "Microfono Disattivato (Muto)" : "Microfono Attivo",
-        description: next ? "I tuoi compagni non ti sentono." : "Agora Voice: trasmissione in corso.",
+        description: next ? "Traccia audio mutata su Agora." : "Agora Voice: trasmissione in corso.",
       });
       return next;
     });
@@ -289,6 +312,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleDeafen = () => {
     setIsDeafened((prev) => {
       const next = !prev;
+      agoraVoiceService.setDeafened(next);
       toast({
         title: next ? "Audio Disattivato (Deafen)" : "Audio Riattivato",
         description: next ? "Non sentirai gli altri membri del canale." : "Audio del canale ripristinato.",
@@ -297,19 +321,38 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const joinVoiceRoom = (roomId: string) => {
+  const joinVoiceRoom = async (roomId: string) => {
+    const targetRoom = voiceRooms.find((r) => r.id === roomId);
+    const channelName = targetRoom ? targetRoom.name.replace(/\s+/g, "_") : `SquadUP_${roomId}`;
+
     setActiveVoiceRoomId(roomId);
-    toast({
-      title: "Canale Vocale Connesso",
-      description: "Canale Agora a bassa latenza e bitrate HD attivo.",
-    });
+
+    const res = await agoraVoiceService.joinVoiceChannel(channelName, userProfile.name);
+    setIsRealSdkActive(res.realSdk);
+
+    if (res.realSdk) {
+      toast({
+        title: "🎙️ Canale Vocale Agora Attivo",
+        description: `Connesso a ${targetRoom?.name || roomId} con VITE_AGORA_APP_ID.`,
+      });
+    } else {
+      toast({
+        title: "Canale Vocale Connesso",
+        description: `Canale ${targetRoom?.name || roomId} attivo. App ID caricata da .env (${agoraAppId.slice(0, 8)}...).`,
+      });
+    }
   };
 
-  const leaveVoiceRoom = () => {
+  const leaveVoiceRoom = async () => {
+    // Chiude sempre le tracce audio alla disconnessione (localAudioTrack.close())
+    await agoraVoiceService.leaveVoiceChannel();
     setActiveVoiceRoomId(null);
+    setIsRealSdkActive(false);
+    setUserSpeaking(false);
+
     toast({
       title: "Disconnesso dal Vocale",
-      description: "Sei uscito dalla stanza vocale.",
+      description: "Tracce microfono chiuse (localAudioTrack.close()) e canale Agora rilasciato.",
     });
   };
 
@@ -392,6 +435,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activeVoiceRoomId,
         isMuted,
         isDeafened,
+        agoraAppId,
+        isAgoraPlaceholder,
+        isRealSdkActive,
+        userSpeaking,
         toggleMute,
         toggleDeafen,
         joinVoiceRoom,

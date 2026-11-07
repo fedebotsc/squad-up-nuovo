@@ -10,6 +10,9 @@ import {
   Radio,
   Headphones,
   SlidersHorizontal,
+  KeyRound,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
@@ -19,6 +22,8 @@ export const VoiceSection: React.FC = () => {
     activeVoiceRoomId,
     isMuted,
     isDeafened,
+    agoraAppId,
+    isRealSdkActive,
     toggleMute,
     toggleDeafen,
     joinVoiceRoom,
@@ -37,19 +42,49 @@ export const VoiceSection: React.FC = () => {
     });
   };
 
+  const maskedAppId =
+    agoraAppId && agoraAppId.length > 8
+      ? `${agoraAppId.slice(0, 6)}••••••••••••${agoraAppId.slice(-4)}`
+      : agoraAppId || "Non configurata";
+
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
-      {/* Agora Engine Banner */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-bold text-zinc-200">
-            AGORA LOW-LATENCY VOICE
+      {/* Agora Engine Banner & Config Card */}
+      <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-3 shadow-md space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-bold text-zinc-200">
+              AGORA WEB SDK (RTC 4.24+)
+            </span>
+          </div>
+          <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full">
+            Opus HD • 64kbps
           </span>
         </div>
-        <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-          Opus HD • 64kbps
-        </span>
+
+        {/* Agora App ID Indicator */}
+        <div className="flex items-center justify-between text-[11px] bg-zinc-950/60 border border-purple-900/30 rounded-xl px-2.5 py-1.5 text-zinc-300">
+          <div className="flex items-center gap-1.5 truncate">
+            <KeyRound className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="text-zinc-400">App ID:</span>
+            <code className="text-purple-300 font-mono text-[10px] truncate max-w-[170px]">
+              {maskedAppId}
+            </code>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold shrink-0">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            <span>Attiva (.env)</span>
+          </div>
+        </div>
+
+        {/* Lifecycle Safety Notice */}
+        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-0.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+          <span className="truncate">
+            Chiusura automatica tracce microfono: <code className="text-cyan-300">localAudioTrack.close()</code>
+          </span>
+        </div>
       </div>
 
       {/* Main Active Room or Disconnected View */}
@@ -203,7 +238,7 @@ export const VoiceSection: React.FC = () => {
                 <span>{isDeafened ? "Cuffie Spente" : "Audio ON"}</span>
               </button>
 
-              {/* Leave Room Button */}
+              {/* Leave Room Button - triggers localAudioTrack.close() */}
               <button
                 onClick={leaveVoiceRoom}
                 className="py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs bg-red-950/40 border border-red-800/60 text-red-300 hover:bg-red-900/50 transition-colors"
@@ -242,7 +277,7 @@ export const VoiceSection: React.FC = () => {
           </div>
           <h3 className="text-sm font-bold text-white">Non sei in nessun canale vocale</h3>
           <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-            Scegli una delle stanze di squadra qui sotto per comunicare in tempo reale con zero ritardo audio.
+            Scegli una delle stanze di squadra qui sotto per comunicare in tempo reale con l'SDK Agora.
           </p>
         </div>
       )}
