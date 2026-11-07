@@ -452,8 +452,6 @@ export const VoiceSection: React.FC = () => {
                       {isCurrent ? 1 : (room.activeMembers?.length || 0)}/{room.maxCapacity || 4} operatori connessi • {room.game || "Warzone"}
                     </span>
                   </div>
-                    </span>
-                  </div>
                 </div>
 
                 <button
