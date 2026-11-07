@@ -13,6 +13,7 @@ import {
   KeyRound,
   ShieldCheck,
   CheckCircle2,
+  Plus,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
@@ -23,14 +24,17 @@ export const VoiceSection: React.FC = () => {
     isMuted,
     isDeafened,
     agoraAppId,
-    isRealSdkActive,
     toggleMute,
     toggleDeafen,
     joinVoiceRoom,
     leaveVoiceRoom,
+    userSpeaking,
+    userProfile,
   } = useSquad();
 
   const [noiseSuppression, setNoiseSuppression] = useState(true);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
   const currentRoom = voiceRooms.find((r) => r.id === activeVoiceRoomId);
 
@@ -40,6 +44,15 @@ export const VoiceSection: React.FC = () => {
       title: !noiseSuppression ? "Cancellazione Rumore IA Attiva" : "Cancellazione Rumore Disattivata",
       description: "Filtro rumori tastiera e respiro Agora RTC.",
     });
+  };
+
+  const handleCreateRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRoomName.trim()) return;
+    const customId = `room-${Date.now()}`;
+    joinVoiceRoom(customId);
+    setNewRoomName("");
+    setIsCreatingRoom(false);
   };
 
   const maskedAppId =
@@ -88,18 +101,18 @@ export const VoiceSection: React.FC = () => {
       </div>
 
       {/* Main Active Room or Disconnected View */}
-      {currentRoom ? (
+      {currentRoom || activeVoiceRoomId ? (
         <div className="bg-[#121628]/95 border-2 border-purple-500/50 rounded-2xl p-4 shadow-[0_0_25px_rgba(139,92,246,0.2)] space-y-4">
           {/* Room Title & Connection Status */}
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
             <div className="min-w-0">
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-600/40 uppercase">
-                {currentRoom.channelType}
+                {currentRoom?.channelType || "Stanza Vocale"}
               </span>
               <h3 className="text-base font-extrabold text-white mt-1 truncate">
-                {currentRoom.name}
+                {currentRoom?.name || `Stanza #${activeVoiceRoomId?.slice(-4)}`}
               </h3>
-              <p className="text-[11px] text-zinc-400 truncate">{currentRoom.game}</p>
+              <p className="text-[11px] text-zinc-400 truncate">{currentRoom?.game || "SquadUP Voice"}</p>
             </div>
 
             <div className="text-right shrink-0">
@@ -111,100 +124,74 @@ export const VoiceSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Connected Squad Members Grid */}
+          {/* Connected User Tile */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
-              <span>Membri nel canale ({currentRoom.activeMembers.length}/{currentRoom.maxCapacity})</span>
+              <span>Membri nel canale</span>
               <span className="text-[10px] text-purple-400">Microfoni Stereo</span>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5">
-              {currentRoom.activeMembers.map((member) => {
-                const isUser = member.id === "vm-1";
-                const isUserMuted = isUser ? isMuted : member.isMuted;
-                const isSpeaking = isUser ? !isMuted && member.isSpeaking : member.isSpeaking;
-
-                return (
-                  <div
-                    key={member.id}
-                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                      isSpeaking
-                        ? "bg-gradient-to-r from-purple-950/50 via-[#151c36] to-cyan-950/30 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
-                        : "bg-zinc-900/70 border-zinc-800/80"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {/* Avatar with speaking wave ring */}
-                      <div className="relative shrink-0">
-                        <img
-                          src={member.avatar}
-                          alt={member.name}
-                          className={`w-10 h-10 rounded-xl object-cover border-2 transition-all ${
-                            isSpeaking
-                              ? "border-cyan-400 scale-105"
-                              : "border-zinc-700"
-                          }`}
-                        />
-                        {isSpeaking && (
-                          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-cyan-400 flex items-center justify-center animate-ping" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                            {member.name}
-                          </span>
-                          <span className="text-[9px] font-semibold px-1 rounded bg-purple-950 text-purple-300 border border-purple-800/50 shrink-0">
-                            {member.role}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
-                          {isSpeaking ? (
-                            <span className="text-cyan-400 font-semibold flex items-center gap-1">
-                              <Radio className="w-2.5 h-2.5 animate-spin" />
-                              Sta parlando...
-                            </span>
-                          ) : (
-                            <span>In ascolto • {member.ping}ms</span>
-                          )}
-                        </div>
-                      </div>
+            <div className="p-3 rounded-xl border bg-zinc-900/70 border-zinc-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative shrink-0">
+                  {userProfile.avatar ? (
+                    <img
+                      src={userProfile.avatar}
+                      alt={userProfile.name}
+                      className={`w-10 h-10 rounded-xl object-cover border-2 transition-all ${
+                        userSpeaking && !isMuted ? "border-cyan-400 scale-105" : "border-zinc-700"
+                      }`}
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center font-bold text-xs text-purple-300 border border-zinc-700">
+                      {userProfile.name.slice(0, 2).toUpperCase()}
                     </div>
+                  )}
+                  {userSpeaking && !isMuted && (
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-cyan-400 flex items-center justify-center animate-ping" />
+                  )}
+                </div>
 
-                    {/* Member Audio Icon */}
-                    <div className="shrink-0">
-                      {isUserMuted ? (
-                        <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400">
-                          <MicOff className="w-4 h-4" />
-                        </div>
-                      ) : isSpeaking ? (
-                        <div className="flex items-center gap-0.5 h-4">
-                          <span className="w-1 bg-cyan-400 rounded-full h-2 animate-bounce" />
-                          <span className="w-1 bg-cyan-400 rounded-full h-4 animate-bounce delay-75" />
-                          <span className="w-1 bg-cyan-400 rounded-full h-3 animate-bounce delay-150" />
-                        </div>
-                      ) : (
-                        <div className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400">
-                          <Mic className="w-4 h-4" />
-                        </div>
-                      )}
-                    </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-white truncate max-w-[120px]">
+                      {userProfile.name} (Tu)
+                    </span>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
+                    {userSpeaking && !isMuted ? (
+                      <span className="text-cyan-400 font-semibold flex items-center gap-1">
+                        <Radio className="w-2.5 h-2.5 animate-spin" />
+                        Sta parlando...
+                      </span>
+                    ) : (
+                      <span>In ascolto</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="shrink-0">
+                {isMuted ? (
+                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400">
+                    <MicOff className="w-4 h-4" />
+                  </div>
+                ) : (
+                  <div className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400">
+                    <Mic className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* VISIBLE MICROPHONE & AUDIO CONTROLS (PROMINENT & CLEAN) */}
+          {/* VISIBLE MICROPHONE & AUDIO CONTROLS */}
           <div className="pt-2 border-t border-zinc-800/80">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-2 px-1">
               Comandi Vocali Rapidi
             </span>
 
             <div className="grid grid-cols-3 gap-2">
-              {/* Mic Toggle Button */}
               <button
                 onClick={toggleMute}
                 className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all shadow-md ${
@@ -218,10 +205,9 @@ export const VoiceSection: React.FC = () => {
                 ) : (
                   <Mic className="w-5 h-5 text-emerald-400" />
                 )}
-                <span>{isMuted ? "Muto (Disattivo)" : "Mic Attivo"}</span>
+                <span>{isMuted ? "Muto" : "Mic Attivo"}</span>
               </button>
 
-              {/* Deafen Toggle Button */}
               <button
                 onClick={toggleDeafen}
                 className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all border ${
@@ -238,7 +224,6 @@ export const VoiceSection: React.FC = () => {
                 <span>{isDeafened ? "Cuffie Spente" : "Audio ON"}</span>
               </button>
 
-              {/* Leave Room Button - triggers localAudioTrack.close() */}
               <button
                 onClick={leaveVoiceRoom}
                 className="py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs bg-red-950/40 border border-red-800/60 text-red-300 hover:bg-red-900/50 transition-colors"
@@ -248,13 +233,12 @@ export const VoiceSection: React.FC = () => {
               </button>
             </div>
 
-            {/* Noise suppression toggle */}
             <div className="mt-3 flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-purple-400" />
                 <div>
                   <span className="font-bold text-white block">Cancellazione Rumore IA</span>
-                  <span className="text-[10px] text-zinc-400">Elimina click tastiera e rumori di fondo</span>
+                  <span className="text-[10px] text-zinc-400">Elimina rumori di fondo</span>
                 </div>
               </div>
               <button
@@ -275,62 +259,108 @@ export const VoiceSection: React.FC = () => {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Headphones className="w-7 h-7" />
           </div>
-          <h3 className="text-sm font-bold text-white">Non sei in nessun canale vocale</h3>
+          <h3 className="text-sm font-bold text-white">Nessun canale vocale attivo</h3>
           <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-            Scegli una delle stanze di squadra qui sotto per comunicare in tempo reale con l'SDK Agora.
+            Entra in una stanza o creane una per parlare con i tuoi compagni con l'SDK Agora.
           </p>
         </div>
       )}
 
-      {/* Available Voice Rooms List */}
+      {/* Available Voice Rooms List or Creation */}
       <div className="space-y-2.5">
-        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider px-1 block">
-          Altre Stanze Vocali Disponibili
-        </span>
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+            Stanze Vocali ({voiceRooms.length})
+          </span>
+          <button
+            onClick={() => setIsCreatingRoom(!isCreatingRoom)}
+            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nuova Stanza</span>
+          </button>
+        </div>
 
-        {voiceRooms.map((room) => {
-          const isCurrent = room.id === activeVoiceRoomId;
+        {isCreatingRoom && (
+          <form
+            onSubmit={handleCreateRoom}
+            className="p-3 bg-[#121628] border border-purple-900/40 rounded-xl space-y-2"
+          >
+            <input
+              type="text"
+              value={newRoomName}
+              onChange={(e) => setNewRoomName(e.target.value)}
+              placeholder="Nome della stanza (es. Warzone Trio #1)..."
+              className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-lg px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-purple-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreatingRoom(false)}
+                className="px-3 py-1 text-xs text-zinc-400 hover:text-white"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={!newRoomName.trim()}
+                className="px-3.5 py-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg"
+              >
+                Crea ed Entra
+              </button>
+            </div>
+          </form>
+        )}
 
-          return (
-            <div
-              key={room.id}
-              className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
-                isCurrent
-                  ? "bg-purple-950/30 border-purple-500/50"
-                  : "bg-[#121628]/80 border-purple-900/30 hover:border-purple-700/40"
-              }`}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white truncate max-w-[150px]">
-                    {room.name}
-                  </span>
-                  <span className="text-[10px] font-semibold px-1.5 rounded bg-zinc-800 text-zinc-300">
-                    {room.activeMembers.length}/{room.maxCapacity}
+        {voiceRooms.length > 0 ? (
+          voiceRooms.map((room) => {
+            const isCurrent = room.id === activeVoiceRoomId;
+
+            return (
+              <div
+                key={room.id}
+                className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                  isCurrent
+                    ? "bg-purple-950/30 border-purple-500/50"
+                    : "bg-[#121628]/80 border-purple-900/30 hover:border-purple-700/40"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-white truncate max-w-[150px]">
+                      {room.name}
+                    </span>
+                    <span className="text-[10px] font-semibold px-1.5 rounded bg-zinc-800 text-zinc-300">
+                      {room.activeMembers.length}/{room.maxCapacity}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-zinc-400 block truncate mt-0.5">
+                    {room.game} • {room.channelType}
                   </span>
                 </div>
-                <span className="text-[11px] text-zinc-400 block truncate mt-0.5">
-                  {room.game} • {room.channelType}
-                </span>
-              </div>
 
-              <div>
-                {isCurrent ? (
-                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
-                    Connesso
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => joinVoiceRoom(room.id)}
-                    className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm"
-                  >
-                    Entra
-                  </button>
-                )}
+                <div>
+                  {isCurrent ? (
+                    <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
+                      Connesso
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => joinVoiceRoom(room.id)}
+                      className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm"
+                    >
+                      Entra
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        ) : (
+          <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
+            Nessuna stanza vocale aperta al momento. Tocca "Nuova Stanza" per crearne una ed iniziare a comunicare.
+          </div>
+        )}
       </div>
     </div>
   );

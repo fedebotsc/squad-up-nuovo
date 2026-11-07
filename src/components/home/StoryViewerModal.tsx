@@ -58,11 +58,17 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClo
         {/* Story Header */}
         <div className="absolute top-6 left-3 right-3 z-20 flex items-center justify-between text-white">
           <div className="flex items-center gap-2">
-            <img
-              src={story.avatar}
-              alt={story.username}
-              className="w-9 h-9 rounded-full border-2 border-purple-500 object-cover"
-            />
+            {story.avatar ? (
+              <img
+                src={story.avatar}
+                alt={story.username}
+                className="w-9 h-9 rounded-full border-2 border-purple-500 object-cover"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-purple-950 border-2 border-purple-500 flex items-center justify-center font-bold text-xs text-purple-300">
+                {story.username.slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-1">
                 <span className="text-xs font-bold text-white drop-shadow truncate max-w-[140px]">
