@@ -1,18 +1,45 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React from "react";
+import { SquadProvider, useSquad } from "@/context/SquadContext";
+import { TopHeader } from "@/components/layout/TopHeader";
+import { BottomNavbar } from "@/components/layout/BottomNavbar";
+import { HomeSection } from "@/components/home/HomeSection";
+import { TournamentsSection } from "@/components/tournaments/TournamentsSection";
+import { VoiceSection } from "@/components/voice/VoiceSection";
+import { ClanSection } from "@/components/clan/ClanSection";
+import { ProfileSection } from "@/components/profile/ProfileSection";
 
-import { MadeWithDyad } from "@/components/made-with-dyad";
+const MainContent: React.FC = () => {
+  const { activeTab } = useSquad();
+
+  return (
+    <main className="min-h-screen bg-[#0b0e17] text-white flex flex-col relative overflow-x-hidden">
+      {/* Cyberpunk subtle ambient glow spots */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="fixed bottom-16 right-0 w-60 h-60 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      {/* Top Header */}
+      <TopHeader />
+
+      {/* Dynamic Subsection Rendering */}
+      <div className="flex-1 w-full max-w-md mx-auto">
+        {activeTab === "home" && <HomeSection />}
+        {activeTab === "tournaments" && <TournamentsSection />}
+        {activeTab === "voice" && <VoiceSection />}
+        {activeTab === "clan" && <ClanSection />}
+        {activeTab === "profile" && <ProfileSection />}
+      </div>
+
+      {/* Mobile-first Bottom Navigation Bar */}
+      <BottomNavbar />
+    </main>
+  );
+};
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">
-          Start building your amazing project here!
-        </p>
-      </div>
-      <MadeWithDyad />
-    </div>
+    <SquadProvider>
+      <MainContent />
+    </SquadProvider>
   );
 };
 

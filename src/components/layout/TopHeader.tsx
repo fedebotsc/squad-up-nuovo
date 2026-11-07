@@ -1,0 +1,65 @@
+import React from "react";
+import { useSquad } from "@/context/SquadContext";
+import { Coins, Flame, Volume2 } from "lucide-react";
+
+export const TopHeader: React.FC = () => {
+  const { sCoinBalance, setActiveTab, activeVoiceRoomId } = useSquad();
+
+  return (
+    <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">
+      <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+        {/* SquadUP Logo & Brand */}
+        <div
+          onClick={() => setActiveTab("home")}
+          className="flex items-center gap-2 cursor-pointer select-none group"
+        >
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 via-indigo-600 to-cyan-500 p-0.5 shadow-[0_0_12px_rgba(139,92,246,0.5)]">
+            <div className="w-full h-full bg-[#0e1220] rounded-[7px] flex items-center justify-center">
+              <Flame className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-1">
+              <span className="font-extrabold text-base tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-300 to-cyan-400">
+                SquadUP
+              </span>
+              <span className="text-[9px] px-1 py-0.5 font-bold uppercase rounded bg-purple-950/80 text-purple-300 border border-purple-700/50">
+                PRO
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Voice & SCoin Wallet Badge */}
+        <div className="flex items-center gap-2">
+          {/* Active Voice Pill */}
+          {activeVoiceRoomId && (
+            <button
+              onClick={() => setActiveTab("voice")}
+              title="Canale Vocale Connesso"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-emerald-950/50 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50 transition-colors"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Volume2 className="w-3 h-3 text-emerald-400" />
+              <span className="text-[10px] hidden sm:inline">Agora</span>
+            </button>
+          )}
+
+          {/* SCoin Wallet Chip */}
+          <button
+            onClick={() => setActiveTab("profile")}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+          >
+            <Coins className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="text-xs font-bold tracking-wide">
+              {sCoinBalance.toLocaleString()}
+            </span>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+};
