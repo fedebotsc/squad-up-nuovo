@@ -1,11 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Trophy, Users, Clock, Coins, ChevronRight, Swords } from "lucide-react";
+import {
+  Trophy,
+  Users,
+  Clock,
+  Coins,
+  ChevronRight,
+  Swords,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Tournament } from "@/data/mockData";
+import { CreateTournamentModal } from "./CreateTournamentModal";
 
 export const ActiveTournamentsTab: React.FC = () => {
-  const { tournaments, setTournamentSubTab, setSelectedTournament } = useSquad();
+  const { tournaments, setTournamentSubTab, setSelectedTournament, refreshUserData } = useSquad();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const handleSelectTournament = (tournament: Tournament) => {
     setSelectedTournament(tournament);
@@ -18,13 +29,24 @@ export const ActiveTournamentsTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Header bar with Create Tournament Button */}
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-          Tornei Disponibili ({tournaments.length})
-        </span>
-        <span className="text-[11px] text-cyan-400 font-medium">
-          SquadUP Competitivo
-        </span>
+        <div>
+          <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
+            Tornei Disponibili ({tournaments.length})
+          </span>
+          <span className="text-[11px] text-cyan-400 font-medium">
+            SquadUP Competitivo
+          </span>
+        </div>
+
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(139,92,246,0.3)] transition-all cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Crea Torneo</span>
+        </button>
       </div>
 
       {tournaments.length > 0 ? (
@@ -90,8 +112,8 @@ export const ActiveTournamentsTab: React.FC = () => {
                   <div className="flex items-center justify-end">
                     <span className="text-[10px] font-semibold text-zinc-300">
                       {tournament.entryFeeSCoin > 0
-                        ? `Quota: ${tournament.entryFeeSCoin} SCoin`
-                        : "Ingresso Gratuito"}
+                        ? `Quota: ${tournament.entryFeeSCoin} SC`
+                        : "Ingresso Free"}
                     </span>
                   </div>
                 </div>
@@ -100,7 +122,7 @@ export const ActiveTournamentsTab: React.FC = () => {
                 <div className="pt-1">
                   <button
                     onClick={() => handleSelectTournament(tournament)}
-                    className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
                     <Swords className="w-3.5 h-3.5" />
                     <span>Entra nella Stanza Match</span>
@@ -118,10 +140,25 @@ export const ActiveTournamentsTab: React.FC = () => {
           </div>
           <h4 className="text-sm font-bold text-white">Nessun torneo attivo al momento</h4>
           <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-            I nuovi tornei ed eventi competitivi verranno mostrati qui appena aperti dagli organizzatori.
+            Organizza tu il primo torneo competitivo per la community o per il tuo clan!
           </p>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-cyan-500 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+          >
+            Crea il Tuo Torneo
+          </button>
         </div>
       )}
+
+      {/* Create Tournament Modal */}
+      <CreateTournamentModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={() => {
+          refreshUserData();
+        }}
+      />
     </div>
   );
 };

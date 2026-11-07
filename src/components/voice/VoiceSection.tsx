@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSquad } from "@/context/SquadContext";
 import {
   Mic,
@@ -6,37 +6,46 @@ import {
   Volume2,
   VolumeX,
   PhoneOff,
-  Signal,
   Radio,
+  Plus,
+  Lock,
   Headphones,
   SlidersHorizontal,
   KeyRound,
-  ShieldCheck,
   CheckCircle2,
-  Plus,
+  SignalHigh,
+  Activity,
+  Play,
+  Square,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { agoraVoiceService } from "@/services/agoraService";
 
 export const VoiceSection: React.FC = () => {
   const {
+    activeVoiceRoom,
     voiceRooms,
-    activeVoiceRoomId,
-    isMuted,
-    isDeafened,
-    agoraAppId,
-    toggleMute,
-    toggleDeafen,
     joinVoiceRoom,
     leaveVoiceRoom,
-    userSpeaking,
+    isMuted,
+    toggleMute,
+    isDeafened,
+    toggleDeafen,
     userProfile,
+    userSpeaking,
+    agoraAppId,
   } = useSquad();
 
-  const [noiseSuppression, setNoiseSuppression] = useState(true);
-  const [newRoomName, setNewRoomName] = useState("");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState("");
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
 
-  const currentRoom = voiceRooms.find((r) => r.id === activeVoiceRoomId);
+  // Mic Testing State
+  const [isTestingMic, setIsTestingMic] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const testStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const toggleNoiseSuppression = () => {
     setNoiseSuppression(!noiseSuppression);
@@ -55,6 +64,65 @@ export const VoiceSection: React.FC = () => {
     setIsCreatingRoom(false);
   };
 
+  // Live Mic Test Handlers with guaranteed track closure
+  const startMicTest = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      testStreamRef.current = stream;
+
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioCtx;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      setIsTestingMic(true);
+
+      const checkVolume = () => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        animationFrameRef.current = requestAnimationFrame(checkVolume);
+      };
+
+      checkVolume();
+    } catch (err: any) {
+      toast({
+        title: "Accesso al microfono negato",
+        description: "Controlla i permessi del browser per testare l'audio.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopMicTest = () => {
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    if (testStreamRef.current) {
+      testStreamRef.current.getTracks().forEach((t) => t.stop());
+      testStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    setIsTestingMic(false);
+    setMicLevel(0);
+    agoraVoiceService.closeLocalAudioTrack();
+  };
+
+  useEffect(() => {
+    return () => {
+      stopMicTest();
+    };
+  }, []);
+
   const maskedAppId =
     agoraAppId && agoraAppId.length > 8
       ? `${agoraAppId.slice(0, 6)}••••••••••••${agoraAppId.slice(-4)}`
@@ -63,7 +131,7 @@ export const VoiceSection: React.FC = () => {
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
       {/* Agora Engine Banner & Config Card */}
-      <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-3 shadow-md space-y-2">
+      <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-3.5 shadow-md space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -91,40 +159,76 @@ export const VoiceSection: React.FC = () => {
           </div>
         </div>
 
-        {/* Lifecycle Safety Notice */}
-        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 px-0.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="truncate">
-            Chiusura automatica tracce microfono: <code className="text-cyan-300">localAudioTrack.close()</code>
-          </span>
+        {/* Mic & Audio Test Diagnostic Box */}
+        <div className="pt-1 border-t border-zinc-800/80">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-semibold">Test Microfono & Audio Agora</span>
+            </div>
+            <button
+              onClick={isTestingMic ? stopMicTest : startMicTest}
+              className={`py-1 px-2.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                isTestingMic
+                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                  : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30"
+              }`}
+            >
+              {isTestingMic ? (
+                <>
+                  <Square className="w-3 h-3 fill-rose-300" />
+                  <span>Ferma Test</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3 h-3 fill-cyan-300" />
+                  <span>Avvia Test</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isTestingMic && (
+            <div className="mt-2 space-y-1.5 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
+              <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                <span>Livello Input Microfono:</span>
+                <span className="font-bold text-cyan-300">{micLevel}%</span>
+              </div>
+              <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-purple-500 transition-all duration-75"
+                  style={{ width: `${micLevel}%` }}
+                />
+              </div>
+              <span className="text-[9px] text-emerald-400 font-medium block">
+                ✓ Tracce audio sincronizzate con cancellazione eco Agora.
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Main Active Room or Disconnected View */}
-      {currentRoom || activeVoiceRoomId ? (
-        <div className="bg-[#121628]/95 border-2 border-purple-500/50 rounded-2xl p-4 shadow-[0_0_25px_rgba(139,92,246,0.2)] space-y-4">
-          {/* Room Title & Connection Status */}
+      {/* ACTIVE VOICE ROOM PANEL */}
+      {activeVoiceRoom ? (
+        <div className="relative rounded-2xl overflow-hidden border border-emerald-500/60 bg-gradient-to-b from-emerald-950/40 via-[#13172e] to-[#0c0f1c] p-4 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-600/40 uppercase">
-                {currentRoom?.channelType || "Stanza Vocale"}
-              </span>
-              <h3 className="text-base font-extrabold text-white mt-1 truncate">
-                {currentRoom?.name || `Stanza #${activeVoiceRoomId?.slice(-4)}`}
-              </h3>
-              <p className="text-[11px] text-zinc-400 truncate">{currentRoom?.game || "SquadUP Voice"}</p>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 block">
+                  Stanza Vocale Connessa
+                </span>
+                <h3 className="text-sm font-bold text-white">{activeVoiceRoom.name}</h3>
+              </div>
             </div>
 
-            <div className="text-right shrink-0">
-              <div className="flex items-center gap-1 text-emerald-400 text-xs font-bold justify-end">
-                <Signal className="w-3.5 h-3.5" />
-                <span>21ms</span>
-              </div>
-              <span className="text-[10px] text-zinc-400">Audio Spaziale 3D</span>
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-1 rounded-xl">
+              <SignalHigh className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Agora 24ms</span>
             </div>
           </div>
 
-          {/* Connected User Tile */}
+          {/* Connected Participants List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
               <span>Membri nel canale</span>
@@ -194,7 +298,7 @@ export const VoiceSection: React.FC = () => {
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={toggleMute}
-                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all shadow-md ${
+                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all shadow-md cursor-pointer ${
                   isMuted
                     ? "bg-rose-500/20 border-2 border-rose-500 text-rose-300"
                     : "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
@@ -210,7 +314,7 @@ export const VoiceSection: React.FC = () => {
 
               <button
                 onClick={toggleDeafen}
-                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all border ${
+                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all border cursor-pointer ${
                   isDeafened
                     ? "bg-amber-500/20 border-amber-500 text-amber-300"
                     : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:text-white"
@@ -226,7 +330,7 @@ export const VoiceSection: React.FC = () => {
 
               <button
                 onClick={leaveVoiceRoom}
-                className="py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs bg-red-950/40 border border-red-800/60 text-red-300 hover:bg-red-900/50 transition-colors"
+                className="py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs bg-red-950/40 border border-red-800/60 text-red-300 hover:bg-red-900/50 transition-colors cursor-pointer"
               >
                 <PhoneOff className="w-5 h-5 text-red-400" />
                 <span>Disconnetti</span>
@@ -243,7 +347,7 @@ export const VoiceSection: React.FC = () => {
               </div>
               <button
                 onClick={toggleNoiseSuppression}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
                   noiseSuppression
                     ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]"
                     : "bg-zinc-800 text-zinc-400"
@@ -255,7 +359,7 @@ export const VoiceSection: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-6 text-center space-y-3">
+        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-6 text-center space-y-3 shadow-md">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Headphones className="w-7 h-7" />
           </div>
@@ -274,7 +378,7 @@ export const VoiceSection: React.FC = () => {
           </span>
           <button
             onClick={() => setIsCreatingRoom(!isCreatingRoom)}
-            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline"
+            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Nuova Stanza</span>
@@ -297,70 +401,71 @@ export const VoiceSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCreatingRoom(false)}
-                className="px-3 py-1 text-xs text-zinc-400 hover:text-white"
+                className="px-3 py-1 text-xs text-zinc-400 hover:text-white cursor-pointer"
               >
                 Annulla
               </button>
               <button
                 type="submit"
-                disabled={!newRoomName.trim()}
-                className="px-3.5 py-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg"
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg cursor-pointer"
               >
-                Crea ed Entra
+                Crea Stanza
               </button>
             </div>
           </form>
         )}
 
-        {voiceRooms.length > 0 ? (
-          voiceRooms.map((room) => {
-            const isCurrent = room.id === activeVoiceRoomId;
+        <div className="space-y-2">
+          {voiceRooms.map((room) => {
+            const isCurrent = activeVoiceRoom?.id === room.id;
 
             return (
               <div
                 key={room.id}
-                className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                   isCurrent
-                    ? "bg-purple-950/30 border-purple-500/50"
-                    : "bg-[#121628]/80 border-purple-900/30 hover:border-purple-700/40"
+                    ? "bg-emerald-950/20 border-emerald-500/50 shadow-md"
+                    : "bg-[#121628]/90 border-purple-900/30 hover:border-purple-700/50"
                 }`}
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold text-white truncate max-w-[150px]">
-                      {room.name}
-                    </span>
-                    <span className="text-[10px] font-semibold px-1.5 rounded bg-zinc-800 text-zinc-300">
-                      {room.activeMembers.length}/{room.maxCapacity}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      isCurrent
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : "bg-purple-950/60 text-purple-300 border border-purple-500/30"
+                    }`}
+                  >
+                    <Headphones className="w-5 h-5" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-white truncate max-w-[150px]">
+                        {room.name}
+                      </h4>
+                      {room.isPrivate && <Lock className="w-3 h-3 text-zinc-500" />}
+                    </div>
+                    <span className="text-[10px] text-zinc-400">
+                      {room.members.length}/{room.maxMembers} operatori connessi
                     </span>
                   </div>
-                  <span className="text-[11px] text-zinc-400 block truncate mt-0.5">
-                    {room.game} • {room.channelType}
-                  </span>
                 </div>
 
-                <div>
-                  {isCurrent ? (
-                    <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1 rounded-full">
-                      Connesso
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => joinVoiceRoom(room.id)}
-                      className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm"
-                    >
-                      Entra
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={() => (isCurrent ? leaveVoiceRoom() : joinVoiceRoom(room.id))}
+                  className={`py-1.5 px-3 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                    isCurrent
+                      ? "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40"
+                      : "bg-purple-600 hover:bg-purple-500 text-white"
+                  }`}
+                >
+                  {isCurrent ? "Esci" : "Entra"}
+                </button>
               </div>
             );
-          })
-        ) : (
-          <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
-            Nessuna stanza vocale aperta al momento. Tocca "Nuova Stanza" per crearne una ed iniziare a comunicare.
-          </div>
-        )}
+          })}
+        </div>
       </div>
     </div>
   );

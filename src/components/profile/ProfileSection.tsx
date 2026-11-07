@@ -15,8 +15,17 @@ import {
   LogIn,
   Shield,
   Sparkles,
+  Palette,
+  Crown,
+  Star,
+  Plus,
+  Zap,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { ProfileCustomizerModal, AVATAR_FRAMES } from "./ProfileCustomizerModal";
+import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
+import { SCoinShopModal } from "@/components/shop/SCoinShopModal";
+import { PlayerReviewsModal } from "./PlayerReviewsModal";
 
 export const ProfileSection: React.FC = () => {
   const {
@@ -28,7 +37,14 @@ export const ProfileSection: React.FC = () => {
     openAuthModal,
     signOut,
   } = useSquad();
+
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
+
+  // Modals state
+  const [showCustomizer, setShowCustomizer] = useState(false);
+  const [showSubscription, setShowSubscription] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [showReviews, setShowReviews] = useState(false);
 
   const rewards = [
     {
@@ -84,6 +100,9 @@ export const ProfileSection: React.FC = () => {
     userProfile.stats.kd !== null
   );
 
+  const isPro = userProfile.subscriptionTier === "pro";
+  const frameObj = AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame) || AVATAR_FRAMES[0];
+
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
       {/* Unauthenticated Guest Banner */}
@@ -96,7 +115,7 @@ export const ProfileSection: React.FC = () => {
             <div>
               <h3 className="text-sm font-bold text-white">Unisciti a SquadUP</h3>
               <p className="text-xs text-zinc-300 mt-0.5 leading-relaxed">
-                Registrati con Email, Password, Username e Activision ID per pubblicare post, commentare e partecipare ai tornei con montepremi!
+                Registrati per personalizzare banner, equipaggiare cornici, gestire tornei e guadagnare SCoin!
               </p>
             </div>
           </div>
@@ -120,93 +139,211 @@ export const ProfileSection: React.FC = () => {
         </div>
       )}
 
-      {/* Player Profile Card */}
-      <div className="relative rounded-2xl overflow-hidden border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-[#13172e] to-[#0d1022] p-4 shadow-xl">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="relative shrink-0">
-              {userProfile.avatar ? (
-                <img
-                  src={userProfile.avatar}
-                  alt={userProfile.name}
-                  className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-[0_0_15px_rgba(139,92,246,0.5)]"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-2xl bg-purple-950/80 border-2 border-purple-500 flex items-center justify-center text-purple-300">
-                  <User className="w-8 h-8" />
-                </div>
-              )}
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black">
-                {userProfile.level}
-              </span>
-            </div>
+      {/* Player Profile Card with Custom Banner & Frame */}
+      <div className="relative rounded-3xl overflow-hidden border border-purple-500/50 bg-[#0d1022] shadow-2xl">
+        {/* Profile Banner */}
+        <div className="relative h-28 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
+          {userProfile.bannerUrl ? (
+            <img
+              src={userProfile.bannerUrl}
+              alt="Banner profilo"
+              className="w-full h-full object-cover opacity-85"
+            />
+          ) : (
+            <div className="w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-800/40 via-purple-950 to-[#0d1022]" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1022] via-[#0d1022]/40 to-transparent" />
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h2 className="text-base font-extrabold text-white truncate max-w-[140px]">
-                  {userProfile.name}
-                </h2>
-                {clanData?.tag && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
-                    [{clanData.tag}]
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-1 flex-wrap">
-                <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
-                <span>•</span>
-                <span className="text-zinc-400">{userProfile.tag}</span>
-              </div>
-
-              {userProfile.activisionName && (
-                <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1.5 w-fit">
-                  <Gamepad2 className="w-3 h-3 text-cyan-400" />
-                  <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Logout button if authenticated */}
+          {/* Quick Customizer Icon button on Banner */}
           {currentUser && (
             <button
-              onClick={signOut}
-              title="Disconnetti"
-              className="p-2 rounded-xl bg-zinc-900/80 hover:bg-rose-500/20 border border-zinc-800 hover:border-rose-500/40 text-zinc-400 hover:text-rose-300 transition-colors cursor-pointer shrink-0"
+              onClick={() => setShowCustomizer(true)}
+              title="Personalizza Banner & Cornice"
+              className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-lg"
             >
-              <LogOut className="w-4 h-4" />
+              <Palette className="w-3.5 h-3.5 text-cyan-300" />
+              <span>Personalizza</span>
             </button>
           )}
         </div>
 
-        {/* Dynamic stat highlights or placeholder */}
-        {hasStats ? (
-          <div className="grid grid-cols-4 gap-2 pt-4 mt-3 border-t border-zinc-800/80 text-center">
-            <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-              <span className="text-[9px] uppercase font-bold text-zinc-400 block">K/D</span>
-              <span className="text-xs font-extrabold text-cyan-300">{userProfile.stats.kd ?? "-"}</span>
+        {/* Profile Body Content */}
+        <div className="px-4 pb-4 -mt-10 relative">
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex items-end gap-3 min-w-0">
+              {/* Avatar with Custom Frame & Glow */}
+              <div className="relative shrink-0">
+                <div
+                  className={`w-18 h-18 rounded-2xl overflow-hidden bg-purple-950/80 border-2 ${
+                    frameObj.borderClass
+                  } ${frameObj.glowClass || ""} shadow-xl`}
+                >
+                  {userProfile.avatar ? (
+                    <img
+                      src={userProfile.avatar}
+                      alt={userProfile.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-purple-300">
+                      <User className="w-9 h-9" />
+                    </div>
+                  )}
+                </div>
+                <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black shadow-md">
+                  {userProfile.level}
+                </span>
+              </div>
+
+              {/* Name & Title */}
+              <div className="min-w-0 pb-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h2 className="text-base font-black text-white truncate max-w-[140px]">
+                    {userProfile.name}
+                  </h2>
+                  {isPro && (
+                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
+                      <Crown className="w-2.5 h-2.5 text-amber-400" />
+                      PRO
+                    </span>
+                  )}
+                  {clanData?.tag && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
+                      [{clanData.tag}]
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-0.5 flex-wrap">
+                  <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
+                  <span>•</span>
+                  <span className="text-zinc-400">{userProfile.tag}</span>
+                </div>
+
+                {userProfile.activisionName && (
+                  <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1 w-fit">
+                    <Gamepad2 className="w-3 h-3 text-cyan-400" />
+                    <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Win Rate</span>
-              <span className="text-xs font-extrabold text-emerald-400">{userProfile.stats.winRate ?? "-"}</span>
-            </div>
-            <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Match</span>
-              <span className="text-xs font-extrabold text-white">{userProfile.stats.matches}</span>
-            </div>
-            <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Kill</span>
-              <span className="text-xs font-extrabold text-purple-300">{userProfile.stats.kills}</span>
-            </div>
+
+            {/* Logout button */}
+            {currentUser && (
+              <button
+                onClick={signOut}
+                title="Disconnetti"
+                className="p-2 rounded-xl bg-zinc-900/80 hover:bg-rose-500/20 border border-zinc-800 hover:border-rose-500/40 text-zinc-400 hover:text-rose-300 transition-colors cursor-pointer shrink-0 mb-1"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="pt-3 mt-3 border-t border-zinc-800/80 text-center">
-            <span className="text-[11px] text-zinc-400 italic">
-              Partecipa a un torneo per vedere le statistiche
+
+          {/* Dynamic stat highlights */}
+          {hasStats ? (
+            <div className="grid grid-cols-4 gap-2 pt-3 mt-3 border-t border-zinc-800/80 text-center">
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">K/D</span>
+                <span className="text-xs font-extrabold text-cyan-300">{userProfile.stats.kd ?? "-"}</span>
+              </div>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Win Rate</span>
+                <span className="text-xs font-extrabold text-emerald-400">{userProfile.stats.winRate ?? "-"}</span>
+              </div>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Match</span>
+                <span className="text-xs font-extrabold text-white">{userProfile.stats.matches}</span>
+              </div>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Kill</span>
+                <span className="text-xs font-extrabold text-purple-300">{userProfile.stats.kills}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2 mt-2.5 border-t border-zinc-800/80 text-center">
+              <span className="text-[11px] text-zinc-400 italic">
+                Gioca partite e tornei per registrare le tue statistiche
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* QUICK ACTIONS GRID: SHOP, PRO, CUSTOMIZER, REVIEWS */}
+      <div className="grid grid-cols-2 gap-2">
+        {/* Shop SCoin */}
+        <button
+          onClick={() => setShowShop(true)}
+          className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/10 via-[#14182c] to-[#0f1322] border border-amber-500/40 hover:border-amber-400 text-left transition-all cursor-pointer group shadow-md"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              <Coins className="w-4 h-4 text-amber-400" />
+            </div>
+            <span className="text-[10px] font-black text-amber-400 px-1.5 py-0.5 rounded bg-amber-500/10">
+              1€ = 100 SC
             </span>
           </div>
-        )}
+          <span className="text-xs font-black text-white block group-hover:text-amber-300 transition-colors">
+            Shop SCoin
+          </span>
+          <span className="text-[10px] text-zinc-400">Ricarica wallet e premi</span>
+        </button>
+
+        {/* Abbonamenti Pro & Clan */}
+        <button
+          onClick={() => setShowSubscription(true)}
+          className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/10 via-[#14182c] to-[#0f1322] border border-purple-500/40 hover:border-purple-400 text-left transition-all cursor-pointer group shadow-md"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="p-1.5 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/40">
+              <Crown className="w-4 h-4 text-amber-400" />
+            </div>
+            <span className="text-[10px] font-extrabold text-purple-300 px-1.5 py-0.5 rounded bg-purple-500/10">
+              PRO PASS
+            </span>
+          </div>
+          <span className="text-xs font-black text-white block group-hover:text-purple-300 transition-colors">
+            Piani Pro & Clan
+          </span>
+          <span className="text-[10px] text-zinc-400">Vantaggi, 2x coins & aura</span>
+        </button>
+
+        {/* Personalizzazione Aspetto */}
+        <button
+          onClick={() => setShowCustomizer(true)}
+          className="p-3 rounded-2xl bg-gradient-to-br from-cyan-500/10 via-[#14182c] to-[#0f1322] border border-cyan-500/40 hover:border-cyan-400 text-left transition-all cursor-pointer group shadow-md"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="p-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+              <Palette className="w-4 h-4 text-cyan-300" />
+            </div>
+            <span className="text-[10px] font-bold text-cyan-300">ESTETICA</span>
+          </div>
+          <span className="text-xs font-black text-white block group-hover:text-cyan-300 transition-colors">
+            Banner & Cornici
+          </span>
+          <span className="text-[10px] text-zinc-400">Personalizza il tuo stile</span>
+        </button>
+
+        {/* Recensioni & Reputazione */}
+        <button
+          onClick={() => setShowReviews(true)}
+          className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-[#14182c] to-[#0f1322] border border-emerald-500/40 hover:border-emerald-400 text-left transition-all cursor-pointer group shadow-md"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              <Star className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+            </div>
+            <span className="text-[10px] font-bold text-emerald-300">TRUST</span>
+          </div>
+          <span className="text-xs font-black text-white block group-hover:text-emerald-300 transition-colors">
+            Recensioni Operatore
+          </span>
+          <span className="text-[10px] text-zinc-400">Stelle e reputazione</span>
+        </button>
       </div>
 
       {/* Profile Section Tabs */}
@@ -231,7 +368,7 @@ export const ProfileSection: React.FC = () => {
           }`}
         >
           <Gift className="w-3.5 h-3.5 text-pink-400" />
-          <span>Riscatto Premi</span>
+          <span>Catalogo Premi</span>
         </button>
         <button
           onClick={() => setActiveTab("stats")}
@@ -242,181 +379,176 @@ export const ProfileSection: React.FC = () => {
           }`}
         >
           <Trophy className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Statistiche</span>
+          <span>Trofei</span>
         </button>
       </div>
 
-      {/* WALLET TAB */}
+      {/* Tab: WALLET */}
       {activeTab === "wallet" && (
-        <div className="space-y-4">
-          {/* SCoin Wallet Balance Card */}
-          <div className="bg-gradient-to-br from-amber-500/10 via-[#161a30] to-purple-900/20 border-2 border-amber-500/40 rounded-2xl p-4 shadow-[0_0_20px_rgba(245,158,11,0.15)] space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-amber-400" />
-                Saldo Disponibile
+        <div className="space-y-4 animate-fade-in">
+          {/* Balance card with Shop CTA */}
+          <div className="bg-gradient-to-r from-purple-950/80 via-[#151932] to-amber-950/40 border border-amber-500/40 rounded-2xl p-4 shadow-lg flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block mb-0.5">
+                Saldo Squad Coins Disponibile
               </span>
-              <span className="text-[10px] font-semibold text-zinc-400">
-                1 SCoin = 0,01€
-              </span>
+              <div className="flex items-center gap-2">
+                <Coins className="w-6 h-6 text-amber-400 animate-pulse" />
+                <span className="text-2xl font-black text-white">
+                  {sCoinBalance.toLocaleString()} <span className="text-sm font-bold text-amber-300">SC</span>
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-white tracking-tight">
-                {sCoinBalance.toLocaleString()}
-              </span>
-              <span className="text-base font-bold text-amber-400">SCoin</span>
-              <span className="text-xs text-zinc-400 ml-2">
-                (~{(sCoinBalance * 0.01).toFixed(2)}€)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => {
-                  if (!currentUser) {
-                    openAuthModal("signup");
-                    return;
-                  }
-                  toast({
-                    title: "Ricarica SCoin",
-                    description: "Seleziona un pacchetto di SCoin per ricaricare il tuo wallet.",
-                  });
-                }}
-                className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow transition-all cursor-pointer"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                Ricarica Saldo
-              </button>
-              <button
-                onClick={() => setActiveTab("rewards")}
-                className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Gift className="w-3.5 h-3.5 text-purple-400" />
-                Spendi nei Premi
-              </button>
-            </div>
+            <button
+              onClick={() => setShowShop(true)}
+              className="py-2 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Ricarica</span>
+            </button>
           </div>
 
-          {/* Transactions History */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-3.5 h-3.5 text-purple-400" />
-                Transazioni Recenti
-              </span>
+          {/* Transactions list */}
+          <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-1.5">
+                <History className="w-4 h-4 text-purple-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Storico Transazioni
+                </h3>
+              </div>
+              <span className="text-[10px] text-zinc-400">sc_transactions</span>
             </div>
 
             {transactions.length > 0 ? (
-              <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl divide-y divide-zinc-800/70 overflow-hidden shadow-md">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="p-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                          tx.isPositive
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                            : "bg-rose-500/20 text-rose-400 border border-rose-500/40"
-                        }`}
-                      >
-                        {tx.isPositive ? (
-                          <ArrowDownLeft className="w-4 h-4" />
-                        ) : (
-                          <ArrowUpRight className="w-4 h-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-xs font-bold text-zinc-200 block truncate max-w-[170px]">
-                          {tx.title}
-                        </span>
-                        <span className="text-[10px] text-zinc-500 block">{tx.date}</span>
-                      </div>
-                    </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {transactions.map((t) => {
+                  const isPositive =
+                    t.type === "reward" ||
+                    t.type === "daily_bonus" ||
+                    t.type === "shop_purchase" ||
+                    t.amount > 0;
 
-                    <div className="text-right shrink-0">
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            isPositive
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                          }`}
+                        >
+                          {isPositive ? (
+                            <ArrowDownLeft className="w-4 h-4" />
+                          ) : (
+                            <ArrowUpRight className="w-4 h-4" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-200 block truncate max-w-[170px]">
+                            {t.description}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">{t.date}</span>
+                        </div>
+                      </div>
+
                       <span
-                        className={`text-xs font-extrabold ${
-                          tx.isPositive ? "text-emerald-400" : "text-zinc-300"
+                        className={`font-black shrink-0 ${
+                          isPositive ? "text-emerald-400" : "text-rose-400"
                         }`}
                       >
-                        {tx.isPositive ? `+${tx.amount}` : `-${tx.amount}`} SCoin
+                        {isPositive ? `+${t.amount}` : `-${Math.abs(t.amount)}`} SC
                       </span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
-                Nessuna transazione registrata nel wallet.
+              <div className="py-6 text-center text-xs text-zinc-400">
+                Nessuna transazione registrata finora.
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* REWARDS STORE TAB */}
+      {/* Tab: REWARDS */}
       {activeTab === "rewards" && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-              Premi Disponibili
-            </span>
-            <span className="text-[10px] text-amber-300 font-bold">
-              Tuo Saldo: {sCoinBalance} SCoin
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {rewards.map((reward) => (
-              <div
-                key={reward.id}
-                className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <img
-                    src={reward.image}
-                    alt={reward.title}
-                    className="w-14 h-14 rounded-xl object-cover border border-purple-500/30 shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-bold text-cyan-400 uppercase block">
-                      {reward.tag}
-                    </span>
-                    <h4 className="text-xs font-extrabold text-white truncate max-w-[150px]">
-                      {reward.title}
-                    </h4>
-                    <span className="text-xs font-bold text-amber-300 block mt-0.5">
-                      {reward.cost.toLocaleString()} SCoin
-                    </span>
+        <div className="space-y-3 animate-fade-in">
+          {rewards.map((rw) => (
+            <div
+              key={rw.id}
+              className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={rw.image}
+                  alt={rw.title}
+                  className="w-14 h-14 rounded-xl object-cover border border-purple-500/30 shrink-0"
+                />
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-cyan-400 block uppercase">
+                    {rw.tag}
+                  </span>
+                  <h4 className="text-xs font-bold text-white truncate max-w-[160px]">
+                    {rw.title}
+                  </h4>
+                  <div className="flex items-center gap-1 text-amber-300 font-extrabold text-xs mt-1">
+                    <Coins className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{rw.cost.toLocaleString()} SCoin</span>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleRedeem(reward.title, reward.cost)}
-                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-bold rounded-xl shrink-0 shadow-sm transition-all cursor-pointer"
-                >
-                  Riscatta
-                </button>
               </div>
-            ))}
-          </div>
+
+              <button
+                onClick={() => handleRedeem(rw.title, rw.cost)}
+                className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs shrink-0 shadow-sm cursor-pointer"
+              >
+                Riscatta
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* STATS TAB */}
+      {/* Tab: STATS */}
       {activeTab === "stats" && (
-        <div className="space-y-3">
-          <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-6 text-center space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
-              <Gamepad2 className="w-6 h-6" />
-            </div>
-            <h4 className="text-sm font-bold text-white">Statistiche Giocatore</h4>
-            <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-              Partecipa a un torneo per vedere le statistiche di gioco, K/D e win rate aggiornate.
-            </p>
-          </div>
+        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-6 text-center space-y-3 animate-fade-in shadow-md">
+          <Trophy className="w-10 h-10 text-amber-400 mx-auto" />
+          <h4 className="text-sm font-bold text-white">Bacheca Trofei & Tornei</h4>
+          <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
+            Iscriviti a un torneo competitivo per sbloccare trofei stagionali, montepremi e scalare la classifica nazionale.
+          </p>
         </div>
       )}
+
+      {/* ALL MODALS */}
+      <ProfileCustomizerModal
+        isOpen={showCustomizer}
+        onClose={() => setShowCustomizer(false)}
+      />
+
+      <SubscriptionModal
+        isOpen={showSubscription}
+        onClose={() => setShowSubscription(false)}
+        defaultTab="player"
+      />
+
+      <SCoinShopModal
+        isOpen={showShop}
+        onClose={() => setShowShop(false)}
+      />
+
+      <PlayerReviewsModal
+        isOpen={showReviews}
+        onClose={() => setShowReviews(false)}
+      />
     </div>
   );
 };

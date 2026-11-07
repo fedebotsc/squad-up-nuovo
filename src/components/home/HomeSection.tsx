@@ -28,6 +28,7 @@ export const HomeSection: React.FC = () => {
     toggleLikePost,
     createPost,
     deletePost,
+    createStory,
     fetchPostComments,
     addComment,
     deleteComment,
@@ -60,8 +61,10 @@ export const HomeSection: React.FC = () => {
     postId: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploadingStory, setIsUploadingStory] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const storyInputRef = useRef<HTMLInputElement>(null);
 
   const gameFilters = ["Tutti", "Warzone", "Multiplayer", "Ritorno", "Competitivo"];
 
@@ -185,10 +188,17 @@ export const HomeSection: React.FC = () => {
       });
       return;
     }
-    toast({
-      title: "Carica Storia 24h",
-      description: "Carica una clip o uno screenshot dalla galleria.",
-    });
+    storyInputRef.current?.click();
+  };
+
+  const handleStoryFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingStory(true);
+    await createStory(file);
+    setIsUploadingStory(false);
+    if (storyInputRef.current) storyInputRef.current.value = "";
   };
 
   return (
@@ -204,20 +214,32 @@ export const HomeSection: React.FC = () => {
 
         <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none scroll-smooth">
           {/* Add story button */}
+          <input
+            type="file"
+            ref={storyInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={handleStoryFileSelected}
+          />
           <button
             onClick={handleAddStory}
+            disabled={isUploadingStory}
             className="flex flex-col items-center shrink-0 group select-none cursor-pointer"
           >
             <div className="relative w-16 h-16 rounded-2xl bg-[#161b2e] border-2 border-dashed border-purple-500/60 p-0.5 flex items-center justify-center group-hover:border-purple-400 transition-colors">
               <div className="w-full h-full rounded-xl bg-purple-950/40 flex items-center justify-center">
-                <Plus className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform" />
+                {isUploadingStory ? (
+                  <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                ) : (
+                  <Plus className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform" />
+                )}
               </div>
               <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center text-black font-bold text-xs shadow-md">
                 +
               </div>
             </div>
             <span className="text-[11px] font-medium text-zinc-300 mt-1.5 truncate max-w-[64px]">
-              La tua clip
+              {isUploadingStory ? "Upload..." : "La tua clip"}
             </span>
           </button>
 
@@ -330,12 +352,24 @@ export const HomeSection: React.FC = () => {
             />
 
             {selectedFile && (
-              <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-900 rounded-lg text-xs text-zinc-300 border border-zinc-800">
-                <span className="truncate max-w-[200px]">{selectedFile.name}</span>
+              <div className="relative rounded-xl overflow-hidden border border-purple-500/40 bg-zinc-950 p-2 flex items-center gap-3">
+                <img
+                  src={URL.createObjectURL(selectedFile)}
+                  alt="Preview"
+                  className="w-14 h-14 rounded-lg object-cover border border-zinc-700"
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-bold text-white block truncate">
+                    {selectedFile.name}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    Pronto per l'upload su social-media
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setSelectedFile(null)}
-                  className="text-rose-400 text-xs hover:underline"
+                  className="px-2.5 py-1 text-rose-400 text-xs hover:bg-rose-500/10 rounded-lg transition-colors"
                 >
                   Rimuovi
                 </button>

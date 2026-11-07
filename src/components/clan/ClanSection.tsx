@@ -6,77 +6,274 @@ import {
   Users,
   Gift,
   PlusCircle,
-  Search,
+  Crown,
+  Heart,
+  Loader2,
+  Trash2,
+  AlertTriangle,
+  Zap,
+  Flame,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 
 export const ClanSection: React.FC = () => {
-  const { clanData, clanMembers, donateToClan, sCoinBalance } = useSquad();
+  const {
+    clanData,
+    clanMembers,
+    sCoinBalance,
+    donateToClan,
+    currentUser,
+    refreshUserData,
+    openAuthModal,
+  } = useSquad();
+
   const [selectedDonation, setSelectedDonation] = useState<number>(50);
   const [customDonation, setCustomDonation] = useState<string>("");
-  const [isDonating, setIsDonating] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Clan Deletion Confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingClan, setIsDeletingClan] = useState(false);
+
+  // Subscription Modal
+  const [showSubModal, setShowSubModal] = useState(false);
+
+  // Create Clan Modal
+  const [showCreateClan, setShowCreateClan] = useState(false);
+  const [newClanName, setNewClanName] = useState("");
+  const [newClanTag, setNewClanTag] = useState("");
+  const [newClanDescription, setNewClanDescription] = useState("");
+  const [isCreatingClan, setIsCreatingClan] = useState(false);
 
   const handleDonate = async () => {
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
     const amount = customDonation ? parseInt(customDonation, 10) : selectedDonation;
     if (isNaN(amount) || amount <= 0) {
       toast({
         title: "Importo non valido",
-        description: "Inserisci un numero positivo di SCoin da donare.",
+        description: "Inserisci un importo valido di SCoin da donare.",
         variant: "destructive",
       });
       return;
     }
-    setIsDonating(true);
+
+    setIsSubmitting(true);
     const success = await donateToClan(amount);
-    setIsDonating(false);
+    setIsSubmitting(false);
+
     if (success) {
       setCustomDonation("");
     }
   };
 
-  // CLEAN EMPTY STATE IF USER HAS NO CLAN
+  const isOwner = Boolean(currentUser && clanData && currentUser.id === clanData.ownerId);
+
+  const handleDeleteClan = async () => {
+    if (!clanData || !currentUser || !isOwner) return;
+
+    setIsDeletingClan(true);
+    try {
+      const { error } = await supabase
+        .from("clans")
+        .delete()
+        .eq("id", clanData.id)
+        .eq("owner_id", currentUser.id);
+
+      if (error) throw error;
+
+      await refreshUserData();
+      toast({
+        title: "Clan Eliminato",
+        description: `Il clan [${clanData.tag}] ${clanData.name} è stato rimosso definitivamente da Supabase.`,
+      });
+      setShowDeleteConfirm(false);
+    } catch (err: any) {
+      console.error("[ClanSection] Errore eliminazione clan:", err);
+      toast({
+        title: "Errore eliminazione clan",
+        description: err.message || "Impossibile eliminare il clan.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingClan(false);
+    }
+  };
+
+  const handleCreateClanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
+    if (!newClanName.trim() || !newClanTag.trim()) {
+      toast({
+        title: "Dati mancanti",
+        description: "Nome e Tag del clan sono obbligatori.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingClan(true);
+    try {
+      const cleanTag = newClanTag.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+
+      const { data, error } = await supabase
+        .from("clans")
+        .insert({
+          name: newClanName.trim(),
+          tag: cleanTag,
+          description: newClanDescription.trim() || "Squad competitiva COD Warzone",
+          game_mode: "Warzone",
+          region: "EU",
+          owner_id: currentUser.id,
+          is_recruiting: true,
+          subscription_tier: "free",
+          clan_treasury_sc: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await refreshUserData();
+      setShowCreateClan(false);
+      setNewClanName("");
+      setNewClanTag("");
+      setNewClanDescription("");
+
+      toast({
+        title: "Clan Fondato con Successo! 🛡️",
+        description: `Il clan [${cleanTag}] è ora attivo su Supabase.`,
+      });
+    } catch (err: any) {
+      console.error("[ClanSection] Errore creazione clan:", err);
+      toast({
+        title: "Errore creazione clan",
+        description: err.message || "Impossibile creare il clan. Tag già in uso?",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingClan(false);
+    }
+  };
+
+  // EMPTY STATE (NOT IN A CLAN)
   if (!clanData) {
     return (
       <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
-        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-6 text-center space-y-4 shadow-lg">
+        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-8 text-center space-y-4 shadow-lg">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Shield className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-white">Nessun clan trovato</h3>
+            <h3 className="text-base font-bold text-white">Nessun Clan Trovato</h3>
             <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
-              Non fai ancora parte di un clan. Unisciti a un team o fondane uno per competere nei tornei e condividere la cassaforte SCoin!
+              Non fai ancora parte di un clan attivo su SquadUP. Crea la tua squadra o richiedi l'ingresso in una legione esistente!
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row gap-2">
+          <div className="pt-2 flex flex-col gap-2">
             <button
-              onClick={() =>
-                toast({
-                  title: "Ricerca Clan",
-                  description: "Esplora i clan disponibili tramite la barra di ricerca o chiedi un invito.",
-                })
-              }
-              className="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              onClick={() => {
+                if (!currentUser) {
+                  openAuthModal("signup");
+                } else {
+                  setShowCreateClan(true);
+                }
+              }}
+              className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>Cerca Clan</span>
-            </button>
-            <button
-              onClick={() =>
-                toast({
-                  title: "Crea un Clan",
-                  description: "Puoi fondare il tuo clan ufficiale nella sezione impostazioni del profilo.",
-                })
-              }
-              className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <PlusCircle className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Fonda Clan</span>
+              <PlusCircle className="w-3.5 h-3.5 text-cyan-300" />
+              <span>Fonda un Nuovo Clan</span>
             </button>
           </div>
         </div>
+
+        {/* Modal Fonda Clan */}
+        {showCreateClan && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+            <div className="w-full max-w-sm bg-[#0f1322] border border-purple-500/40 rounded-3xl p-5 shadow-2xl space-y-3.5">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-cyan-400" />
+                  Fonda il Tuo Clan
+                </h4>
+                <button
+                  onClick={() => setShowCreateClan(false)}
+                  className="p-1 rounded-full text-zinc-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateClanSubmit} className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                    Nome Clan <span className="text-purple-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="es. Cyber Knights"
+                    value={newClanName}
+                    onChange={(e) => setNewClanName(e.target.value)}
+                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                    Tag Clan (max 5 lettere) <span className="text-purple-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={5}
+                    placeholder="es. CYBER"
+                    value={newClanTag}
+                    onChange={(e) => setNewClanTag(e.target.value.toUpperCase())}
+                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 uppercase focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-300 mb-1">
+                    Descrizione & Obiettivi
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Clan competitivo Warzone e tornei community..."
+                    value={newClanDescription}
+                    onChange={(e) => setNewClanDescription(e.target.value)}
+                    className="w-full bg-[#121629] border border-zinc-800 rounded-xl p-2 text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isCreatingClan}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  {isCreatingClan ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Shield className="w-4 h-4" />
+                  )}
+                  <span>Crea Clan Ufficiale</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -106,6 +303,11 @@ export const ClanSection: React.FC = () => {
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
                   [{clanData.tag}]
                 </span>
+                {isOwner && (
+                  <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    LEADER
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-300 mt-0.5">
                 <span className="font-semibold text-purple-300">{clanData.gameMode}</span>
@@ -131,6 +333,20 @@ export const ClanSection: React.FC = () => {
             {clanData.description}
           </p>
         )}
+
+        {/* Upgrade Clan Tier Banner Button */}
+        <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span>Potenzia a Clan Pro o Elite</span>
+          </div>
+          <button
+            onClick={() => setShowSubModal(true)}
+            className="py-1 px-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-[11px] font-bold rounded-lg shadow-sm cursor-pointer"
+          >
+            Upgrade Clan
+          </button>
+        </div>
       </div>
 
       {/* Quick Donation Card */}
@@ -160,7 +376,7 @@ export const ClanSection: React.FC = () => {
                 setSelectedDonation(amount);
                 setCustomDonation("");
               }}
-              className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border ${
+              className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                 selectedDonation === amount && !customDonation
                   ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
                   : "bg-zinc-900/80 border-zinc-800 text-zinc-300 hover:text-white"
@@ -180,32 +396,52 @@ export const ClanSection: React.FC = () => {
             placeholder="Altro importo..."
             value={customDonation}
             onChange={(e) => setCustomDonation(e.target.value)}
-            className="w-32 bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-purple-500"
+            className="flex-1 bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-zinc-700/60 focus:outline-none focus:border-amber-400"
           />
+
           <button
+            type="button"
             onClick={handleDonate}
-            disabled={isDonating || sCoinBalance <= 0}
-            className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 disabled:opacity-40 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all"
+            disabled={isSubmitting || sCoinBalance <= 0}
+            className="py-2 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
           >
-            <Coins className="w-3.5 h-3.5 text-black" />
-            <span>{isDonating ? "Invio..." : "Dona Ora"}</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Invio...</span>
+              </>
+            ) : (
+              <>
+                <Heart className="w-3.5 h-3.5 fill-black" />
+                <span>Dona</span>
+              </>
+            )}
           </button>
         </div>
       </section>
 
-      {/* Clan Members List */}
-      <section aria-label="Membri del Clan" className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-purple-400" />
-            Roster Membri ({clanMembers.length})
-          </span>
+      {/* Real Clan Members Roster */}
+      <section
+        aria-label="Membri del Clan"
+        className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3"
+      >
+        <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-purple-400" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Roster Clan ({clanMembers.length})
+            </h3>
+          </div>
+          <span className="text-[10px] text-zinc-400">Attivi su Supabase</span>
         </div>
 
         {clanMembers.length > 0 ? (
-          <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl divide-y divide-zinc-800/70 overflow-hidden shadow-md">
+          <div className="space-y-2">
             {clanMembers.map((member) => (
-              <div key={member.id} className="p-3 flex items-center justify-between gap-3">
+              <div
+                key={member.id}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/70"
+              >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="relative shrink-0">
                     {member.avatar ? (
@@ -239,6 +475,73 @@ export const ClanSection: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* CLAN OWNER MANAGEMENT & DELETION SECTION */}
+      {isOwner && (
+        <section className="bg-rose-950/20 border border-rose-500/30 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Zona Amministrativa Owner Clan</span>
+          </div>
+          <p className="text-[11px] text-zinc-400 leading-snug">
+            In qualità di fondatore del clan, hai il controllo totale delle impostazioni. Se desideri sciogliere la squadra, puoi eliminare il clan.
+          </p>
+
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>Elimina Clan Definitivamente</span>
+          </button>
+        </section>
+      )}
+
+      {/* Clan Deletion Modal Confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-xs bg-[#121629] border border-rose-500/50 rounded-2xl p-5 shadow-2xl space-y-3.5 text-center">
+            <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h4 className="text-sm font-extrabold text-white">Eliminare il Clan?</h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Stai per sciogliere il clan <strong className="text-white">[{clanData.tag}] {clanData.name}</strong>.
+                Tutti i membri verranno rimossi e la cassaforte verrà chiusa su Supabase. L'azione è irreversibile.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeletingClan}
+                className="py-2 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteClan}
+                disabled={isDeletingClan}
+                className="py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer"
+              >
+                {isDeletingClan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Elimina Clan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Modal for Clan Upgrade */}
+      <SubscriptionModal
+        isOpen={showSubModal}
+        onClose={() => setShowSubModal(false)}
+        defaultTab="clan"
+      />
     </div>
   );
 };

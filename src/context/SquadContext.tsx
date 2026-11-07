@@ -24,10 +24,17 @@ export interface UserProfileData {
   name: string;
   tag: string;
   avatar: string;
+  bannerUrl?: string;
+  unlockedBanners?: string[];
+  avatarFrame?: string;
+  proTheme?: "gold" | "neon";
+  subscriptionTier?: "free" | "pro";
+  proExpiresAt?: string | null;
   clanTag?: string;
   rank: string;
   level: number;
   activisionName?: string;
+  bio?: string;
   stats: {
     kd: string | null;
     winRate: string | null;
@@ -77,6 +84,7 @@ interface SquadContextType {
   toggleLikePost: (postId: string) => void;
   createPost: (content: string, game: string, imageFile?: File) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
+  createStory: (file: File, caption?: string) => Promise<boolean>;
 
   // Comments
   fetchPostComments: (postId: string) => Promise<PostComment[]>;
@@ -239,6 +247,13 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               ? `#${profile.activision_tag}`
               : `#${profile.username?.slice(0, 4) || "SQ"}`,
             avatar: profile.avatar_url || "",
+            bannerUrl: profile.banner_url || "",
+            unlockedBanners: profile.unlocked_banners || [],
+            avatarFrame: profile.subscription_tier === "pro" ? "gold" : "base",
+            proTheme: (profile.pro_theme as any) || "gold",
+            subscriptionTier: (profile.subscription_tier as any) || "free",
+            proExpiresAt: profile.pro_expires_at || null,
+            bio: profile.bio || "",
             rank: profile.subscription_tier === "pro" ? "Pro Player" : "Competitor",
             level: Math.max(1, Math.floor(balance / 100)),
             activisionName: profile.activision_id || profile.activision_name || "",
@@ -572,23 +587,37 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let mediaUrl: string | undefined = undefined;
 
-    // Optional upload image to Supabase storage if file provided
+    // Upload image to Supabase storage 'social-media' with path `${user.id}/${timestamp}.${ext}`
     if (imageFile) {
       try {
-        const fileExt = imageFile.name.split(".").pop();
-        const fileName = `${user.id}_${Date.now()}.${fileExt}`;
+        const fileExt = imageFile.name.split(".").pop() || "jpg";
+        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+
+        // Attempt upload to 'social-media' bucket
         const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("post_media")
-          .upload(fileName, imageFile);
+          .from("social-media")
+          .upload(filePath, imageFile, {
+            cacheControl: "3600",
+            upsert: true,
+          });
 
         if (!uploadErr && uploadData) {
           const { data: publicUrlData } = supabase.storage
-            .from("post_media")
-            .getPublicUrl(fileName);
+            .from("social-media")
+            .getPublicUrl(filePath);
           mediaUrl = publicUrlData?.publicUrl;
+        } else {
+          console.warn("[SquadContext] Fallback upload su stories-media:", uploadErr);
+          const { data: fallbackData } = await supabase.storage
+            .from("stories-media")
+            .upload(filePath, imageFile, { upsert: true });
+
+          if (fallbackData) {
+            mediaUrl = supabase.storage.from("stories-media").getPublicUrl(filePath).data?.publicUrl;
+          }
         }
       } catch (err) {
-        console.warn("[SquadContext] Impossibile caricare immagine:", err);
+        console.warn("[SquadContext] Impossibile caricare immagine nei bucket Supabase:", err);
       }
     }
 
@@ -656,6 +685,92 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       toast({
         title: "Errore pubblicazione",
         description: err.message || "Impossibile salvare il post su Supabase.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Create Story in Supabase `stories` table and bucket `stories-media` / `social-media`
+  const createStory = async (file: File, caption?: string): Promise<boolean> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("signup");
+      toast({
+        title: "Accesso Richiesto",
+        description: "Accedi o registrati per pubblicare una storia 24h.",
+      });
+      return false;
+    }
+
+    try {
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const filePath = `${user.id}/story_${Date.now()}.${fileExt}`;
+
+      // Try 'stories-media' first, then 'social-media'
+      let mediaUrl: string | undefined = undefined;
+      const { data: uploadStories, error: errStories } = await supabase.storage
+        .from("stories-media")
+        .upload(filePath, file, { upsert: true });
+
+      if (!errStories && uploadStories) {
+        mediaUrl = supabase.storage.from("stories-media").getPublicUrl(filePath).data?.publicUrl;
+      } else {
+        const { data: uploadSocial, error: errSocial } = await supabase.storage
+          .from("social-media")
+          .upload(filePath, file, { upsert: true });
+
+        if (!errSocial && uploadSocial) {
+          mediaUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data?.publicUrl;
+        }
+      }
+
+      if (!mediaUrl) {
+        // Local object URL fallback
+        mediaUrl = URL.createObjectURL(file);
+      }
+
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: storyRow, error: insertErr } = await supabase
+        .from("stories")
+        .insert({
+          user_id: user.id,
+          media_url: mediaUrl,
+          caption: caption || "",
+          expires_at: expiresAt,
+        })
+        .select("*, profiles:user_id(id, username, display_name, avatar_url)")
+        .single();
+
+      if (insertErr) {
+        console.warn("[SquadContext] Errore inserimento riga stories:", insertErr);
+      }
+
+      const newStory: Story = {
+        id: storyRow?.id || `st-${Date.now()}`,
+        userId: user.id,
+        username: userProfile.name,
+        avatar: userProfile.avatar,
+        preview: mediaUrl,
+        hoursLeft: 24,
+        hasUnread: true,
+      };
+
+      setStories((prev) => [newStory, ...prev]);
+      toast({
+        title: "Storia 24h pubblicata! 🔥",
+        description: "La tua clip/screenshot è ora visibile in cima al feed.",
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore pubblicazione storia:", err);
+      toast({
+        title: "Errore pubblicazione storia",
+        description: err.message || "Impossibile caricare il media.",
         variant: "destructive",
       });
       return false;
@@ -1084,6 +1199,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toggleLikePost,
         createPost,
         deletePost,
+        createStory,
         fetchPostComments,
         addComment,
         deleteComment,
