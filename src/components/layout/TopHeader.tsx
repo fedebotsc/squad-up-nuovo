@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search } from "lucide-react";
+import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 
 export const TopHeader: React.FC = () => {
   const {
@@ -11,6 +12,8 @@ export const TopHeader: React.FC = () => {
     userProfile,
     openAuthModal,
   } = useSquad();
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">
@@ -55,13 +58,22 @@ export const TopHeader: React.FC = () => {
             </button>
           )}
 
+          {/* Global Search Button (Persone, Clan, Tornei) */}
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            title="Cerca persone, clan e tornei"
+            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative group"
+          >
+            <Search className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+          </button>
+
           {/* Direct Messages Shortcut (Instagram style) */}
           <button
             onClick={() => setActiveTab("messages")}
             title="Direct Messages"
             className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative"
           >
-            <Send className="w-4 h-4 rotate-12 text-cyan-400" />
+            <Send className="w-4 h-4 rotate-12 text-zinc-400 hover:text-cyan-400 transition-colors" />
           </button>
 
           {/* SCoin Wallet Chip */}
@@ -105,6 +117,12 @@ export const TopHeader: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Global Search Modal (Persone, Clan, Tornei) */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
     </header>
   );
 };

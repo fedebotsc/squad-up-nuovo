@@ -284,7 +284,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                   </div>
                   <div className="text-[10px] text-zinc-400 mt-0.5">Gratuito</div>
                 </div>
-                <div className="text-[9px] text-zinc-400 mt-2">Max 10 membri</div>
+                <div className="text-[9px] text-zinc-400 mt-2">Max 50 membri</div>
               </button>
 
               {/* Pro */}
@@ -304,7 +304,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                   </div>
                   <div className="text-[10px] text-amber-300 font-semibold mt-0.5">250 SC / m</div>
                 </div>
-                <div className="text-[9px] text-zinc-400 mt-2">5 ruoli pers.</div>
+                <div className="text-[9px] text-zinc-400 mt-2">Max 100 membri</div>
               </button>
 
               {/* Elite */}
@@ -324,7 +324,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                   </div>
                   <div className="text-[10px] text-amber-300 font-semibold mt-0.5">500 SC / m</div>
                 </div>
-                <div className="text-[9px] text-zinc-400 mt-2">12 ruoli pers.</div>
+                <div className="text-[9px] text-zinc-400 mt-2">Max 250 membri</div>
               </button>
             </div>
 
@@ -338,7 +338,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] leading-relaxed">
                   <div className="flex items-start gap-1.5">
                     <Users className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
-                    <span><strong>Fino a 25 Membri</strong> (rispetto ai 10 del clan base)</span>
+                    <span><strong>Fino a 100 Membri</strong> (rispetto ai 50 del clan base)</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <Shield className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
@@ -368,7 +368,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] leading-relaxed">
                   <div className="flex items-start gap-1.5">
                     <Users className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                    <span><strong>Membri Illimitati (fino a 50)</strong> per dominare i tornei</span>
+                    <span><strong>Fino a 250 Membri (o illimitati)</strong> per dominare i tornei</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />

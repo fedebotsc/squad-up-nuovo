@@ -19,6 +19,8 @@ import {
   Layers,
   Sparkles,
   Palette,
+  UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,6 +42,9 @@ export const ClanSection: React.FC = () => {
     userProfile,
     refreshUserData,
     openAuthModal,
+    isFollowingClan,
+    followClan,
+    unfollowClan,
   } = useSquad();
 
   const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "quests">("overview");
@@ -282,17 +287,45 @@ export const ClanSection: React.FC = () => {
           </p>
         )}
 
-        {/* Action Controls in Hero: Personalizza Clan (Pro/Elite) or Upgrade */}
+        {/* Action Controls in Hero: Personalizza Clan (Pro/Elite), Segui Clan or Upgrade */}
         <div className="relative z-10 mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
-          {isClanAdminOrOwner && (
+          <div className="flex items-center gap-2">
+            {isClanAdminOrOwner && (
+              <button
+                onClick={() => setShowClanCustomizer(true)}
+                className="py-1 px-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white font-bold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+              >
+                <Palette className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Personalizza Clan</span>
+              </button>
+            )}
+
+            {/* Follow Clan Button */}
             <button
-              onClick={() => setShowClanCustomizer(true)}
-              className="py-1 px-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white font-bold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+              onClick={() =>
+                isFollowingClan(clanData.id)
+                  ? unfollowClan(clanData.id)
+                  : followClan(clanData.id)
+              }
+              className={`py-1 px-2.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                isFollowingClan(clanData.id)
+                  ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                  : "bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-600/40"
+              }`}
             >
-              <Palette className="w-3.5 h-3.5 text-cyan-300" />
-              <span>Personalizza Grafica Clan</span>
+              {isFollowingClan(clanData.id) ? (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Clan Seguito</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>Segui Clan</span>
+                </>
+              )}
             </button>
-          )}
+          </div>
 
           {!isProOrElite ? (
             <button

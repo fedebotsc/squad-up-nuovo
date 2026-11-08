@@ -122,6 +122,17 @@ interface SquadContextType {
   joinVoiceRoom: (roomId: string) => Promise<void>;
   leaveVoiceRoom: () => Promise<void>;
   createVoiceRoom: (name: string, category?: string) => Promise<VoiceRoom>;
+  deleteVoiceRoom: (roomId: string) => Promise<boolean>;
+
+  // Follow System
+  followedUserIds: string[];
+  followedClanIds: string[];
+  followUser: (targetUserId: string) => Promise<boolean>;
+  unfollowUser: (targetUserId: string) => Promise<boolean>;
+  isFollowingUser: (targetUserId: string) => boolean;
+  followClan: (targetClanId: string) => Promise<boolean>;
+  unfollowClan: (targetClanId: string) => Promise<boolean>;
+  isFollowingClan: (targetClanId: string) => boolean;
 
   // Clan
   clanData: ClanData | null;
@@ -191,6 +202,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Clan state
   const [clanData, setClanData] = useState<ClanData | null>(null);
   const [clanMembers, setClanMembers] = useState<ClanMember[]>([]);
+
+  // Follow system state
+  const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
+  const [followedClanIds, setFollowedClanIds] = useState<string[]>([]);
 
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
@@ -361,12 +376,36 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           } else {
             setTransactions([]);
           }
+
+          // Fetch followed profiles and clans
+          const { data: userFollows } = await supabase
+            .from("follows")
+            .select("followed_profile_id, followed_clan_id")
+            .eq("follower_id", user.id);
+
+          if (userFollows) {
+            setFollowedUserIds(
+              userFollows
+                .filter((f: any) => f.followed_profile_id)
+                .map((f: any) => f.followed_profile_id as string)
+            );
+            setFollowedClanIds(
+              userFollows
+                .filter((f: any) => f.followed_clan_id)
+                .map((f: any) => f.followed_clan_id as string)
+            );
+          } else {
+            setFollowedUserIds([]);
+            setFollowedClanIds([]);
+          }
         }
       } else {
         // Guest user - clear state
         setClanData(null);
         setClanMembers([]);
         setTransactions([]);
+        setFollowedUserIds([]);
+        setFollowedClanIds([]);
         setSCoinBalance(0);
         setUserProfile({
           name: "Ospite",
@@ -555,37 +594,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .from("squad_rooms")
         .select("*")
         .eq("status", "open")
-        .limit(10);
-
-      const defaultRooms: VoiceRoom[] = [
-        {
-          id: "room-default-1",
-          name: "Warzone Trio Tattico",
-          game: "Warzone",
-          channelType: "Aperto a tutti",
-          activeMembers: [],
-          maxCapacity: 3,
-          status: "open",
-        },
-        {
-          id: "room-default-2",
-          name: "Lobby CDL S&D 4v4",
-          game: "Multiplayer",
-          channelType: "Aperto a tutti",
-          activeMembers: [],
-          maxCapacity: 4,
-          status: "open",
-        },
-        {
-          id: "room-default-3",
-          name: "Recon Ritorno Squad Alpha",
-          game: "Ritorno",
-          channelType: "Aperto a tutti",
-          activeMembers: [],
-          maxCapacity: 4,
-          status: "open",
-        },
-      ];
+        .limit(20);
 
       if (roomsData && roomsData.length > 0) {
         setVoiceRooms(
@@ -600,7 +609,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }))
         );
       } else {
-        setVoiceRooms(defaultRooms);
+        setVoiceRooms([]);
       }
     } catch (err) {
       console.warn("[SquadContext] Errore caricamento dati database:", err);
@@ -1364,44 +1373,98 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
+  const deleteVoiceRoom = async (roomId: string): Promise<boolean> => {
+    if (activeVoiceRoomId === roomId) {
+      await agoraVoiceService.leaveVoiceChannel();
+      setActiveVoiceRoomId(null);
+      setIsRealSdkActive(false);
+      setUserSpeaking(false);
+    }
+
+    setVoiceRooms((prev) => prev.filter((r) => r.id !== roomId));
+
+    try {
+      if (roomId.length > 20) {
+        await supabase.from("squad_rooms").delete().eq("id", roomId);
+      }
+      return true;
+    } catch (err) {
+      console.warn("[SquadContext] Errore rimozione stanza:", err);
+      return false;
+    }
+  };
+
   const joinVoiceRoom = async (roomId: string) => {
-      let targetRoom = voiceRooms.find((r) => r.id === roomId);
-      if (!targetRoom) {
-        targetRoom = {
-          id: roomId,
-          name: `Canale Vocale #${roomId.slice(0, 6)}`,
-          game: "Warzone",
-          channelType: "Aperto a tutti",
-          activeMembers: [],
-          maxCapacity: 4,
-          status: "open",
-        };
-        setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
-      }
-
-      setActiveVoiceRoomId(roomId);
-      const channelName = targetRoom.name.replace(/\s+/g, "_");
-
-      const res = await agoraVoiceService.joinVoiceChannel(
-        channelName,
-        currentUser?.id || userProfile.name
+    let targetRoom = voiceRooms.find((r) => r.id === roomId);
+    if (!targetRoom) {
+      targetRoom = {
+        id: roomId,
+        name: `Canale Vocale #${roomId.slice(0, 6)}`,
+        game: "Warzone",
+        channelType: "Aperto a tutti",
+        activeMembers: [userProfile],
+        maxCapacity: 4,
+        status: "open",
+      };
+      setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
+    } else {
+      setVoiceRooms((prev) =>
+        prev
+          .map((r) => {
+            if (r.id === roomId) {
+              const already = r.activeMembers.some(
+                (m) => m.id === (currentUser?.id || userProfile.id)
+              );
+              return {
+                ...r,
+                activeMembers: already ? r.activeMembers : [...r.activeMembers, userProfile],
+              };
+            }
+            if (activeVoiceRoomId && r.id === activeVoiceRoomId && r.id !== roomId) {
+              return {
+                ...r,
+                activeMembers: r.activeMembers.filter(
+                  (m) => m.id !== (currentUser?.id || userProfile.id)
+                ),
+              };
+            }
+            return r;
+          })
+          .filter((r) => {
+            if (r.id !== roomId && r.activeMembers.length === 0) {
+              if (r.id.length > 20) {
+                supabase.from("squad_rooms").delete().eq("id", r.id).catch(console.error);
+              }
+              return false;
+            }
+            return true;
+          })
       );
-      setIsRealSdkActive(res.realSdk);
+    }
 
-      if (res.success) {
-        toast({
-          title: "Canale Vocale Connesso 🎙️",
-          description: `Connesso a "${targetRoom.name}" con Agora Web RTC (App ID: ${agoraAppId.slice(0, 6)}...).`,
-        });
-      } else if (res.error) {
-        setActiveVoiceRoomId(null);
-        toast({
-          title: "Errore Connessione Vocale",
-          description: res.error,
-          variant: "destructive",
-        });
-      }
-    };
+    setActiveVoiceRoomId(roomId);
+    const channelName = targetRoom.name.replace(/\s+/g, "_");
+
+    const res = await agoraVoiceService.joinVoiceChannel(
+      channelName,
+      currentUser?.id || userProfile.name
+    );
+    setIsRealSdkActive(res.realSdk);
+
+    if (res.success) {
+      toast({
+        title: "Canale Vocale Connesso 🎙️",
+        description: `Connesso a "${targetRoom.name}" con Agora Web RTC (App ID: ${agoraAppId.slice(0, 6)}...).`,
+      });
+    } else if (res.error) {
+      setActiveVoiceRoomId(null);
+      toast({
+        title: "Errore Connessione Vocale",
+        description: res.error,
+        variant: "destructive",
+      });
+    }
+  };
 
   const createVoiceRoom = async (name: string, category: string = "Warzone"): Promise<VoiceRoom> => {
     const trimmedName = name.trim() || `Stanza ${userProfile.name}`;
@@ -1427,7 +1490,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             name: inserted.name,
             game: inserted.category || category,
             channelType: "Aperto a tutti",
-            activeMembers: [],
+            activeMembers: [userProfile],
             maxCapacity: 4,
             status: inserted.status,
           };
@@ -1437,7 +1500,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             name: trimmedName,
             game: category,
             channelType: "Aperto a tutti",
-            activeMembers: [],
+            activeMembers: [userProfile],
             maxCapacity: 4,
             status: "open",
           };
@@ -1448,7 +1511,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           name: trimmedName,
           game: category,
           channelType: "Aperto a tutti",
-          activeMembers: [],
+          activeMembers: [userProfile],
           maxCapacity: 4,
           status: "open",
         };
@@ -1459,7 +1522,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         name: trimmedName,
         game: category,
         channelType: "Aperto a tutti",
-        activeMembers: [],
+        activeMembers: [userProfile],
         maxCapacity: 4,
         status: "open",
       };
@@ -1471,16 +1534,176 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const leaveVoiceRoom = async () => {
-      await agoraVoiceService.leaveVoiceChannel();
-      setActiveVoiceRoomId(null);
-      setIsRealSdkActive(false);
-      setUserSpeaking(false);
-  
-      toast({
-        title: "Disconnesso",
-        description: "Hai lasciato il canale vocale. Tracce audio rilasciate correttamente.",
+    const leavingRoomId = activeVoiceRoomId;
+    await agoraVoiceService.leaveVoiceChannel();
+    setActiveVoiceRoomId(null);
+    setIsRealSdkActive(false);
+    setUserSpeaking(false);
+
+    if (leavingRoomId) {
+      setVoiceRooms((prev) => {
+        const updated = prev.map((r) => {
+          if (r.id === leavingRoomId) {
+            return {
+              ...r,
+              activeMembers: r.activeMembers.filter(
+                (m) => m.id !== (currentUser?.id || userProfile.id)
+              ),
+            };
+          }
+          return r;
+        });
+
+        const target = updated.find((r) => r.id === leavingRoomId);
+        // Automatically delete room if empty
+        if (!target || target.activeMembers.length === 0) {
+          if (leavingRoomId.length > 20) {
+            supabase
+              .from("squad_rooms")
+              .delete()
+              .eq("id", leavingRoomId)
+              .then(() => {
+                console.log("[SquadContext] Stanza vocale vuota eliminata:", leavingRoomId);
+              })
+              .catch(console.error);
+          }
+          toast({
+            title: "Stanza Eliminata",
+            description: "La stanza vocale è rimasta vuota ed è stata rimossa automaticamente.",
+          });
+          return updated.filter((r) => r.id !== leavingRoomId);
+        }
+
+        return updated;
       });
-    };
+    }
+
+    toast({
+      title: "Disconnesso",
+      description: "Hai lasciato il canale vocale. Tracce audio rilasciate correttamente.",
+    });
+  };
+
+  // Follow system methods
+  const isFollowingUser = (targetUserId: string): boolean => {
+    return followedUserIds.includes(targetUserId);
+  };
+
+  const isFollowingClan = (targetClanId: string): boolean => {
+    return followedClanIds.includes(targetClanId);
+  };
+
+  const followUser = async (targetUserId: string): Promise<boolean> => {
+    if (!currentUser) {
+      openAuthModal();
+      return false;
+    }
+    if (targetUserId === currentUser.id) {
+      toast({
+        title: "Azione non consentita",
+        description: "Non puoi seguire il tuo stesso account.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    setFollowedUserIds((prev) => (prev.includes(targetUserId) ? prev : [...prev, targetUserId]));
+
+    try {
+      const { error } = await supabase.from("follows").insert({
+        follower_id: currentUser.id,
+        followed_profile_id: targetUserId,
+      });
+
+      if (error && error.code !== "23505") {
+        console.warn("[SquadContext] Errore follow:", error);
+      }
+
+      toast({
+        title: "Giocatore Seguito! 🔔",
+        description: "Riceverai aggiornamenti da questo giocatore.",
+      });
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const unfollowUser = async (targetUserId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+
+    setFollowedUserIds((prev) => prev.filter((id) => id !== targetUserId));
+
+    try {
+      await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", currentUser.id)
+        .eq("followed_profile_id", targetUserId);
+
+      toast({
+        title: "Follow Rimosso",
+        description: "Non segui più questo giocatore.",
+      });
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const followClan = async (targetClanId: string): Promise<boolean> => {
+    if (!currentUser) {
+      openAuthModal();
+      return false;
+    }
+
+    setFollowedClanIds((prev) => (prev.includes(targetClanId) ? prev : [...prev, targetClanId]));
+
+    try {
+      const { error } = await supabase.from("follows").insert({
+        follower_id: currentUser.id,
+        followed_clan_id: targetClanId,
+      });
+
+      if (error && error.code !== "23505") {
+        console.warn("[SquadContext] Errore follow clan:", error);
+      }
+
+      toast({
+        title: "Clan Seguito! 🛡️",
+        description: "Ora segui le attività di questo Clan.",
+      });
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const unfollowClan = async (targetClanId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+
+    setFollowedClanIds((prev) => prev.filter((id) => id !== targetClanId));
+
+    try {
+      await supabase
+        .from("follows")
+        .delete()
+        .eq("follower_id", currentUser.id)
+        .eq("followed_clan_id", targetClanId);
+
+      toast({
+        title: "Follow Clan Rimosso",
+        description: "Non segui più questo Clan.",
+      });
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
 
   const donateToClan = async (amount: number): Promise<boolean> => {
     if (!clanData) {
@@ -1599,6 +1822,15 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         joinVoiceRoom,
         leaveVoiceRoom,
         createVoiceRoom,
+        deleteVoiceRoom,
+        followedUserIds,
+        followedClanIds,
+        followUser,
+        unfollowUser,
+        isFollowingUser,
+        followClan,
+        unfollowClan,
+        isFollowingClan,
         clanData,
         clanMembers,
         donateToClan,

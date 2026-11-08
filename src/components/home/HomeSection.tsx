@@ -21,6 +21,8 @@ import {
   Smile,
   Shield,
   Crown,
+  UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +47,12 @@ export const HomeSection: React.FC = () => {
     openAuthModal,
     clanData,
     clanMembers,
+    isFollowingUser,
+    followUser,
+    unfollowUser,
+    isFollowingClan,
+    followClan,
+    unfollowClan,
   } = useSquad();
 
   const [selectedGameFilter, setSelectedGameFilter] = useState<string>("Tutti");
@@ -705,6 +713,63 @@ export const HomeSection: React.FC = () => {
                   )}
 
                   <div className="flex items-center gap-1.5">
+                    {/* Follow button for player or clan */}
+                    {post.postedAsClan && post.clan && (!clanData || clanData.id !== post.clan.id) && (
+                      <button
+                        onClick={() =>
+                          isFollowingClan(post.clan!.id)
+                            ? unfollowClan(post.clan!.id)
+                            : followClan(post.clan!.id)
+                        }
+                        title={isFollowingClan(post.clan!.id) ? "Segui già questo clan" : "Segui clan"}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+                          isFollowingClan(post.clan!.id)
+                            ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                            : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30"
+                        }`}
+                      >
+                        {isFollowingClan(post.clan!.id) ? (
+                          <>
+                            <UserCheck className="w-3 h-3 text-emerald-400" />
+                            <span>Seguito</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3 h-3 text-cyan-300" />
+                            <span>Segui Clan</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {!post.postedAsClan && post.userId && (!currentUser || currentUser.id !== post.userId) && (
+                      <button
+                        onClick={() =>
+                          isFollowingUser(post.userId!)
+                            ? unfollowUser(post.userId!)
+                            : followUser(post.userId!)
+                        }
+                        title={isFollowingUser(post.userId!) ? "Segui già questo giocatore" : "Segui giocatore"}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+                          isFollowingUser(post.userId!)
+                            ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                            : "bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600/30"
+                        }`}
+                      >
+                        {isFollowingUser(post.userId!) ? (
+                          <>
+                            <UserCheck className="w-3 h-3 text-emerald-400" />
+                            <span>Seguito</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3 h-3 text-purple-300" />
+                            <span>Segui</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 shrink-0">
                       {post.game}
                     </span>

@@ -381,24 +381,29 @@ export const VoiceSection: React.FC = () => {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Headphones className="w-7 h-7" />
           </div>
-          <h3 className="text-sm font-bold text-white">Nessun canale vocale attivo</h3>
+          <h3 className="text-sm font-bold text-white">Nessuna stanza Cerca Team attiva</h3>
           <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-            Entra in una stanza o creane una per parlare con i tuoi compagni con l'SDK Agora.
+            Crea una stanza vocale per cercare compagni di squadra (Warzone, CDL, Zombie) con l'audio Agora RTC. Quando tutti i partecipanti escono, la stanza viene eliminata automaticamente!
           </p>
         </div>
       )}
 
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-            Stanze Vocali ({voiceRooms.length})
-          </span>
+          <div>
+            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+              Cerca Team & Stanze ({voiceRooms.length})
+            </span>
+            <span className="text-[10px] text-zinc-500">
+              Le stanze vuote si eliminano da sole all'uscita
+            </span>
+          </div>
           <button
             onClick={() => setIsCreatingRoom(!isCreatingRoom)}
-            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline cursor-pointer"
+            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline cursor-pointer bg-cyan-950/40 border border-cyan-500/30 px-2 py-1 rounded-lg"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Nuova Stanza</span>
+            <span>Nuovo Team</span>
           </button>
         </div>
 
