@@ -52,7 +52,10 @@ export const ProfileSection: React.FC = () => {
   const [followersCount, setFollowersCount] = useState<number>(0);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.id) {
+      setFollowersCount(0);
+      return;
+    }
     supabase
       .from("follows")
       .select("*", { count: "exact", head: true })
@@ -63,7 +66,7 @@ export const ProfileSection: React.FC = () => {
         }
       })
       .catch(console.error);
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
   const [rewardsSubTab, setRewardsSubTab] = useState<"tenure" | "giftcards">("tenure");

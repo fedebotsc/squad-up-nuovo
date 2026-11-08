@@ -228,23 +228,28 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Notifications state
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
 
-  const refreshNotificationsCount = useCallback(async () => {
-    if (!currentUser) {
-      setUnreadNotificationsCount(0);
-      return;
-    }
+  const refreshNotificationsCount = useCallback(async (targetUserId?: string) => {
     try {
+      let uid = targetUserId;
+      if (!uid) {
+        const { data } = await supabase.auth.getUser();
+        uid = data?.user?.id;
+      }
+      if (!uid) {
+        setUnreadNotificationsCount(0);
+        return;
+      }
       const { count } = await supabase
         .from("notifications")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", currentUser.id)
+        .eq("user_id", uid)
         .eq("is_read", false);
 
       setUnreadNotificationsCount(count ?? 0);
     } catch {
       // non-blocking
     }
-  }, [currentUser]);
+  }, []);
 
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
@@ -715,7 +720,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Listen to Supabase Auth State changes
+  // Listen to Supabase Auth State changes (run once on mount)
   useEffect(() => {
     refreshUserData();
     loadDatabaseContent();
@@ -724,7 +729,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setCurrentUser(session?.user ?? null);
       refreshUserData();
-      refreshNotificationsCount();
+      if (session?.user?.id) {
+        refreshNotificationsCount(session.user.id);
+      } else {
+        setUnreadNotificationsCount(0);
+      }
     });
 
     return () => {

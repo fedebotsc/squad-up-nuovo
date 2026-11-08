@@ -48,7 +48,7 @@ export const ClanNotificationModal: React.FC<ClanNotificationModalProps> = ({
 
   // Fetch current membership notification settings from clan_members
   useEffect(() => {
-    if (!isOpen || !clanId || !currentUser) return;
+    if (!isOpen || !clanId || !currentUser?.id) return;
 
     const loadClanMemberSettings = async () => {
       setIsLoading(true);
@@ -84,7 +84,7 @@ export const ClanNotificationModal: React.FC<ClanNotificationModalProps> = ({
     };
 
     loadClanMemberSettings();
-  }, [isOpen, clanId, currentUser]);
+  }, [isOpen, clanId, currentUser?.id]);
 
   if (!isOpen) return null;
 

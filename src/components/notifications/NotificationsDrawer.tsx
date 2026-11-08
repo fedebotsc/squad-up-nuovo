@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   X,
   Bell,
@@ -38,14 +38,15 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { currentUser, setActiveTab, openAuthModal } = useSquad();
+  const { currentUser, setActiveTab, openAuthModal, refreshNotificationsCount } = useSquad();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [filter, setFilter] = useState<"all" | "unread" | "tournaments" | "clan">("all");
   const [isLoading, setIsLoading] = useState(false);
+  const hasSeededRef = useRef(false);
 
   // Fetch notifications for currentUser
-  const fetchNotifications = async () => {
-    if (!currentUser) return;
+  const fetchNotifications = useCallback(async () => {
+    if (!currentUser?.id) return;
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -58,7 +59,8 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
 
       if (data && data.length > 0) {
         setNotifications(data as NotificationItem[]);
-      } else {
+      } else if (!hasSeededRef.current) {
+        hasSeededRef.current = true;
         // If brand new user with no notifications, seed initial welcome notifications
         const initialSeed = [
           {
@@ -87,26 +89,28 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
         if (inserted) {
           setNotifications(inserted as NotificationItem[]);
         }
+      } else {
+        setNotifications([]);
       }
     } catch (err: any) {
       console.warn("[Notifications] Errore caricamento:", err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser?.id]);
 
   useEffect(() => {
-    if (isOpen && currentUser) {
+    if (isOpen && currentUser?.id) {
       fetchNotifications();
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen, currentUser?.id, fetchNotifications]);
 
-  // Real-time listener for new notifications
+  // Real-time listener for new notifications while open
   useEffect(() => {
-    if (!currentUser) return;
+    if (!isOpen || !currentUser?.id) return;
 
     const channel = supabase
-      .channel("realtime:notifications")
+      .channel(`realtime:notifs:${currentUser.id}`)
       .on(
         "postgres_changes",
         {
@@ -117,6 +121,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
         },
         () => {
           fetchNotifications();
+          refreshNotificationsCount(currentUser.id);
         }
       )
       .subscribe();
@@ -124,7 +129,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser]);
+  }, [isOpen, currentUser?.id, fetchNotifications, refreshNotificationsCount]);
 
   if (!isOpen) return null;
 
