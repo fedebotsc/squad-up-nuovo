@@ -32,7 +32,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
   sCoinBalance,
   onSuccess,
 }) => {
-  const { isUniversalAdmin } = useSquad();
+  const { isUniversalAdmin, setClanData } = useSquad();
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [description, setDescription] = useState("");
@@ -140,6 +140,19 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
 
       if (clanErr) throw clanErr;
 
+      // 2b. Explicitly ensure creator is registered as active founder in clan_members
+      if (newClan) {
+        await supabase.from("clan_members").upsert(
+          {
+            clan_id: newClan.id,
+            user_id: currentUser.id,
+            role: "founder",
+            status: "active",
+          },
+          { onConflict: "clan_id,user_id" }
+        );
+      }
+
       // 3. Register transaction if paid tier
       if (totalCost > 0) {
         await supabase.from("sc_transactions").insert({
@@ -173,6 +186,28 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
         }));
 
         await supabase.from("clan_custom_roles").insert(rolesToInsert);
+      }
+
+      // 5. Update local state immediately so user sees clan instantly
+      if (newClan) {
+        setClanData({
+          id: newClan.id,
+          name: newClan.name,
+          tag: newClan.tag,
+          description: newClan.description || "",
+          gameMode: newClan.game_mode || "Warzone",
+          region: newClan.region || "EU",
+          treasurySC: 0,
+          avatarUrl: newClan.avatar_url,
+          bannerUrl: newClan.banner_url,
+          isRecruiting: true,
+          ownerId: currentUser.id,
+          level: 1,
+          tier: tier,
+          subscriptionTier: tier === "base" ? "free" : tier,
+          subscriptionMonths: durationMonths,
+          subscriptionExpiresAt: expiresAt,
+        });
       }
 
       toast({

@@ -136,6 +136,7 @@ interface SquadContextType {
 
   // Clan
   clanData: ClanData | null;
+  setClanData: (data: ClanData | null) => void;
   clanMembers: ClanMember[];
   donateToClan: (amount: number) => Promise<boolean>;
 
@@ -290,16 +291,41 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             },
           });
 
-          // Fetch user's clan membership from Supabase
-          const { data: membership } = await supabase
-            .from("clan_members")
-            .select("*, clans(*)")
-            .eq("user_id", user.id)
-            .eq("status", "active")
+          // Fetch user's clan: check first as owner, then as member
+          let targetClan: any = null;
+
+          // 1. Check if user is the OWNER of a clan
+          const { data: ownedClan } = await supabase
+            .from("clans")
+            .select("*")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
             .maybeSingle();
 
-          if (membership && membership.clans) {
-            const rawClan = membership.clans as any;
+          if (ownedClan) {
+            targetClan = ownedClan;
+          } else {
+            // 2. Check if user is an active member in clan_members
+            const { data: membership } = await supabase
+              .from("clan_members")
+              .select("clan_id, role, status")
+              .eq("user_id", user.id)
+              .eq("status", "active")
+              .maybeSingle();
+
+            if (membership?.clan_id) {
+              const { data: memberClan } = await supabase
+                .from("clans")
+                .select("*")
+                .eq("id", membership.clan_id)
+                .maybeSingle();
+              targetClan = memberClan;
+            }
+          }
+
+          if (targetClan) {
+            const rawClan = targetClan;
             setClanData({
               id: rawClan.id,
               name: rawClan.name,
@@ -307,12 +333,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               description: rawClan.description || "",
               gameMode: rawClan.game_mode || "Warzone",
               region: rawClan.region || "EU",
-              treasurySC: rawClan.clan_treasury_sc || 0,
+              treasurySC: Number(rawClan.clan_treasury_sc || 0),
               avatarUrl: rawClan.avatar_url,
               bannerUrl: rawClan.banner_url,
               isRecruiting: rawClan.is_recruiting ?? true,
               ownerId: rawClan.owner_id,
-              level: Math.max(1, Math.floor((rawClan.clan_treasury_sc || 0) / 1000)),
+              level: Math.max(1, Math.floor(Number(rawClan.clan_treasury_sc || 0) / 1000)),
               tier: (rawClan.tier as any) || (rawClan.subscription_tier === "elite" ? "elite" : rawClan.subscription_tier === "pro" ? "pro" : "base"),
               subscriptionTier: (rawClan.subscription_tier as any) || "free",
               subscriptionMonths: rawClan.subscription_months || 1,
@@ -321,28 +347,57 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               clanBannerUrl: rawClan.clan_banner_url,
             });
 
-            // Fetch members of this clan
-            const { data: membersList } = await supabase
-              .from("clan_members")
-              .select("*, profiles:user_id(id, username, display_name, avatar_url)")
-              .eq("clan_id", rawClan.id)
-              .eq("status", "active");
+            // Fetch members of this clan with profile lookup
+            try {
+              const { data: membersList } = await supabase
+                .from("clan_members")
+                .select("user_id, role, status, custom_role_id, custom_role_title, joined_at")
+                .eq("clan_id", rawClan.id)
+                .eq("status", "active");
 
-            if (membersList) {
-              setClanMembers(
-                membersList.map((m: any) => ({
-                  id: m.user_id,
-                  userId: m.user_id,
-                  name: m.profiles?.display_name || m.profiles?.username || "Membro",
-                  avatar: m.profiles?.avatar_url || "",
-                  role: m.role === "founder" ? "Leader" : m.role === "admin" ? "Co-Leader" : "Membro",
-                  customRoleId: m.custom_role_id,
-                  customRoleTitle: m.custom_role_title,
-                  donatedSCoin: 0,
-                  isOnline: false,
-                  joinedAt: m.joined_at,
-                }))
-              );
+              if (membersList && membersList.length > 0) {
+                const userIds = membersList.map((m: any) => m.user_id);
+                const { data: memberProfiles } = await supabase
+                  .from("profiles")
+                  .select("id, username, display_name, avatar_url")
+                  .in("id", userIds);
+
+                const profileMap = new Map((memberProfiles || []).map((p: any) => [p.id, p]));
+
+                setClanMembers(
+                  membersList.map((m: any) => {
+                    const prof = profileMap.get(m.user_id);
+                    return {
+                      id: m.user_id,
+                      userId: m.user_id,
+                      name: prof?.display_name || prof?.username || (m.user_id === user.id ? (profile.display_name || profile.username || "Leader") : "Operatore"),
+                      avatar: prof?.avatar_url || (m.user_id === user.id ? (profile.avatar_url || "") : ""),
+                      role: m.role === "founder" ? "Leader" : m.role === "admin" ? "Co-Leader" : "Membro",
+                      customRoleId: m.custom_role_id,
+                      customRoleTitle: m.custom_role_title,
+                      donatedSCoin: 0,
+                      isOnline: m.user_id === user.id,
+                      joinedAt: m.joined_at,
+                    };
+                  })
+                );
+              } else {
+                // If member list empty, show at least the current user/founder
+                setClanMembers([
+                  {
+                    id: user.id,
+                    userId: user.id,
+                    name: profile.display_name || profile.username || "Leader",
+                    avatar: profile.avatar_url || "",
+                    role: "Leader",
+                    donatedSCoin: 0,
+                    isOnline: true,
+                    joinedAt: new Date().toISOString(),
+                  },
+                ]);
+              }
+            } catch (err) {
+              console.warn("[SquadContext] Errore caricamento membri clan:", err);
             }
           } else {
             setClanData(null);
@@ -1832,6 +1887,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         unfollowClan,
         isFollowingClan,
         clanData,
+        setClanData,
         clanMembers,
         donateToClan,
         isUniversalAdmin: currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com",
