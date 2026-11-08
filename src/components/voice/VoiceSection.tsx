@@ -41,12 +41,13 @@ export const VoiceSection: React.FC = () => {
   const [newRoomName, setNewRoomName] = useState("");
   const [noiseSuppression, setNoiseSuppression] = useState(true);
 
-  // Mic Testing State
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const testStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  const [isConnected, setIsConnected] = useState(false);
 
   const toggleNoiseSuppression = () => {
     setNoiseSuppression(!noiseSuppression);
@@ -64,7 +65,6 @@ export const VoiceSection: React.FC = () => {
     setIsCreatingRoom(false);
   };
 
-  // Live Mic Test Handlers with guaranteed track closure
   const startMicTest = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -123,6 +123,32 @@ export const VoiceSection: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleConnectionStateChange = (state: string) => {
+      if (state === "CONNECTED" && activeVoiceRoom) {
+        setIsConnected(true);
+        toast({
+          title: "Stato Connessione Aggiornato",
+          description: `Agora RTC: ${state} - Canale: ${activeVoiceRoom.name}`,
+        });
+      } else if (state === "DISCONNECTED" || state === "FAILED") {
+        setIsConnected(false);
+      }
+    };
+
+    agoraVoiceService.onConnectionStateChange(handleConnectionStateChange);
+
+    return () => {
+      agoraVoiceService.onConnectionStateChange((state) => {});
+    };
+  }, [activeVoiceRoom]);
+
+  useEffect(() => {
+    if (!activeVoiceRoom) {
+      setIsConnected(false);
+    }
+  }, [activeVoiceRoom]);
+
   const maskedAppId =
     agoraAppId && agoraAppId.length > 8
       ? `${agoraAppId.slice(0, 6)}••••••••••••${agoraAppId.slice(-4)}`
@@ -130,21 +156,17 @@ export const VoiceSection: React.FC = () => {
 
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
-      {/* Agora Engine Banner & Config Card */}
       <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-3.5 shadow-md space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-bold text-zinc-200">
-              AGORA WEB SDK (RTC 4.24+)
-            </span>
+            <span className="text-xs font-bold text-zinc-200">AGORA WEB SDK (RTC 4.24+)</span>
           </div>
           <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full">
             Opus HD • 64kbps
           </span>
         </div>
 
-        {/* Agora App ID Indicator */}
         <div className="flex items-center justify-between text-[11px] bg-zinc-950/60 border border-purple-900/30 rounded-xl px-2.5 py-1.5 text-zinc-300">
           <div className="flex items-center gap-1.5 truncate">
             <KeyRound className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -159,7 +181,6 @@ export const VoiceSection: React.FC = () => {
           </div>
         </div>
 
-        {/* Mic & Audio Test Diagnostic Box */}
         <div className="pt-1 border-t border-zinc-800/80">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs text-zinc-300">
@@ -208,7 +229,6 @@ export const VoiceSection: React.FC = () => {
         </div>
       </div>
 
-      {/* ACTIVE VOICE ROOM PANEL */}
       {activeVoiceRoom ? (
         <div className="relative rounded-2xl overflow-hidden border border-emerald-500/60 bg-gradient-to-b from-emerald-950/40 via-[#13172e] to-[#0c0f1c] p-4 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
@@ -228,7 +248,6 @@ export const VoiceSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Connected Participants List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
               <span>Membri nel canale</span>
@@ -289,7 +308,6 @@ export const VoiceSection: React.FC = () => {
             </div>
           </div>
 
-          {/* VISIBLE MICROPHONE & AUDIO CONTROLS */}
           <div className="pt-2 border-t border-zinc-800/80">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-2 px-1">
               Comandi Vocali Rapidi
@@ -370,7 +388,6 @@ export const VoiceSection: React.FC = () => {
         </div>
       )}
 
-      {/* Available Voice Rooms List or Creation */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">

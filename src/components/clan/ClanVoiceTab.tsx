@@ -41,14 +41,31 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
   const clanChannelName = `Clan_${clanData.tag}_${clanData.id.slice(0, 8)}`;
   const [isConnected, setIsConnected] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [remoteCount, setRemoteCount] = useState(0);
 
-  // Active connected participants in this clan voice channel
   const [activeParticipants, setActiveParticipants] = useState<
     { id: string; name: string; avatar?: string; isSpeaking: boolean; role?: string }[]
   >([]);
 
   useEffect(() => {
-    // If connected, ensure current user is listed
+    const sanitized = clanChannelName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60);
+    if (agoraVoiceService.getCurrentChannel() === sanitized) {
+      setIsConnected(true);
+      setRemoteCount(agoraVoiceService.getConnectedUsersCount());
+    }
+
+    agoraVoiceService.onRemoteUserChange((count) => {
+      setRemoteCount(count);
+    });
+
+    return () => {
+      agoraVoiceService.onRemoteUserChange((count) => {
+        setRemoteCount(count);
+      });
+    };
+  }, [clanChannelName]);
+
+  useEffect(() => {
     if (isConnected && currentUser) {
       setActiveParticipants([
         {
@@ -76,12 +93,16 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
 
     setIsJoining(true);
     try {
-      const res = await agoraVoiceService.joinVoiceChannel(clanChannelName, userProfile.name);
-      setIsConnected(true);
-      toast({
-        title: "Canale Vocale Clan Connesso 🎙️",
-        description: `Sei ora in voce con i membri del clan [${clanData.tag}] con tecnologia Agora RTC.`,
-      });
+      const res = await agoraVoiceService.joinVoiceChannel(clanChannelName, currentUser.id);
+      if (res.success) {
+        setIsConnected(true);
+        toast({
+          title: "Canale Vocale Clan Connesso 🎙️",
+          description: `Sei ora in voce con i membri del clan [${clanData.tag}] con tecnologia Agora RTC.`,
+        });
+      } else {
+        throw new Error(res.error || "Impossibile connettersi al canale Agora.");
+      }
     } catch (err: any) {
       console.error("[ClanVoiceTab] Errore connessione Agora:", err);
       toast({
@@ -109,7 +130,6 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
 
   return (
     <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-xl space-y-4">
-      {/* Voice Room Header Card */}
       <div className="relative rounded-2xl p-4 bg-gradient-to-r from-purple-950/80 via-[#151a32] to-cyan-950/50 border border-purple-500/30 overflow-hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -154,7 +174,6 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
         <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
           {!isConnected ? (
             <button
@@ -208,7 +227,6 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
         </div>
       </div>
 
-      {/* Participants in Voice Channel */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">

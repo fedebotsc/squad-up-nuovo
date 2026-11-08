@@ -4,10 +4,11 @@ import AgoraRTC, {
   IAgoraRTCRemoteUser,
 } from "agora-rtc-sdk-ng";
 
+AgoraRTC.setLogLevel(2);
+
 export interface AgoraConnectionState {
   status: "idle" | "connecting" | "connected" | "error";
   errorMessage?: string;
-  isRealSdkConnected: boolean;
   channelName: string | null;
   appId: string;
 }
@@ -17,239 +18,287 @@ class AgoraVoiceService {
   private localAudioTrack: IMicrophoneAudioTrack | null = null;
   private remoteUsers: Map<string | number, IAgoraRTCRemoteUser> = new Map();
   private isDeafened: boolean = false;
+  private currentChannel: string | null = null;
+  private isConnecting: boolean = false;
+  private isDisconnected: boolean = false;
   private onSpeakingChangeCallback?: (isSpeaking: boolean, volume: number) => void;
-  private onRemoteUserChangeCallback?: (usersCount: number) => void;
+  private onRemoteUserChangeCallback?: (usersCount: number, users: IAgoraRTCRemoteUser[]) => void;
+  private onConnectionStateChangeCallback?: (state: string) => void;
 
   constructor() {
-    // Garanzia di rilascio tracce audio all'uscita o chiusura finestra
     if (typeof window !== "undefined") {
       window.addEventListener("beforeunload", () => {
-        this.closeLocalAudioTrack();
+        this.cleanup();
       });
     }
   }
 
   public getAppId(): string {
-    const rawId = import.meta.env.VITE_AGORA_APP_ID || "";
+    const rawId = import.meta.env.VITE_AGORA_APP_ID || "f7511dae35db4516aeb30dc522b84824";
     return rawId.trim();
   }
 
   public isAppIdPlaceholder(): boolean {
     const appId = this.getAppId();
-    return (
-      !appId ||
-      appId === "la_tua_app_id_di_agora" ||
-      appId.includes("la_tua_app_id") ||
-      appId.length < 10
-    );
+    return !appId || appId === "la_tua_app_id_di_agora" || appId.includes("la_tua_app_id") || appId.length < 15;
   }
 
   public getClient(): IAgoraRTCClient {
     if (!this.client) {
       this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-      this.setupEventListeners();
+      this.setupEventListeners(this.client);
     }
     return this.client;
   }
 
-  private setupEventListeners(): void {
-    if (!this.client) return;
+  private setupEventListeners(client: IAgoraRTCClient): void {
+    client.on("user-published", async (user, mediaType) => {
+      try {
+        await client.subscribe(user, mediaType);
+        this.remoteUsers.set(user.uid, user);
 
-    // Utente remoto che pubblica traccia audio
-    this.client.on("user-published", async (user, mediaType) => {
-      if (mediaType === "audio") {
-        try {
-          const remoteTrack = await this.client!.subscribe(user, mediaType);
-          this.remoteUsers.set(user.uid, user);
+        if (mediaType === "audio" && user.audioTrack) {
           if (!this.isDeafened) {
-            remoteTrack.play();
+            try {
+              user.audioTrack.play();
+            } catch (playErr) {
+              console.warn("[Agora Voice] Autoplay remoto bloccato dal browser:", playErr);
+            }
           }
-          this.onRemoteUserChangeCallback?.(this.remoteUsers.size);
-        } catch (err) {
-          console.warn("[Agora Web SDK] Errore sottoscrizione audio remoto:", err);
         }
+        this.notifyRemoteUsers();
+      } catch (err) {
+        console.warn("[Agora Voice] Errore sottoscrizione utente remoto:", err);
       }
     });
 
-    // Utente remoto che interrompe la trasmissione audio
-    this.client.on("user-unpublished", (user, mediaType) => {
+    client.on("user-unpublished", (user, mediaType) => {
       if (mediaType === "audio") {
         this.remoteUsers.delete(user.uid);
-        this.onRemoteUserChangeCallback?.(this.remoteUsers.size);
+        this.notifyRemoteUsers();
       }
     });
 
-    this.client.on("user-left", (user) => {
+    client.on("user-left", (user) => {
       this.remoteUsers.delete(user.uid);
-      this.onRemoteUserChangeCallback?.(this.remoteUsers.size);
+      this.notifyRemoteUsers();
     });
 
-    // Indicatore livello volume per animazioni grafiche audio parlante
-    this.client.enableAudioVolumeIndicator();
-    this.client.on("volume-indicator", (volumes) => {
-      const localVolume = volumes.find(
-        (v) => v.uid === 0 || v.uid === this.client?.uid
-      );
-      if (localVolume && this.onSpeakingChangeCallback) {
-        this.onSpeakingChangeCallback(localVolume.level > 5, localVolume.level);
-      }
+    client.on("connection-state-change", (curState) => {
+      this.onConnectionStateChangeCallback?.(curState);
     });
-  }
-
-  /**
-   * Connette alla stanza vocale Agora utilizzando VITE_AGORA_APP_ID
-   */
-  public async joinVoiceChannel(
-    channelName: string,
-    uid?: string | number,
-    token: string | null = null
-  ): Promise<{ success: boolean; realSdk: boolean; error?: string }> {
-    const appId = this.getAppId();
-
-    // Pulizia e chiusura preventiva di tracce audio precedenti
-    this.closeLocalAudioTrack();
-
-    // Se l'App ID è assente o segnaposto
-    if (this.isAppIdPlaceholder()) {
-      console.info(
-        `[Agora Web SDK] VITE_AGORA_APP_ID non configurata o segnaposto ("${appId}").`
-      );
-      return {
-        success: true,
-        realSdk: false,
-        error: "App ID non configurata in .env",
-      };
-    }
 
     try {
-      const client = this.getClient();
+      client.enableAudioVolumeIndicator();
+      client.on("volume-indicator", (volumes) => {
+        const localVolume = volumes.find((v) => v.uid === 0 || v.uid === client.uid);
+        if (localVolume && this.onSpeakingChangeCallback) {
+          this.onSpeakingChangeCallback(localVolume.level > 5, localVolume.level);
+        }
+      });
+    } catch (e) {
+      console.warn("[Agora Voice] Volume indicator non supportato:", e);
+    }
+  }
 
-      // Crea traccia microfono locale con cancellazione rumore e AEC
-      try {
-        this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "high_quality_stereo",
-          AEC: true,
-          ANS: true,
-        });
-      } catch (micErr: unknown) {
-        console.warn(
-          "[Agora Web SDK] Impossibile acquisire il microfono (permessi o dispositivo assente):",
-          micErr
-        );
-        // Assicurati che nessuna risorsa rimanga appesa
-        this.closeLocalAudioTrack();
+  private notifyRemoteUsers(): void {
+    const usersList = Array.from(this.remoteUsers.values());
+    this.onRemoteUserChangeCallback?.(usersList.length, usersList);
+  }
 
-        // Connetti comunque al canale per ricevere l'audio degli altri membri
-        await client.join(appId, channelName, token, uid || null);
-        console.info(
-          `[Agora Web SDK] Connesso al canale ${channelName} in modalità solo ascolto (mic non disponibile).`
-        );
-        return {
-          success: true,
-          realSdk: true,
-          error: "Microfono non accessibile, connesso in modalità ascolto.",
-        };
-      }
+  public async joinVoiceChannel(
+    channelName: string,
+    userNameOrId?: string | number,
+    token: string | null = null
+  ): Promise<{ success: boolean; realSdk: boolean; error?: string; isPublishing: boolean }> {
+    const appId = this.getAppId();
 
-      // Join del canale Agora con App ID
-      await client.join(appId, channelName, token, uid || null);
-
-      // Pubblica la traccia audio nel canale se disponibile
-      if (this.localAudioTrack) {
-        await client.publish([this.localAudioTrack]);
-      }
-
-      console.info(
-        `[Agora Web SDK] Connesso con successo al canale: ${channelName} con App ID ${appId.slice(0, 8)}...`
-      );
-      return { success: true, realSdk: true };
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error("[Agora Web SDK] Errore connessione canale vocale:", errorMessage);
-
-      // Chiudi SEMPRE la traccia audio locale in caso di errore
-      this.closeLocalAudioTrack();
-
+    if (this.isAppIdPlaceholder()) {
       return {
         success: false,
         realSdk: false,
+        isPublishing: false,
+        error: "App ID Agora non valido o non configurato.",
+      };
+    }
+
+    if (this.isConnecting) {
+      return { success: false, realSdk: false, isPublishing: false, error: "Connessione in corso..." };
+    }
+
+    this.isConnecting = true;
+    this.isDisconnected = false;
+
+    try {
+      const sanitizedChannel = channelName
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .slice(0, 60);
+
+      let numericUid: number;
+      if (typeof userNameOrId === "number") {
+        numericUid = Math.abs(userNameOrId) % 900000 + 100000;
+      } else if (typeof userNameOrId === "string" && userNameOrId.length > 0) {
+        let hash = 0;
+        for (let i = 0; i < userNameOrId.length; i++) {
+          hash = (hash << 5) - hash + userNameOrId.charCodeAt(i);
+          hash |= 0;
+        }
+        numericUid = Math.abs(hash) % 900000 + 100000;
+      } else {
+        numericUid = Math.floor(Math.random() * 899999) + 100000;
+      }
+
+      const client = this.getClient();
+
+      await client.join(appId, sanitizedChannel, token, numericUid);
+      this.currentChannel = sanitizedChannel;
+
+      let isPublishing = false;
+      try {
+        this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          AEC: true,
+          ANS: true,
+          AGC: true,
+        });
+
+        if (this.localAudioTrack) {
+          await client.publish([this.localAudioTrack]);
+          isPublishing = true;
+        }
+      } catch (micErr: any) {
+        console.warn("[Agora Voice] Microfono non disponibile o permessi negati:", micErr?.message || micErr);
+      }
+
+      for (const remoteUser of client.remoteUsers) {
+        if (remoteUser.hasAudio) {
+          try {
+            await client.subscribe(remoteUser, "audio");
+            this.remoteUsers.set(remoteUser.uid, remoteUser);
+            if (!this.isDeafened && remoteUser.audioTrack) {
+              remoteUser.audioTrack.play();
+            }
+          } catch (subErr) {
+            console.warn("[Agora Voice] Errore sottoscrizione partecipante esistente:", subErr);
+          }
+        }
+      }
+      this.notifyRemoteUsers();
+
+      this.isConnecting = false;
+      return {
+        success: true,
+        realSdk: true,
+        isPublishing,
+      };
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("[Agora Voice] Errore critico durante client.join():", errorMessage);
+
+      await this.cleanup();
+
+      this.isConnecting = false;
+      return {
+        success: false,
+        realSdk: false,
+        isPublishing: false,
         error: errorMessage,
       };
     }
   }
 
-  /**
-   * Attiva o disattiva il microfono locale
-   */
   public async setMuted(isMuted: boolean): Promise<void> {
     if (this.localAudioTrack) {
       try {
-        await this.localAudioTrack.setEnabled(!isMuted);
+        await this.localAudioTrack.setMuted(isMuted);
       } catch (err) {
-        console.warn("[Agora Web SDK] Errore setEnabled traccia microfono:", err);
+        console.warn("[Agora Voice] Errore setMuted:", err);
       }
     }
   }
 
-  /**
-   * Attiva o disattiva l'audio in ascolto (Deafen)
-   */
   public setDeafened(isDeafened: boolean): void {
     this.isDeafened = isDeafened;
     this.remoteUsers.forEach((user) => {
       if (user.audioTrack) {
-        if (isDeafened) {
-          user.audioTrack.stop();
-        } else {
-          user.audioTrack.play();
+        try {
+          if (isDeafened) {
+            user.audioTrack.stop();
+          } else {
+            user.audioTrack.play();
+          }
+        } catch (e) {
+          console.warn("[Agora Voice] Errore toggle deafen:", e);
         }
       }
     });
   }
 
-  /**
-   * Chiude e rilascia in modo pulito tutte le risorse audio
-   * Assicura SEMPRE la chiusura della traccia con localAudioTrack.close()
-   */
   public closeLocalAudioTrack(): void {
     if (this.localAudioTrack) {
       try {
         this.localAudioTrack.stop();
         this.localAudioTrack.close();
-        console.info("[Agora Web SDK] localAudioTrack.close() eseguito correttamente.");
       } catch (err) {
-        console.warn("[Agora Web SDK] Errore durante localAudioTrack.close():", err);
+        console.warn("[Agora Voice] Errore closeLocalAudioTrack:", err);
       } finally {
         this.localAudioTrack = null;
       }
     }
   }
 
-  /**
-   * Disconnessione completa dalla stanza vocale
-   */
   public async leaveVoiceChannel(): Promise<void> {
-    // 1. Chiudi SEMPRE la traccia audio locale (localAudioTrack.close())
+    await this.cleanup();
+  }
+
+  public getCurrentChannel(): string | null {
+    return this.currentChannel;
+  }
+
+  public getConnectedUsersCount(): number {
+    return this.remoteUsers.size;
+  }
+
+  public getRemoteUsers(): IAgoraRTCRemoteUser[] {
+    return Array.from(this.remoteUsers.values());
+  }
+
+  public isConnected(): boolean {
+    return Boolean(this.client && this.client.connectionState === "CONNECTED");
+  }
+
+  public isPublishingAudio(): boolean {
+    return Boolean(this.localAudioTrack && !this.localAudioTrack.isMuted);
+  }
+
+  public onSpeakingChange(callback: (isSpeaking: boolean, volume: number) => void): void {
+    this.onSpeakingChangeCallback = callback;
+  }
+
+  public onRemoteUserChange(callback: (usersCount: number, users: IAgoraRTCRemoteUser[]) => void): void {
+    this.onRemoteUserChangeCallback = callback;
+  }
+
+  public onConnectionStateChange(callback: (state: string) => void): void {
+    this.onConnectionStateChangeCallback = callback;
+  }
+
+  public cleanup(): void {
     this.closeLocalAudioTrack();
 
-    // 2. Lascia il canale Agora se il client è attivo
     if (this.client) {
       try {
-        await this.client.leave();
-        this.remoteUsers.clear();
-        console.info("[Agora Web SDK] Disconnessione dal canale completata.");
+        this.client.leave().catch(() => {});
       } catch (err) {
-        console.warn("[Agora Web SDK] Errore uscita canale Agora:", err);
+        console.warn("[Agora Voice] Errore client.leave() durante cleanup:", err);
+      } finally {
+        this.remoteUsers.clear();
+        this.currentChannel = null;
+        this.notifyRemoteUsers();
       }
     }
-  }
-
-  public onSpeakingChange(cb: (isSpeaking: boolean, volume: number) => void): void {
-    this.onSpeakingChangeCallback = cb;
-  }
-
-  public onRemoteUserChange(cb: (count: number) => void): void {
-    this.onRemoteUserChangeCallback = cb;
+    this.isDisconnected = true;
+    this.isConnecting = false;
   }
 }
 

@@ -15,6 +15,7 @@ import {
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import { uploadMediaFile } from "@/services/storageService";
 
 interface ProfileCustomizerModalProps {
   isOpen: boolean;
@@ -140,16 +141,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     setUploadProgress("Caricamento banner su storage protetto...");
 
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const filePath = `${currentUser.id}/banner_${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("social-media")
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const publicUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data.publicUrl;
+      const { url: publicUrl } = await uploadMediaFile(file, "banner", currentUser.id);
 
       // Update in profiles table
       const { error: updateError } = await supabase
@@ -181,7 +173,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     }
   };
 
-  // Direct File Upload for Avatar to Supabase bucket 'social-media'
+  // Direct File Upload for Avatar to Supabase bucket 'avatars' / 'social-media'
   const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -195,16 +187,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     setUploadProgress("Caricamento avatar su storage protetto...");
 
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const filePath = `${currentUser.id}/avatar_${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("social-media")
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const publicUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data.publicUrl;
+      const { url: publicUrl } = await uploadMediaFile(file, "avatar", currentUser.id);
 
       // Update in profiles table
       const { error: updateError } = await supabase
@@ -293,7 +276,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
       await supabase
         .from("profiles")
         .update({
-          pro_theme: frameId === "neon-cyan" ? "neon" : "gold",
+          avatar_frame: frameId,
         })
         .eq("id", currentUser.id);
 

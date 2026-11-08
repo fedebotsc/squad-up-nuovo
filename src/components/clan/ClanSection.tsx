@@ -15,9 +15,10 @@ import {
   Flame,
   MessageSquare,
   Radio,
-  Award,
+  Target,
   Layers,
   Sparkles,
+  Palette,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,7 +27,8 @@ import { CreateClanModal } from "./CreateClanModal";
 import { ClanChatTab } from "./ClanChatTab";
 import { ClanVoiceTab } from "./ClanVoiceTab";
 import { ClanRolesTab } from "./ClanRolesTab";
-import { ClanLoyaltyTab } from "./ClanLoyaltyTab";
+import { DailyQuestsTab } from "./DailyQuestsTab";
+import { ClanCustomizerModal } from "./ClanCustomizerModal";
 
 export const ClanSection: React.FC = () => {
   const {
@@ -40,21 +42,18 @@ export const ClanSection: React.FC = () => {
     openAuthModal,
   } = useSquad();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "loyalty">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "quests">("overview");
 
   const [selectedDonation, setSelectedDonation] = useState<number>(50);
   const [customDonation, setCustomDonation] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Clan Deletion Confirmation
+  // Modals
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingClan, setIsDeletingClan] = useState(false);
-
-  // Subscription Modal
   const [showSubModal, setShowSubModal] = useState(false);
-
-  // Create Clan Modal
   const [showCreateClan, setShowCreateClan] = useState(false);
+  const [showClanCustomizer, setShowClanCustomizer] = useState(false);
 
   const handleDonate = async () => {
     if (!currentUser) {
@@ -62,7 +61,7 @@ export const ClanSection: React.FC = () => {
       return;
     }
 
-    const amount = customDonation ? parseInt(customDonation, 10) : selectedDonation;
+    const amount = customDonation ? parseFloat(customDonation) : selectedDonation;
     if (isNaN(amount) || amount <= 0) {
       toast({
         title: "Importo non valido",
@@ -82,6 +81,16 @@ export const ClanSection: React.FC = () => {
   };
 
   const isOwner = Boolean(currentUser && clanData && currentUser.id === clanData.ownerId);
+  const isClanAdminOrOwner = Boolean(
+    currentUser &&
+      clanData &&
+      (clanData.ownerId === currentUser.id ||
+        clanMembers.some(
+          (m) =>
+            (m.userId === currentUser.id || m.id === currentUser.id) &&
+            (m.role === "Leader" || m.role === "Co-Leader" || m.role === "admin" || m.role === "founder")
+        ))
+  );
 
   const handleDeleteClan = async () => {
     if (!clanData || !currentUser || !isOwner) return;
@@ -165,21 +174,42 @@ export const ClanSection: React.FC = () => {
     clanData.subscriptionTier === "pro" ||
     clanData.subscriptionTier === "elite";
 
+  const clanBanner = clanData.clanBannerUrl || clanData.bannerUrl;
+  const isImageBanner = clanBanner && (clanBanner.startsWith("http") || clanBanner.startsWith("/"));
+
   // AUTHENTIC CLAN VIEW
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
-      {/* Clan Hero Card */}
-      <div className="relative rounded-2xl overflow-hidden border border-purple-500/50 bg-gradient-to-br from-purple-950/80 via-[#13172e] to-[#0c0f1c] p-4 shadow-xl">
-        <div className="flex items-start justify-between gap-3">
+      {/* Clan Hero Card with Custom Banner */}
+      <div
+        className={`relative rounded-3xl overflow-hidden border border-purple-500/50 p-4 shadow-xl ${
+          isImageBanner
+            ? "bg-[#0d1020]"
+            : clanBanner && clanBanner.includes("from-")
+            ? `bg-gradient-to-r ${clanBanner}`
+            : "bg-gradient-to-br from-purple-950/90 via-[#13172e] to-[#0c0f1c]"
+        }`}
+      >
+        {/* If image banner, display with dark overlay for readability */}
+        {isImageBanner && (
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${clanBanner})` }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0e1224] via-[#0e1224]/80 to-[#0e1224]/50" />
+          </div>
+        )}
+
+        <div className="relative z-10 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
-              {/* Equipped Clan Frame from Loyalty or Custom */}
+              {/* Equipped Clan Frame around Logo */}
               {clanData.clanFrameUrl && (
                 <div
                   className="absolute -inset-1.5 rounded-2xl pointer-events-none z-10 border-2"
                   style={{
                     borderColor: clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4",
-                    boxShadow: `0 0 12px ${clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4"}80`,
+                    boxShadow: `0 0 12px ${clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4"}90`,
                   }}
                 />
               )}
@@ -199,7 +229,7 @@ export const ClanSection: React.FC = () => {
                 <h2 className="text-base font-extrabold text-white tracking-wide truncate max-w-[140px]">
                   {clanData.name}
                 </h2>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-300 border border-purple-500/40">
                   [{clanData.tag}]
                 </span>
 
@@ -236,47 +266,48 @@ export const ClanSection: React.FC = () => {
           </div>
 
           <div className="text-right shrink-0">
-            <span className="text-[10px] text-zinc-400 block uppercase font-bold">
+            <span className="text-[10px] text-zinc-300/80 block uppercase font-bold">
               Cassaforte Clan
             </span>
             <div className="flex items-center gap-1 text-amber-300 font-extrabold text-sm justify-end">
               <Coins className="w-4 h-4 text-amber-400" />
-              <span>{clanData.treasurySC.toLocaleString()}</span>
+              <span>{clanData.treasurySC.toLocaleString()} SC</span>
             </div>
           </div>
         </div>
 
         {clanData.description && (
-          <p className="mt-3 text-xs text-zinc-300 border-t border-zinc-800/80 pt-2.5 break-words">
+          <p className="relative z-10 mt-3 text-xs text-zinc-200 border-t border-zinc-800/80 pt-2.5 break-words">
             {clanData.description}
           </p>
         )}
 
-        {/* Upgrade / Tier info banner */}
-        {!isProOrElite ? (
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold">
-              <Crown className="w-4 h-4 text-amber-400" />
-              <span>Sblocca ruoli e premi con Clan Pro o Elite</span>
-            </div>
+        {/* Action Controls in Hero: Personalizza Clan (Pro/Elite) or Upgrade */}
+        <div className="relative z-10 mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
+          {isClanAdminOrOwner && (
+            <button
+              onClick={() => setShowClanCustomizer(true)}
+              className="py-1 px-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 text-white font-bold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+            >
+              <Palette className="w-3.5 h-3.5 text-cyan-300" />
+              <span>Personalizza Grafica Clan</span>
+            </button>
+          )}
+
+          {!isProOrElite ? (
             <button
               onClick={() => setShowSubModal(true)}
-              className="py-1 px-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-[11px] font-bold rounded-lg shadow-sm cursor-pointer"
+              className="py-1 px-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black text-[11px] font-extrabold rounded-xl shadow-sm cursor-pointer ml-auto"
             >
-              Upgrade Clan
+              Passa a Pro o Elite
             </button>
-          </div>
-        ) : (
-          <div className="mt-3 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
-            <span className="flex items-center gap-1 text-purple-300">
+          ) : (
+            <span className="text-[11px] text-zinc-300 ml-auto flex items-center gap-1">
               <Crown className="w-3.5 h-3.5 text-amber-400" />
-              Abbonamento {clanData.tier?.toUpperCase()} attivo
+              Piano {clanData.tier?.toUpperCase()} attivo
             </span>
-            <span className="text-zinc-300 font-medium">
-              Durata: {clanData.subscriptionMonths || 1} Mesi
-            </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Modern Navigation Tabs */}
@@ -330,15 +361,15 @@ export const ClanSection: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab("loyalty")}
+          onClick={() => setActiveTab("quests")}
           className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
-            activeTab === "loyalty"
-              ? "bg-amber-600 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]"
+            activeTab === "quests"
+              ? "bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.4)]"
               : "text-zinc-400 hover:text-white"
           }`}
         >
-          <Award className="w-3.5 h-3.5 text-amber-400" />
-          <span>Premi</span>
+          <Target className="w-3.5 h-3.5 text-cyan-300" />
+          <span>Obiettivi</span>
         </button>
       </div>
 
@@ -353,7 +384,7 @@ export const ClanSection: React.FC = () => {
               </div>
               <div>
                 <span className="text-xs font-bold text-white block">Stanza Vocale Clan Agora</span>
-                <span className="text-[10px] text-zinc-400">Canale crittografato a 24ms per i compagni</span>
+                <span className="text-[10px] text-zinc-400">Canale crittografato Agora per il clan</span>
               </div>
             </div>
             <button
@@ -551,14 +582,13 @@ export const ClanSection: React.FC = () => {
         />
       )}
 
-      {/* TAB CONTENT: LOYALTY */}
-      {activeTab === "loyalty" && (
-        <ClanLoyaltyTab
+      {/* TAB CONTENT: DAILY QUESTS */}
+      {activeTab === "quests" && (
+        <DailyQuestsTab
           clanData={clanData}
           currentUser={currentUser}
           userProfile={userProfile}
           onRefresh={refreshUserData}
-          onOpenUpgrade={() => setShowSubModal(true)}
         />
       )}
 
@@ -600,6 +630,16 @@ export const ClanSection: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Clan Customizer Modal for Logo, Frame & Banner */}
+      <ClanCustomizerModal
+        isOpen={showClanCustomizer}
+        onClose={() => setShowClanCustomizer(false)}
+        clanData={clanData}
+        currentUser={currentUser}
+        onRefresh={refreshUserData}
+        onOpenUpgrade={() => setShowSubModal(true)}
+      />
 
       {/* Subscription Modal for Clan Upgrade */}
       <SubscriptionModal

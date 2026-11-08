@@ -15,6 +15,7 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { agoraVoiceService } from "@/services/agoraService";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadMediaFile } from "@/services/storageService";
 
 export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
@@ -658,35 +659,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     let mediaUrl: string | undefined = undefined;
 
-    // Upload image to Supabase storage 'social-media' with path `${user.id}/${timestamp}.${ext}`
+    // Upload image to Supabase storage with robust bucket fallback
     if (imageFile) {
       try {
-        const fileExt = imageFile.name.split(".").pop() || "jpg";
-        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
-
-        // Attempt upload to 'social-media' bucket
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("social-media")
-          .upload(filePath, imageFile, {
-            cacheControl: "3600",
-            upsert: true,
-          });
-
-        if (!uploadErr && uploadData) {
-          const { data: publicUrlData } = supabase.storage
-            .from("social-media")
-            .getPublicUrl(filePath);
-          mediaUrl = publicUrlData?.publicUrl;
-        } else {
-          console.warn("[SquadContext] Fallback upload su stories-media:", uploadErr);
-          const { data: fallbackData } = await supabase.storage
-            .from("stories-media")
-            .upload(filePath, imageFile, { upsert: true });
-
-          if (fallbackData) {
-            mediaUrl = supabase.storage.from("stories-media").getPublicUrl(filePath).data?.publicUrl;
-          }
-        }
+        const uploadRes = await uploadMediaFile(imageFile, "post-media", user.id);
+        mediaUrl = uploadRes.url;
       } catch (err) {
         console.warn("[SquadContext] Impossibile caricare immagine nei bucket Supabase:", err);
       }
@@ -809,29 +786,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     try {
-      const fileExt = file.name.split(".").pop() || "jpg";
-      const filePath = `${user.id}/story_${Date.now()}.${fileExt}`;
-
-      // Try 'stories-media' first, then 'social-media'
       let mediaUrl: string | undefined = undefined;
-      const { data: uploadStories, error: errStories } = await supabase.storage
-        .from("stories-media")
-        .upload(filePath, file, { upsert: true });
-
-      if (!errStories && uploadStories) {
-        mediaUrl = supabase.storage.from("stories-media").getPublicUrl(filePath).data?.publicUrl;
-      } else {
-        const { data: uploadSocial, error: errSocial } = await supabase.storage
-          .from("social-media")
-          .upload(filePath, file, { upsert: true });
-
-        if (!errSocial && uploadSocial) {
-          mediaUrl = supabase.storage.from("social-media").getPublicUrl(filePath).data?.publicUrl;
-        }
-      }
-
-      if (!mediaUrl) {
-        // Local object URL fallback
+      try {
+        const uploadRes = await uploadMediaFile(file, "post-media", user.id);
+        mediaUrl = uploadRes.url;
+      } catch {
         mediaUrl = URL.createObjectURL(file);
       }
 
@@ -1181,38 +1140,43 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const joinVoiceRoom = async (roomId: string) => {
-    let targetRoom = voiceRooms.find((r) => r.id === roomId);
-    if (!targetRoom) {
-      targetRoom = {
-        id: roomId,
-        name: `Canale Vocale #${roomId.slice(0, 6)}`,
-        game: "Warzone",
-        channelType: "Aperto a tutti",
-        activeMembers: [],
-        maxCapacity: 4,
-        status: "open",
-      };
-      setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
-    }
+      let targetRoom = voiceRooms.find((r) => r.id === roomId);
+      if (!targetRoom) {
+        targetRoom = {
+          id: roomId,
+          name: `Canale Vocale #${roomId.slice(0, 6)}`,
+          game: "Warzone",
+          channelType: "Aperto a tutti",
+          activeMembers: [],
+          maxCapacity: 4,
+          status: "open",
+        };
+        setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
+      }
 
-    setActiveVoiceRoomId(roomId);
-    const channelName = targetRoom.name.replace(/\s+/g, "_");
+      setActiveVoiceRoomId(roomId);
+      const channelName = targetRoom.name.replace(/\s+/g, "_");
 
-    const res = await agoraVoiceService.joinVoiceChannel(channelName, userProfile.name);
-    setIsRealSdkActive(res.realSdk);
+      const res = await agoraVoiceService.joinVoiceChannel(
+        channelName,
+        currentUser?.id || userProfile.name
+      );
+      setIsRealSdkActive(res.realSdk);
 
-    if (res.realSdk) {
-      toast({
-        title: "Canale Vocale Connesso",
-        description: `Connesso a "${targetRoom.name}" con Agora Web RTC.`,
-      });
-    } else {
-      toast({
-        title: "Stanza Vocale Attiva",
-        description: `Canale "${targetRoom.name}" attivo in ascolto.`,
-      });
-    }
-  };
+      if (res.success) {
+        toast({
+          title: "Canale Vocale Connesso 🎙️",
+          description: `Connesso a "${targetRoom.name}" con Agora Web RTC (App ID: ${agoraAppId.slice(0, 6)}...).`,
+        });
+      } else if (res.error) {
+        setActiveVoiceRoomId(null);
+        toast({
+          title: "Errore Connessione Vocale",
+          description: res.error,
+          variant: "destructive",
+        });
+      }
+    };
 
   const createVoiceRoom = async (name: string, category: string = "Warzone"): Promise<VoiceRoom> => {
     const trimmedName = name.trim() || `Stanza ${userProfile.name}`;
@@ -1282,16 +1246,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const leaveVoiceRoom = async () => {
-    await agoraVoiceService.leaveVoiceChannel();
-    setActiveVoiceRoomId(null);
-    setIsRealSdkActive(false);
-    setUserSpeaking(false);
-
-    toast({
-      title: "Disconnesso",
-      description: "Tracce microfono chiuse (localAudioTrack.close()).",
-    });
-  };
+      await agoraVoiceService.leaveVoiceChannel();
+      setActiveVoiceRoomId(null);
+      setIsRealSdkActive(false);
+      setUserSpeaking(false);
+  
+      toast({
+        title: "Disconnesso",
+        description: "Hai lasciato il canale vocale. Tracce audio rilasciate correttamente.",
+      });
+    };
 
   const donateToClan = async (amount: number): Promise<boolean> => {
     if (!clanData) {
