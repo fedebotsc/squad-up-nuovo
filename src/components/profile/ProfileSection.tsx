@@ -26,7 +26,8 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ProfileCustomizerModal, AVATAR_FRAMES } from "./ProfileCustomizerModal";
+import { ProfileCustomizerModal } from "./ProfileCustomizerModal";
+import { AVATAR_FRAMES } from "./cosmeticsData";
 import { TenureRewardsCard } from "./TenureRewardsCard";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 import { SCoinShopModal } from "@/components/shop/SCoinShopModal";
@@ -132,7 +133,10 @@ export const ProfileSection: React.FC = () => {
   );
 
   const isPro = userProfile.subscriptionTier === "pro";
-  const frameObj = AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame) || AVATAR_FRAMES[0];
+  const frameObj =
+    (Array.isArray(AVATAR_FRAMES) &&
+      AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)) ||
+    AVATAR_FRAMES?.[0] || { borderClass: "border-purple-500", glowClass: "" };
 
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">

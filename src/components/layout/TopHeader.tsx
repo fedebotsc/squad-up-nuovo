@@ -3,7 +3,7 @@ import { useSquad } from "@/context/SquadContext";
 import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search, Bell } from "lucide-react";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
-import { AVATAR_FRAMES } from "@/components/profile/ProfileCustomizerModal";
+import { AVATAR_FRAMES } from "@/components/profile/cosmeticsData";
 
 export const TopHeader: React.FC = () => {
   const {
@@ -18,7 +18,10 @@ export const TopHeader: React.FC = () => {
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const frameBorder = AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)?.borderClass || "border-purple-500/60";
+  const frameBorder =
+    (Array.isArray(AVATAR_FRAMES) &&
+      AVATAR_FRAMES.find((f) => f.id === userProfile?.avatarFrame)?.borderClass) ||
+    "border-purple-500/60";
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">

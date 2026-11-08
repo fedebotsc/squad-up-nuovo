@@ -21,7 +21,7 @@ import {
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
-import { BANNER_THEMES, AVATAR_FRAMES } from "@/components/profile/ProfileCustomizerModal";
+import { BANNER_THEMES, AVATAR_FRAMES } from "@/components/profile/cosmeticsData";
 
 type ShopCategory = "all" | "passes" | "coins" | "frames" | "banners" | "perks";
 
