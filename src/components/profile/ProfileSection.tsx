@@ -51,7 +51,7 @@ export const ProfileSection: React.FC = () => {
     supabase
       .from("follows")
       .select("*", { count: "exact", head: true })
-      .eq("followed_profile_id", currentUser.id)
+      .eq("following_user_id", currentUser.id)
       .then(({ count }) => {
         if (typeof count === "number") {
           setFollowersCount(count);

@@ -380,19 +380,19 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           // Fetch followed profiles and clans
           const { data: userFollows } = await supabase
             .from("follows")
-            .select("followed_profile_id, followed_clan_id")
+            .select("following_user_id, following_clan_id")
             .eq("follower_id", user.id);
 
           if (userFollows) {
             setFollowedUserIds(
               userFollows
-                .filter((f: any) => f.followed_profile_id)
-                .map((f: any) => f.followed_profile_id as string)
+                .filter((f: any) => f.following_user_id)
+                .map((f: any) => f.following_user_id as string)
             );
             setFollowedClanIds(
               userFollows
-                .filter((f: any) => f.followed_clan_id)
-                .map((f: any) => f.followed_clan_id as string)
+                .filter((f: any) => f.following_clan_id)
+                .map((f: any) => f.following_clan_id as string)
             );
           } else {
             setFollowedUserIds([]);
@@ -1612,7 +1612,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const { error } = await supabase.from("follows").insert({
         follower_id: currentUser.id,
-        followed_profile_id: targetUserId,
+        following_user_id: targetUserId,
       });
 
       if (error && error.code !== "23505") {
@@ -1640,7 +1640,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .from("follows")
         .delete()
         .eq("follower_id", currentUser.id)
-        .eq("followed_profile_id", targetUserId);
+        .eq("following_user_id", targetUserId);
 
       toast({
         title: "Follow Rimosso",
@@ -1664,7 +1664,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const { error } = await supabase.from("follows").insert({
         follower_id: currentUser.id,
-        followed_clan_id: targetClanId,
+        following_clan_id: targetClanId,
       });
 
       if (error && error.code !== "23505") {
@@ -1692,7 +1692,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .from("follows")
         .delete()
         .eq("follower_id", currentUser.id)
-        .eq("followed_clan_id", targetClanId);
+        .eq("following_clan_id", targetClanId);
 
       toast({
         title: "Follow Clan Rimosso",
