@@ -269,12 +269,6 @@ export const TENURE_REWARDS: TenureMilestone[] = [
     },
     description: "Diamante platino olografico con riflessi prismatici viola/azzurri e particelle fluttuanti.",
     perk: "Cornice prismatica olografica con moti di diamante + Banner Holo Platinum",
-      accent: "cyan",
-      rarity: "Mitico",
-      svgUrl: SVG_BANNER_12M,
-    },
-    description: "Il massimo onore di SquadUP per un anno intero di abbonamento attivo.",
-    perk: "Cornice olografica prismatica turchese + Banner Mitico Obsidian Legend",
   },
 ];
 
