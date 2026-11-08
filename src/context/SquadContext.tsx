@@ -45,6 +45,11 @@ export interface UserProfileData {
   level: number;
   activisionName?: string;
   bio?: string;
+  unlockedTitles?: string[];
+  activeTitle?: string | null;
+  unlockedBadges?: string[];
+  activeBadge?: string | null;
+  tournamentsWon?: number;
   stats: {
     kd: string | null;
     winRate: string | null;
@@ -320,6 +325,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             unlockedBanners: profile.unlocked_banners || [],
             unlockedFrames: profile.unlocked_frames || [],
             claimedTenureRewards: profile.claimed_tenure_rewards || [],
+            unlockedTitles: profile.unlocked_titles || [],
+            activeTitle: profile.active_title || null,
+            unlockedBadges: profile.unlocked_badges || [],
+            activeBadge: profile.active_badge || null,
+            tournamentsWon: profile.tournaments_won || 0,
             activeFrame: profile.active_frame || (isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base")),
             avatarFrame: profile.active_frame || (isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base")),
             createdAt: profile.created_at,
@@ -385,14 +395,18 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               bannerUrl: rawClan.banner_url,
               isRecruiting: rawClan.is_recruiting ?? true,
               ownerId: rawClan.owner_id,
-              level: Math.max(1, Math.floor(Number(rawClan.clan_treasury_sc || 0) / 1000)),
+              level: rawClan.level || Math.max(1, Math.floor(Number(rawClan.clan_treasury_sc || 0) / 1000)),
               tier: (rawClan.tier as any) || (rawClan.subscription_tier === "elite" ? "elite" : rawClan.subscription_tier === "pro" ? "pro" : "base"),
               subscriptionTier: (rawClan.subscription_tier as any) || "free",
               subscriptionMonths: rawClan.subscription_months || 1,
               subscriptionExpiresAt: rawClan.subscription_expires_at,
               clanFrameUrl: rawClan.clan_frame_url,
               clanBannerUrl: rawClan.clan_banner_url,
-            });
+              tournamentsWon: rawClan.tournaments_won || 0,
+              unlockedClanRewards: rawClan.unlocked_clan_rewards || [],
+              activeClanBadge: rawClan.active_clan_badge || null,
+              activeClanTitle: rawClan.active_clan_title || null,
+            } as any);
 
             // Fetch members of this clan with profile lookup
             try {

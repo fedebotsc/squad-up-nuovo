@@ -23,6 +23,7 @@ import {
   UserCheck,
   Bell,
   ShoppingBag,
+  Award,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,7 @@ import { ClanRolesTab } from "./ClanRolesTab";
 import { DailyQuestsTab } from "./DailyQuestsTab";
 import { ClanCustomizerModal } from "./ClanCustomizerModal";
 import { ClanNotificationModal } from "./ClanNotificationModal";
+import { RewardsHub } from "@/components/rewards/RewardsHub";
 
 export const ClanSection: React.FC = () => {
   const {
@@ -51,7 +53,7 @@ export const ClanSection: React.FC = () => {
     setActiveTab: setSquadNavTab,
   } = useSquad();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "quests">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "quests" | "rewards">("overview");
 
   const [selectedDonation, setSelectedDonation] = useState<number>(50);
   const [customDonation, setCustomDonation] = useState<string>("");
@@ -360,7 +362,7 @@ export const ClanSection: React.FC = () => {
       </div>
 
       {/* Modern Navigation Tabs */}
-      <div className="grid grid-cols-5 gap-1 bg-[#101426] p-1 rounded-2xl border border-purple-900/30">
+      <div className="grid grid-cols-6 gap-1 bg-[#101426] p-1 rounded-2xl border border-purple-900/30">
         <button
           onClick={() => setActiveTab("overview")}
           className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
@@ -418,30 +420,62 @@ export const ClanSection: React.FC = () => {
           }`}
         >
           <Target className="w-3.5 h-3.5 text-cyan-300" />
-          <span>Obiettivi</span>
+          <span>Missioni</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("rewards")}
+          className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center gap-1 cursor-pointer ${
+            activeTab === "rewards"
+              ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.5)] font-extrabold"
+              : "text-amber-400 hover:text-amber-200"
+          }`}
+        >
+          <Award className="w-3.5 h-3.5 text-amber-400" />
+          <span>Traguardi</span>
         </button>
       </div>
 
       {/* TAB CONTENT: OVERVIEW */}
       {activeTab === "overview" && (
         <div className="space-y-4">
-          {/* Quick Voice Access Banner */}
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#151a32] to-cyan-950/40 border border-emerald-500/30 flex items-center justify-between gap-3 shadow-md">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
-                <Radio className="w-4 h-4" />
+          {/* Quick Voice Access Banner & Rewards Banner */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#151a32] to-cyan-950/40 border border-emerald-500/30 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
+                  <Radio className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Stanza Vocale Clan Agora</span>
+                  <span className="text-[10px] text-zinc-400">Canale crittografato Agora per il clan</span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs font-bold text-white block">Stanza Vocale Clan Agora</span>
-                <span className="text-[10px] text-zinc-400">Canale crittografato Agora per il clan</span>
-              </div>
+              <button
+                onClick={() => setActiveTab("voice")}
+                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+              >
+                <span>Entra</span>
+              </button>
             </div>
-            <button
-              onClick={() => setActiveTab("voice")}
-              className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
-            >
-              <span>Entra</span>
-            </button>
+
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-950/50 via-[#19152b] to-yellow-950/40 border border-amber-500/40 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300">
+                  <Award className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white block">Traguardi &amp; Ricompense Clan</span>
+                  <span className="text-[10px] text-zinc-400">Stemmi, Widescreen Camo &amp; Titoli Chat</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab("rewards")}
+                className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-extrabold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+              >
+                <span>Visualizza</span>
+              </button>
+            </div>
           </div>
 
           {/* Quick Donation Card */}
@@ -639,6 +673,17 @@ export const ClanSection: React.FC = () => {
           userProfile={userProfile}
           onRefresh={refreshUserData}
         />
+      )}
+
+      {/* TAB CONTENT: REWARDS HUB // 3 TABS WITH CLAN FOCUS */}
+      {activeTab === "rewards" && (
+        <div className="space-y-4 animate-fade-in">
+          <RewardsHub
+            initialTab="clan"
+            onNavigateToShop={() => setSquadNavTab("shop")}
+            onNavigateToClan={() => setActiveTab("overview")}
+          />
+        </div>
       )}
 
       {/* Clan Deletion Modal Confirmation */}
