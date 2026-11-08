@@ -2,7 +2,6 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   fileToBase64,
   analyzeMatchScreenshotWithAI,
-  getOpenRouterApiKey,
 } from "./openRouterService";
 
 export interface GeminiVisionResult {
@@ -35,46 +34,42 @@ export const analyzeDualMatchScreenshots = async (
     throw new Error("Nessuno screenshot fornito per l'analisi OCR.");
   }
 
-  const apiKey = getOpenRouterApiKey();
+  try {
+    const b64 = await fileToBase64(primaryFile);
+    const mime = primaryFile.type || "image/jpeg";
 
-  if (apiKey) {
-    try {
-      const b64 = await fileToBase64(primaryFile);
-      const mime = primaryFile.type || "image/jpeg";
+    const analysis = await analyzeMatchScreenshotWithAI({
+      imageBase64: b64,
+      mimeType: mime,
+      tournamentRules: `Kill Points: ${killMultiplier}pt per kill. Punti vittoria/piazzamento: 1° = ${placementMap["1"] || 15}pt, 2° = ${placementMap["2"] || 10}pt.`,
+    });
 
-      const analysis = await analyzeMatchScreenshotWithAI({
-        imageBase64: b64,
-        mimeType: mime,
-        tournamentRules: `Kill Points: ${killMultiplier}pt per kill. Punti vittoria/piazzamento: 1° = ${placementMap["1"] || 15}pt, 2° = ${placementMap["2"] || 10}pt.`,
-      });
+    const kills =
+      analysis.player1_details?.kills ??
+      analysis.score_player1 ??
+      0;
 
-      const kills =
-        analysis.player1_details?.kills ??
-        analysis.score_player1 ??
-        0;
+    const placement =
+      analysis.player1_details?.placement ??
+      (analysis.winner === "player1" ? 1 : 2);
 
-      const placement =
-        analysis.player1_details?.placement ??
-        (analysis.winner === "player1" ? 1 : 2);
+    const damage =
+      analysis.player1_details?.damage ?? kills * 450;
 
-      const damage =
-        analysis.player1_details?.damage ?? kills * 450;
+    const placementScore = placementMap[String(placement)] ?? (placement <= 10 ? (placementMap.top10 ?? 1) : 0);
+    const scoreAwarded = kills * killMultiplier + placementScore;
 
-      const placementScore = placementMap[String(placement)] ?? (placement <= 10 ? (placementMap.top10 ?? 1) : 0);
-      const scoreAwarded = kills * killMultiplier + placementScore;
-
-      return {
-        kills,
-        placement,
-        damage,
-        scoreAwarded,
-        confidence: analysis.confidence || 95,
-        notes: analysis.explanation || "Convalidato con successo tramite OpenRouter Gemini Flash",
-        rawResponse: analysis,
-      };
-    } catch (err: any) {
-      console.warn("[GeminiVision] Chiamata OpenRouter fallita o errore fallback:", err);
-    }
+    return {
+      kills,
+      placement,
+      damage,
+      scoreAwarded,
+      confidence: analysis.confidence || 95,
+      notes: analysis.explanation || "Convalidato con successo tramite arbitro IA SquadUP",
+      rawResponse: analysis,
+    };
+  } catch (err: any) {
+    console.warn("[GeminiVision] Chiamata OCR fallita, applicazione euristica:", err);
   }
 
   // Fallback heuristic if no key or transient error

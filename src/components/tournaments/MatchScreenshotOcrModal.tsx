@@ -15,7 +15,6 @@ import {
   ArrowRight,
   Flame,
   Crosshair,
-  Key,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSquad } from "@/context/SquadContext";
@@ -23,10 +22,8 @@ import { toast } from "@/components/ui/use-toast";
 import {
   fileToBase64,
   analyzeMatchScreenshotWithAI,
-  getOpenRouterApiKey,
   MatchScreenshotAnalysis,
 } from "@/services/openRouterService";
-import { OpenRouterKeyModal } from "@/components/common/OpenRouterKeyModal";
 
 export interface TournamentMatchItem {
   id: string;
@@ -68,7 +65,6 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrResult, setOcrResult] = useState<MatchScreenshotAnalysis | null>(null);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
 
   // Editable scores before saving
   const [score1, setScore1] = useState<number>(0);
@@ -107,12 +103,6 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
 
     if (!currentUser) {
       openAuthModal("login");
-      return;
-    }
-
-    const hasKey = !!getOpenRouterApiKey();
-    if (!hasKey) {
-      setIsKeyModalOpen(true);
       return;
     }
 
@@ -336,18 +326,14 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
               <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase tracking-wider">
                 {match.round_name}
               </span>
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className="text-[10px] font-bold text-cyan-400 hover:underline flex items-center gap-1"
-              >
-                <Key className="w-3 h-3" />
-                <span>Configura OpenRouter</span>
-              </button>
+              <span className="text-[10px] font-mono text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-500/40 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>IA Arbitro Centralizzata</span>
+              </span>
             </div>
 
             <h3 className="text-base sm:text-lg font-extrabold text-white mt-1">
-              Analisi Screenshot & Risultato Match
+              Analisi Screenshot &amp; Risultato Match
             </h3>
             <p className="text-[11px] text-zinc-400">
               Carica lo screenshot finale: Gemini Flash estrarrà automaticamente gol, kill e vincitore convalidando la classifica.
@@ -594,16 +580,6 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
           </div>
         </div>
       </div>
-
-      <OpenRouterKeyModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onSaved={() => {
-          if (selectedFile) {
-            handleAnalyzeScreenshot();
-          }
-        }}
-      />
     </>
   );
 };

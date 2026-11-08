@@ -32,8 +32,6 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MatchScreenshotOcrModal, TournamentMatchItem } from "./MatchScreenshotOcrModal";
-import { OpenRouterKeyModal } from "@/components/common/OpenRouterKeyModal";
-import { getOpenRouterApiKey } from "@/services/openRouterService";
 
 export const MatchRoomTab: React.FC = () => {
   const {
@@ -51,7 +49,6 @@ export const MatchRoomTab: React.FC = () => {
   const [matches, setMatches] = useState<TournamentMatchItem[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
   const [activeMatchForOcr, setActiveMatchForOcr] = useState<TournamentMatchItem | null>(null);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingTourn, setIsDeletingTourn] = useState(false);
@@ -292,8 +289,6 @@ export const MatchRoomTab: React.FC = () => {
     }
   };
 
-  const hasApiKey = !!getOpenRouterApiKey();
-
   if (!selectedTournament) {
     return (
       <div className="space-y-4">
@@ -347,18 +342,6 @@ export const MatchRoomTab: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsKeyModalOpen(true)}
-              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1 transition-all ${
-                hasApiKey
-                  ? "bg-purple-950/60 border-purple-500/40 text-purple-300"
-                  : "bg-amber-950/60 border-amber-500/50 text-amber-300 animate-pulse"
-              }`}
-            >
-              <Key className="w-3 h-3" />
-              <span>{hasApiKey ? "IA OpenRouter" : "Configura Key"}</span>
-            </button>
-
             {(isUniversalAdmin || (currentUser?.id && rawTourn.owner_id === currentUser.id)) && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
@@ -672,12 +655,6 @@ export const MatchRoomTab: React.FC = () => {
           }}
         />
       )}
-
-      {/* OpenRouter Key Modal */}
-      <OpenRouterKeyModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-      />
 
       {/* Delete Tournament Confirmation Dialog */}
       {showDeleteConfirm && (

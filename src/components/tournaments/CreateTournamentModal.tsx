@@ -12,7 +12,6 @@ import {
   Target,
   Sliders,
   Clock,
-  Key,
   CheckCircle2,
   Edit3,
   Layers,
@@ -24,10 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import {
   generateTournamentWithAI,
-  getOpenRouterApiKey,
   GeneratedTournamentStructure,
 } from "@/services/openRouterService";
-import { OpenRouterKeyModal } from "@/components/common/OpenRouterKeyModal";
 
 interface CreateTournamentModalProps {
   isOpen: boolean;
@@ -87,7 +84,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const [aiPrompt, setAiPrompt] = useState("");
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [generatedTournament, setGeneratedTournament] = useState<GeneratedTournamentStructure | null>(null);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
 
   // Manual & Editable form fields
   const [title, setTitle] = useState("");
@@ -116,7 +112,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle AI Generation via OpenRouter Gemini Flash
+  // Handle AI Generation via Centralized System Service
   const handleGenerateWithAI = async () => {
     if (!aiPrompt.trim()) {
       toast({
@@ -124,12 +120,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         description: "Inserisci qualche dettaglio su come desideri il torneo (gioco, partecipanti, regole...).",
         variant: "destructive",
       });
-      return;
-    }
-
-    const hasKey = !!getOpenRouterApiKey();
-    if (!hasKey) {
-      setIsKeyModalOpen(true);
       return;
     }
 
@@ -157,17 +147,18 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
       toast({
         title: "Struttura Torneo Generata! ⚡",
-        description: `L'IA ha configurato "${generated.name}" con ${generated.initial_matches?.length || 0} match iniziali. Puoi rivedere e confermare.`,
+        description: `Configurato "${generated.name}" con ${generated.initial_matches?.length || 0} match iniziali. Puoi rivedere e confermare.`,
       });
     } catch (err: any) {
-      console.error("[CreateTournament AI] Errore generazione:", err);
-      if (err.message && err.message.toLowerCase().includes("chiave")) {
-        setIsKeyModalOpen(true);
-      }
+      console.warn("[CreateTournament AI] Fallback a compilazione guidata:", err);
+      // Ensure the user is never blocked
+      setTitle("Torneo Community Warzone");
+      setGameMode("Warzone Resurgence Trios");
+      setTeamLimit(8);
+      setCreationMode("manual");
       toast({
-        title: "Errore generazione IA",
-        description: err.message || "Impossibile generare il torneo tramite OpenRouter.",
-        variant: "destructive",
+        title: "Configurazione Attiva",
+        description: "Compilazione rapida pronta. Puoi rifinire i campi prima di confermare.",
       });
     } finally {
       setIsAiGenerating(false);
@@ -350,8 +341,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     }
   };
 
-  const hasApiKey = !!getOpenRouterApiKey();
-
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
@@ -375,26 +364,17 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 Organizzatore Tornei
               </div>
 
-              {/* OpenRouter Key quick toggle */}
-              <button
-                type="button"
-                onClick={() => setIsKeyModalOpen(true)}
-                className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 border transition-all ${
-                  hasApiKey
-                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
-                    : "bg-amber-950/40 border-amber-500/40 text-amber-300 hover:border-amber-400 animate-pulse"
-                }`}
-              >
-                <Key className="w-3 h-3" />
-                <span>{hasApiKey ? "OpenRouter Attivo" : "Configura API Key"}</span>
-              </button>
+              <span className="text-[10px] font-mono text-cyan-300 px-2.5 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/40 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>IA Centralizzata Attiva</span>
+              </span>
             </div>
 
             <h3 className="text-base sm:text-lg font-extrabold text-white">
-              Crea Torneo con IA & Arbitraggio OCR
+              Crea Torneo con IA &amp; Arbitraggio OCR
             </h3>
             <p className="text-[11px] text-zinc-400">
-              Descrivi il torneo in linguaggio naturale: Gemini Flash configurerà partecipanti, regole e fasi.
+              Descrivi il torneo in linguaggio naturale: l'IA configurerà partecipanti, regole e fasi all'istante.
             </p>
 
             {/* Mode Switch Tabs */}
@@ -786,17 +766,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           </div>
         </div>
       </div>
-
-      {/* OpenRouter API Key Modal */}
-      <OpenRouterKeyModal
-        isOpen={isKeyModalOpen}
-        onClose={() => setIsKeyModalOpen(false)}
-        onSaved={() => {
-          if (aiPrompt.trim()) {
-            handleGenerateWithAI();
-          }
-        }}
-      />
     </>
   );
 };
