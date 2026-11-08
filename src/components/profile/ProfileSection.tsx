@@ -252,30 +252,6 @@ export const ProfileSection: React.FC = () => {
               </button>
             )}
           </div>
-                  <span>•</span>
-                  <span className="text-zinc-400">{userProfile.tag}</span>
-                </div>
-
-                {userProfile.activisionName && (
-                  <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1 w-fit">
-                    <Gamepad2 className="w-3 h-3 text-cyan-400" />
-                    <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Logout button */}
-            {currentUser && (
-              <button
-                onClick={signOut}
-                title="Disconnetti"
-                className="p-2 rounded-xl bg-zinc-900/80 hover:bg-rose-500/20 border border-zinc-800 hover:border-rose-500/40 text-zinc-400 hover:text-rose-300 transition-colors cursor-pointer shrink-0 mb-1"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            )}
-          </div>
 
           {/* Dynamic stat highlights */}
           {hasStats ? (
