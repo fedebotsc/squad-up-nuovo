@@ -21,10 +21,12 @@ import {
   Plus,
   Zap,
   ShieldAlert,
+  Award,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileCustomizerModal, AVATAR_FRAMES } from "./ProfileCustomizerModal";
+import { TenureRewardsCard } from "./TenureRewardsCard";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 import { SCoinShopModal } from "@/components/shop/SCoinShopModal";
 import { PlayerReviewsModal } from "./PlayerReviewsModal";
@@ -61,6 +63,7 @@ export const ProfileSection: React.FC = () => {
   }, [currentUser]);
 
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
+  const [rewardsSubTab, setRewardsSubTab] = useState<"tenure" | "giftcards">("tenure");
 
   // Modals state
   const [showCustomizer, setShowCustomizer] = useState(false);
@@ -436,8 +439,8 @@ export const ProfileSection: React.FC = () => {
               : "text-zinc-400 hover:text-zinc-200"
           }`}
         >
-          <Gift className="w-3.5 h-3.5 text-pink-400" />
-          <span>Catalogo Premi</span>
+          <Award className="w-3.5 h-3.5 text-amber-400" />
+          <span>Premi & Fedeltà</span>
         </button>
         <button
           onClick={() => setActiveTab("stats")}
@@ -559,54 +562,88 @@ export const ProfileSection: React.FC = () => {
         </div>
       )}
 
-      {/* Tab: REWARDS */}
+      {/* Tab: REWARDS & TENURE */}
       {activeTab === "rewards" && (
-        <div className="space-y-3 animate-fade-in">
-          {rewards.map((rw) => (
-            <div
-              key={rw.id}
-              className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md"
+        <div className="space-y-3.5 animate-fade-in">
+          {/* Sub-tab switcher */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-[#121628] rounded-2xl border border-purple-900/40 shadow-inner">
+            <button
+              onClick={() => setRewardsSubTab("tenure")}
+              className={`py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                rewardsSubTab === "tenure"
+                  ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md"
+                  : "text-zinc-400 hover:text-white"
+              }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-14 h-14 rounded-2xl border flex items-center justify-center font-black text-xs shrink-0 shadow-inner ${rw.brandColor}`}
-                >
-                  {rw.iconType === "psn" ? (
-                    <span className="text-center font-black tracking-tight leading-none">
-                      PSN<br /><span className="text-[9px]">10€</span>
-                    </span>
-                  ) : rw.iconType === "xbox" ? (
-                    <span className="text-center font-black tracking-tight leading-none">
-                      XBOX<br /><span className="text-[9px]">PASS</span>
-                    </span>
-                  ) : (
-                    <span className="text-center font-black tracking-tight leading-none text-amber-300">
-                      COD<br /><span className="text-[9px]">CP</span>
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-bold text-cyan-400 block uppercase">
-                    {rw.tag}
-                  </span>
-                  <h4 className="text-xs font-bold text-white truncate max-w-[160px]">
-                    {rw.title}
-                  </h4>
-                  <div className="flex items-center gap-1 text-amber-300 font-extrabold text-xs mt-1">
-                    <Coins className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{rw.cost.toLocaleString()} SCoin</span>
-                  </div>
-                </div>
-              </div>
+              <Award className="w-3.5 h-3.5" />
+              <span>Anzianità Abbonamento</span>
+            </button>
+            <button
+              onClick={() => setRewardsSubTab("giftcards")}
+              className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                rewardsSubTab === "giftcards"
+                  ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              <Gift className="w-3.5 h-3.5" />
+              <span>Buoni & Gift Card</span>
+            </button>
+          </div>
 
-              <button
-                onClick={() => handleRedeem(rw.title, rw.cost)}
-                className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs shrink-0 shadow-sm cursor-pointer"
-              >
-                Riscatta
-              </button>
+          {/* SubTab 1: Tenure Rewards (3, 6, 9, 12 Mesi) */}
+          {rewardsSubTab === "tenure" && <TenureRewardsCard />}
+
+          {/* SubTab 2: Gift Cards Catalogue */}
+          {rewardsSubTab === "giftcards" && (
+            <div className="space-y-3 animate-fade-in">
+              {rewards.map((rw) => (
+                <div
+                  key={rw.id}
+                  className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-14 h-14 rounded-2xl border flex items-center justify-center font-black text-xs shrink-0 shadow-inner ${rw.brandColor}`}
+                    >
+                      {rw.iconType === "psn" ? (
+                        <span className="text-center font-black tracking-tight leading-none">
+                          PSN<br /><span className="text-[9px]">10€</span>
+                        </span>
+                      ) : rw.iconType === "xbox" ? (
+                        <span className="text-center font-black tracking-tight leading-none">
+                          XBOX<br /><span className="text-[9px]">PASS</span>
+                        </span>
+                      ) : (
+                        <span className="text-center font-black tracking-tight leading-none text-amber-300">
+                          COD<br /><span className="text-[9px]">CP</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-bold text-cyan-400 block uppercase">
+                        {rw.tag}
+                      </span>
+                      <h4 className="text-xs font-bold text-white truncate max-w-[160px]">
+                        {rw.title}
+                      </h4>
+                      <div className="flex items-center gap-1 text-amber-300 font-extrabold text-xs mt-1">
+                        <Coins className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{rw.cost.toLocaleString()} SCoin</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleRedeem(rw.title, rw.cost)}
+                    className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold text-xs shrink-0 shadow-sm cursor-pointer"
+                  >
+                    Riscatta
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 

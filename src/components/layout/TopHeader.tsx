@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
 import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search } from "lucide-react";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
+import { AVATAR_FRAMES } from "@/components/profile/ProfileCustomizerModal";
 
 export const TopHeader: React.FC = () => {
   const {
@@ -14,6 +15,7 @@ export const TopHeader: React.FC = () => {
   } = useSquad();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const frameBorder = AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)?.borderClass || "border-purple-500/60";
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">
@@ -92,7 +94,7 @@ export const TopHeader: React.FC = () => {
             <button
               onClick={() => setActiveTab("profile")}
               title={userProfile.name}
-              className="w-8 h-8 rounded-full overflow-hidden border border-purple-500/60 bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform"
+              className={`w-8 h-8 rounded-full overflow-hidden border-2 ${frameBorder} bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform`}
             >
               {userProfile.avatar ? (
                 <img

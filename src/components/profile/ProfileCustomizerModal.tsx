@@ -11,18 +11,20 @@ import {
   Lock,
   Image as ImageIcon,
   CheckCircle2,
+  Award,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { uploadMediaFile } from "@/services/storageService";
+import { TENURE_REWARDS } from "./tenureRewardsData";
 
 interface ProfileCustomizerModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-// Tactical SVG / CSS Gradients (No external placeholder links)
+// Base banner themes + Tenure Banner Themes
 export const BANNER_THEMES = [
   {
     id: "theme-void",
@@ -31,6 +33,9 @@ export const BANNER_THEMES = [
     accent: "purple",
     costSC: 0,
     isFree: true,
+    isTenure: false,
+    tenureMilestone: "",
+    svgUrl: "",
   },
   {
     id: "theme-cyber",
@@ -39,6 +44,9 @@ export const BANNER_THEMES = [
     accent: "cyan",
     costSC: 50,
     isFree: false,
+    isTenure: false,
+    tenureMilestone: "",
+    svgUrl: "",
   },
   {
     id: "theme-recon",
@@ -47,6 +55,9 @@ export const BANNER_THEMES = [
     accent: "emerald",
     costSC: 50,
     isFree: false,
+    isTenure: false,
+    tenureMilestone: "",
+    svgUrl: "",
   },
   {
     id: "theme-gold",
@@ -55,6 +66,9 @@ export const BANNER_THEMES = [
     accent: "amber",
     costSC: 50,
     isFree: false,
+    isTenure: false,
+    tenureMilestone: "",
+    svgUrl: "",
   },
   {
     id: "theme-inferno",
@@ -63,9 +77,25 @@ export const BANNER_THEMES = [
     accent: "rose",
     costSC: 50,
     isFree: false,
+    isTenure: false,
+    tenureMilestone: "",
+    svgUrl: "",
   },
+  // Tenure rewards banners (3, 6, 9, 12 Mesi)
+  ...TENURE_REWARDS.map((r) => ({
+    id: r.banner.id,
+    name: r.banner.name,
+    gradient: r.banner.gradient,
+    accent: r.banner.accent,
+    costSC: 0,
+    isFree: false,
+    isTenure: true,
+    tenureMilestone: r.badgeLabel,
+    svgUrl: r.banner.svgUrl,
+  })),
 ];
 
+// Base avatar frames + Tenure Avatar Frames
 export const AVATAR_FRAMES = [
   {
     id: "base",
@@ -74,6 +104,8 @@ export const AVATAR_FRAMES = [
     glowClass: "shadow-[0_0_12px_rgba(139,92,246,0.5)]",
     previewColor: "from-purple-500 to-indigo-600",
     requiresPro: false,
+    isTenure: false,
+    tenureMilestone: "",
   },
   {
     id: "neon-cyan",
@@ -82,6 +114,8 @@ export const AVATAR_FRAMES = [
     glowClass: "shadow-[0_0_15px_rgba(34,211,238,0.7)]",
     previewColor: "from-cyan-400 to-blue-500",
     requiresPro: false,
+    isTenure: false,
+    tenureMilestone: "",
   },
   {
     id: "gold",
@@ -90,6 +124,8 @@ export const AVATAR_FRAMES = [
     glowClass: "shadow-[0_0_18px_rgba(245,158,11,0.8)]",
     previewColor: "from-amber-400 to-yellow-500",
     requiresPro: true,
+    isTenure: false,
+    tenureMilestone: "",
   },
   {
     id: "fire-red",
@@ -98,6 +134,8 @@ export const AVATAR_FRAMES = [
     glowClass: "shadow-[0_0_15px_rgba(244,63,94,0.7)]",
     previewColor: "from-rose-500 to-orange-500",
     requiresPro: false,
+    isTenure: false,
+    tenureMilestone: "",
   },
   {
     id: "amethyst",
@@ -106,16 +144,39 @@ export const AVATAR_FRAMES = [
     glowClass: "shadow-[0_0_15px_rgba(217,70,239,0.7)]",
     previewColor: "from-fuchsia-500 to-purple-600",
     requiresPro: false,
+    isTenure: false,
+    tenureMilestone: "",
   },
+  // Tenure rewards frames (3, 6, 9, 12 Mesi)
+  ...TENURE_REWARDS.map((r) => ({
+    id: r.frame.id,
+    name: r.frame.name,
+    borderClass: r.frame.borderClass,
+    glowClass: r.frame.glowClass,
+    previewColor: r.frame.previewColor,
+    requiresPro: true,
+    isTenure: true,
+    tenureMilestone: r.badgeLabel,
+    rarity: r.frame.rarity,
+  })),
 ];
 
 export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { userProfile, sCoinBalance, refreshUserData, currentUser, openAuthModal } = useSquad();
+  const {
+    userProfile,
+    sCoinBalance,
+    refreshUserData,
+    currentUser,
+    openAuthModal,
+    isUniversalAdmin,
+  } = useSquad();
   const [activeTab, setActiveTab] = useState<"upload" | "themes" | "frames">("upload");
-  const [selectedFrame, setSelectedFrame] = useState<string>(userProfile.avatarFrame || "base");
+  const [selectedFrame, setSelectedFrame] = useState<string>(
+    userProfile.activeFrame || userProfile.avatarFrame || "base"
+  );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
@@ -124,10 +185,11 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isPro = userProfile.subscriptionTier === "pro";
+  const isPro = userProfile.subscriptionTier === "pro" || isUniversalAdmin;
   const unlockedBanners = userProfile.unlockedBanners || [];
+  const unlockedFrames = userProfile.unlockedFrames || [];
 
-  // Direct File Upload for Banner to Supabase bucket 'social-media'
+  // Direct File Upload for Banner to Supabase
   const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -143,7 +205,6 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     try {
       const { url: publicUrl } = await uploadMediaFile(file, "banner", currentUser.id);
 
-      // Update in profiles table
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
@@ -173,7 +234,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     }
   };
 
-  // Direct File Upload for Avatar to Supabase bucket 'avatars' / 'social-media'
+  // Direct File Upload for Avatar
   const handleAvatarFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -189,7 +250,6 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     try {
       const { url: publicUrl } = await uploadMediaFile(file, "avatar", currentUser.id);
 
-      // Update in profiles table
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
@@ -219,12 +279,32 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     }
   };
 
-  // Select Preset Theme
+  // Select Preset Theme or Tenure Banner
   const handleApplyTheme = async (theme: typeof BANNER_THEMES[0]) => {
     if (!currentUser) return;
     setIsUploading(true);
     try {
-      const isUnlocked = theme.isFree || unlockedBanners.includes(theme.id) || isPro;
+      const isTenureUnlocked =
+        unlockedBanners.includes(theme.id) ||
+        isUniversalAdmin ||
+        userProfile.claimedTenureRewards?.some((r) => theme.id.includes(r.replace("tenure_", "")));
+
+      if (theme.isTenure && !isTenureUnlocked) {
+        toast({
+          title: "Banner Fedeltà Bloccato 🎖️",
+          description: `Questo banner si sblocca nella sezione Premi Fedeltà raggiungendo ${theme.tenureMilestone}.`,
+          variant: "destructive",
+        });
+        setIsUploading(false);
+        return;
+      }
+
+      const isUnlocked =
+        theme.isFree ||
+        unlockedBanners.includes(theme.id) ||
+        isPro ||
+        isTenureUnlocked ||
+        isUniversalAdmin;
 
       if (!isUnlocked && sCoinBalance < theme.costSC) {
         toast({
@@ -236,17 +316,27 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
         return;
       }
 
-      await supabase
-        .from("profiles")
-        .update({
-          pro_theme: theme.id === "theme-gold" ? "gold" : "neon",
-        })
-        .eq("id", currentUser.id);
+      if (theme.svgUrl) {
+        // Tenure banner with high-res SVG
+        await supabase
+          .from("profiles")
+          .update({
+            banner_url: theme.svgUrl,
+          })
+          .eq("id", currentUser.id);
+      } else {
+        await supabase
+          .from("profiles")
+          .update({
+            pro_theme: theme.id === "theme-gold" ? "gold" : "neon",
+          })
+          .eq("id", currentUser.id);
+      }
 
       await refreshUserData();
       toast({
-        title: "Stema Tema Equipaggiato",
-        description: `Lo stile "${theme.name}" è ora attivo.`,
+        title: "Banner Profilo Equipaggiato! 🖼️",
+        description: `Lo stile "${theme.name}" è ora attivo sul tuo profilo.`,
       });
     } catch (err: any) {
       toast({
@@ -259,14 +349,30 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
     }
   };
 
-  // Equip Avatar Frame
+  // Equip Avatar Frame on Supabase `profiles.active_frame`
   const handleApplyFrame = async (frameId: string) => {
     if (!currentUser) return;
     const target = AVATAR_FRAMES.find((f) => f.id === frameId);
-    if (target?.requiresPro && !isPro) {
+
+    const isTenureUnlocked =
+      unlockedFrames.includes(frameId) ||
+      isUniversalAdmin ||
+      userProfile.claimedTenureRewards?.some((r) => frameId.includes(r.replace("tenure_", "")));
+
+    if (target?.isTenure && !isTenureUnlocked) {
+      toast({
+        title: "Cornice Fedeltà Bloccata 🎖️",
+        description: `Questa cornice si sblocca nei Premi Fedeltà con anzianità ${target.tenureMilestone}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (target?.requiresPro && !isPro && !isTenureUnlocked) {
       toast({
         title: "Vantaggio Esclusivo Player Pro 👑",
-        description: "La cornice Golden Champion richiede un abbonamento Player Pro attivo.",
+        description: "Questa cornice richiede un abbonamento Player Pro attivo.",
+        variant: "destructive",
       });
       return;
     }
@@ -276,14 +382,14 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
       await supabase
         .from("profiles")
         .update({
-          avatar_frame: frameId,
+          active_frame: frameId,
         })
         .eq("id", currentUser.id);
 
       setSelectedFrame(frameId);
       await refreshUserData();
       toast({
-        title: "Cornice Avatar Aggiornata",
+        title: "Cornice Avatar Aggiornata! ✨",
         description: `Cornice ${target?.name} equipaggiata con successo.`,
       });
     } catch (err: any) {
@@ -318,13 +424,13 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
             Personalizzazione Profilo
           </div>
           <h3 className="text-base font-extrabold text-white">Caricamento Media & Stile</h3>
-          <p className="text-[11px] text-zinc-400">
-            Carica file diretti salvati su Supabase Storage e seleziona cornici avatar
+          <p className="text-[11px] text-zinc-400 mt-0.5">
+            Scegli foto, cornici e banner sbloccati per il tuo operatore.
           </p>
         </div>
 
         {/* Tabs */}
-        <div className="grid grid-cols-3 gap-1 bg-[#121628] p-1 rounded-2xl border border-zinc-800 my-3">
+        <div className="grid grid-cols-3 gap-1 p-1 bg-zinc-900/80 rounded-2xl border border-zinc-800 my-3">
           <button
             onClick={() => setActiveTab("upload")}
             className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -333,7 +439,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Upload File
+            Carica Foto
           </button>
           <button
             onClick={() => setActiveTab("frames")}
@@ -353,7 +459,7 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Temi Colore
+            Banner & Temi
           </button>
         </div>
 
@@ -414,8 +520,8 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
             <div className="bg-[#121629] p-3.5 rounded-2xl border border-zinc-800 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-white text-xs flex items-center gap-1.5">
-                  <UploadCloud className="w-4 h-4 text-purple-400" />
-                  Foto Profilo Avatar (File Diretto)
+                  <Shield className="w-4 h-4 text-purple-400" />
+                  Foto Avatar Personale
                 </span>
                 <span className="text-[10px] text-purple-400 font-medium">social-media</span>
               </div>
@@ -463,7 +569,16 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
             {AVATAR_FRAMES.map((frame) => {
               const isSelected = selectedFrame === frame.id;
-              const isLocked = frame.requiresPro && !isPro;
+              const isTenureUnlocked =
+                unlockedFrames.includes(frame.id) ||
+                isUniversalAdmin ||
+                userProfile.claimedTenureRewards?.some((r) =>
+                  frame.id.includes(r.replace("tenure_", ""))
+                );
+
+              const isLocked =
+                (frame.isTenure && !isTenureUnlocked) ||
+                (frame.requiresPro && !isPro && !isTenureUnlocked);
 
               return (
                 <div
@@ -482,16 +597,26 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
                       ★
                     </div>
                     <div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-white text-xs">{frame.name}</span>
-                        {frame.requiresPro && (
+                        {frame.isTenure ? (
                           <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            {frame.tenureMilestone}
+                          </span>
+                        ) : frame.requiresPro ? (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
                             PRO
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <span className="text-[10px] text-zinc-400">
-                        {frame.requiresPro ? "Riservato agli abbonati Pro" : "Disponibile per tutti"}
+                        {frame.isTenure
+                          ? isTenureUnlocked
+                            ? "Sbloccata da fedeltà abbonamento"
+                            : `Riservata ad anzianità ${frame.tenureMilestone}`
+                          : frame.requiresPro
+                          ? "Riservato agli abbonati Pro"
+                          : "Disponibile per tutti"}
                       </span>
                     </div>
                   </div>
@@ -504,7 +629,9 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
                     ) : isLocked ? (
                       <Lock className="w-4 h-4 text-zinc-500" />
                     ) : (
-                      <span className="text-[10px] text-zinc-500 hover:text-white">Equipaggia</span>
+                      <span className="text-[10px] text-zinc-400 hover:text-white font-semibold">
+                        Equipaggia
+                      </span>
                     )}
                   </div>
                 </div>
@@ -513,31 +640,73 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
           </div>
         )}
 
-        {/* TAB 3: THEMES */}
+        {/* TAB 3: BANNER THEMES */}
         {activeTab === "themes" && (
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
             {BANNER_THEMES.map((theme) => {
+              const isTenureUnlocked =
+                unlockedBanners.includes(theme.id) ||
+                isUniversalAdmin ||
+                userProfile.claimedTenureRewards?.some((r) =>
+                  theme.id.includes(r.replace("tenure_", ""))
+                );
+
+              const isLocked = theme.isTenure && !isTenureUnlocked;
+
               return (
                 <div
                   key={theme.id}
-                  onClick={() => handleApplyTheme(theme)}
-                  className="p-3 rounded-2xl border border-zinc-800 bg-zinc-900/80 hover:border-zinc-700 flex items-center justify-between gap-3 transition-all cursor-pointer"
+                  onClick={() => !isLocked && handleApplyTheme(theme)}
+                  className={`p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                    isLocked
+                      ? "border-zinc-800/60 bg-zinc-900/40 opacity-60 cursor-not-allowed"
+                      : "border-zinc-800 bg-zinc-900/80 hover:border-zinc-700"
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-12 h-8 rounded-lg bg-gradient-to-r ${theme.gradient} border border-zinc-700 shrink-0`}
-                    />
-                    <div>
-                      <span className="font-bold text-white text-xs block">{theme.name}</span>
-                      <span className="text-[10px] text-zinc-400">
-                        {theme.isFree ? "Gratuito" : `${theme.costSC} SCoin`}
+                  <div className="flex items-center gap-3 min-w-0">
+                    {theme.svgUrl ? (
+                      <div className="w-14 h-8 rounded-lg overflow-hidden border border-zinc-700 shrink-0">
+                        <img
+                          src={theme.svgUrl}
+                          alt={theme.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`w-12 h-8 rounded-lg bg-gradient-to-r ${theme.gradient} border border-zinc-700 shrink-0`}
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs truncate">
+                          {theme.name}
+                        </span>
+                        {theme.isTenure && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                            {theme.tenureMilestone}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 block truncate">
+                        {theme.isTenure
+                          ? isTenureUnlocked
+                            ? "Sbloccato da fedeltà abbonamento"
+                            : `Richiede anzianità ${theme.tenureMilestone}`
+                          : theme.isFree
+                          ? "Gratuito"
+                          : `${theme.costSC} SCoin`}
                       </span>
                     </div>
                   </div>
 
-                  <button className="text-[10px] font-bold text-cyan-400 hover:underline">
-                    Equipaggia
-                  </button>
+                  {isLocked ? (
+                    <Lock className="w-4 h-4 text-zinc-500 shrink-0" />
+                  ) : (
+                    <button className="text-[10px] font-bold text-cyan-400 hover:underline shrink-0">
+                      Equipaggia
+                    </button>
+                  )}
                 </div>
               );
             })}

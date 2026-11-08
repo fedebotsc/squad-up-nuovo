@@ -17,6 +17,11 @@ import { agoraVoiceService } from "@/services/agoraService";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadMediaFile } from "@/services/storageService";
 
+import {
+  TENURE_REWARDS,
+  calculateTenureMonths,
+} from "@/components/profile/tenureRewardsData";
+
 export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
 
@@ -27,6 +32,10 @@ export interface UserProfileData {
   avatar: string;
   bannerUrl?: string;
   unlockedBanners?: string[];
+  activeFrame?: string;
+  unlockedFrames?: string[];
+  claimedTenureRewards?: string[];
+  createdAt?: string;
   avatarFrame?: string;
   proTheme?: "gold" | "neon";
   subscriptionTier?: "free" | "pro";
@@ -139,6 +148,10 @@ interface SquadContextType {
   setClanData: (data: ClanData | null) => void;
   clanMembers: ClanMember[];
   donateToClan: (amount: number) => Promise<boolean>;
+
+  // Tenure Rewards & Customization
+  claimTenureReward: (milestoneMonths: 3 | 6 | 9 | 12) => Promise<boolean>;
+  equipAvatarFrame: (frameId: string) => Promise<boolean>;
 
   // Universal Admin & Deletion
   isUniversalAdmin: boolean;
@@ -275,7 +288,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             avatar: profile.avatar_url || "",
             bannerUrl: profile.banner_url || "",
             unlockedBanners: profile.unlocked_banners || [],
-            avatarFrame: isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base"),
+            unlockedFrames: profile.unlocked_frames || [],
+            claimedTenureRewards: profile.claimed_tenure_rewards || [],
+            activeFrame: profile.active_frame || (isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base")),
+            avatarFrame: profile.active_frame || (isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base")),
+            createdAt: profile.created_at,
             proTheme: (profile.pro_theme as any) || "gold",
             subscriptionTier: isSuper ? "pro" : ((profile.subscription_tier as any) || "free"),
             proExpiresAt: profile.pro_expires_at || null,
@@ -1823,6 +1840,123 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  // Claim Subscription Tenure Reward (3, 6, 9, 12 Mesi)
+  const claimTenureReward = async (milestoneMonths: 3 | 6 | 9 | 12): Promise<boolean> => {
+    if (!currentUser) {
+      openAuthModal("signup");
+      return false;
+    }
+
+    const milestone = TENURE_REWARDS.find((m) => m.months === milestoneMonths);
+    if (!milestone) return false;
+
+    const isSuper = currentUser.email?.toLowerCase() === "fedezdesimone@gmail.com";
+    const currentTenure = calculateTenureMonths(
+      userProfile.subscriptionTier,
+      userProfile.proExpiresAt,
+      userProfile.createdAt,
+      isSuper
+    );
+
+    if (currentTenure < milestoneMonths && !isSuper) {
+      toast({
+        title: "Requisito non raggiunto",
+        description: `Questo premio richiede almeno ${milestoneMonths} mesi di abbonamento Pro attivo (anzianità attuale: ${currentTenure} mesi).`,
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (userProfile.claimedTenureRewards?.includes(milestone.id)) {
+      toast({
+        title: "Premio già riscattato",
+        description: `Hai già riscattato le ricompense per ${milestone.badgeLabel}. Puoi equipaggiarle in qualsiasi momento.`,
+      });
+      return false;
+    }
+
+    try {
+      // 1. Fetch current profile arrays
+      const { data: profData, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("claimed_tenure_rewards, unlocked_frames, unlocked_banners")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
+
+      const newClaimed = Array.from(
+        new Set([...(profData?.claimed_tenure_rewards || []), milestone.id])
+      );
+      const newFrames = Array.from(
+        new Set([...(profData?.unlocked_frames || []), milestone.frame.id])
+      );
+      const newBanners = Array.from(
+        new Set([...(profData?.unlocked_banners || []), milestone.banner.id])
+      );
+
+      // 2. Persist to Supabase profiles and automatically equip the newly unlocked frame & banner!
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({
+          claimed_tenure_rewards: newClaimed,
+          unlocked_frames: newFrames,
+          unlocked_banners: newBanners,
+          active_frame: milestone.frame.id,
+          banner_url: milestone.banner.svgUrl,
+        })
+        .eq("id", currentUser.id);
+
+      if (updateErr) throw updateErr;
+
+      await refreshUserData();
+
+      toast({
+        title: `🎖️ Traguardo ${milestone.badgeLabel} Riscattato!`,
+        description: `Hai sbloccato la cornice "${milestone.frame.name}" ed il banner "${milestone.banner.name}" (già equipaggiati nel tuo profilo)!`,
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore riscatto premio fedeltà:", err);
+      toast({
+        title: "Errore durante il riscatto",
+        description: err.message || "Impossibile salvare i premi sul profilo.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Equip active avatar frame on Supabase `profiles.active_frame`
+  const equipAvatarFrame = async (frameId: string): Promise<boolean> => {
+    if (!currentUser) {
+      openAuthModal("login");
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          active_frame: frameId,
+        })
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+      await refreshUserData();
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore equipaggiamento cornice:", err);
+      toast({
+        title: "Errore salvataggio cornice",
+        description: err.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return (
     <SquadContext.Provider
       value={{
@@ -1890,6 +2024,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setClanData,
         clanMembers,
         donateToClan,
+        claimTenureReward,
+        equipAvatarFrame,
         isUniversalAdmin: currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com",
         deleteTournament,
         deleteStory,
