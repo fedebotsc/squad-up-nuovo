@@ -11,18 +11,33 @@ serve(async (req) => {
   }
 
   try {
-    const { action, userDescription, extraInstructions, imageBase64, mimeType, matchInfo } = await req.json();
+    const {
+      action,
+      userDescription,
+      extraInstructions,
+      imageBase64,
+      mimeType,
+      matchInfo,
+      kdLimits,
+      tournamentRules,
+      submissionType,
+    } = await req.json();
 
     // Centralized system OpenRouter API Key from server environment secrets
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || Deno.env.get("VITE_OPENROUTER_API_KEY") || "";
+    const OPENROUTER_API_KEY =
+      Deno.env.get("OPENROUTER_API_KEY") ||
+      Deno.env.get("VITE_OPENROUTER_API_KEY") ||
+      "";
 
     if (!OPENROUTER_API_KEY) {
       console.warn("[ai-tournaments] OPENROUTER_API_KEY not configured on server, returning fallback directive");
-      return new Response(JSON.stringify({ fallback: true, message: "No server key, use client-side generator" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ fallback: true, message: "No server key, use client-side generator" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
+    // 1. GENERATE TOURNAMENT
     if (action === "generate-tournament") {
       const systemPrompt = `Sei l'assistente IA esperto di SquadUP per l'organizzazione di tornei esport e gaming competitivo (Call of Duty, Warzone, EA FC, Rocket League, Valorant, Fortnite).
 Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto JSON valido con la seguente struttura:
@@ -82,16 +97,26 @@ Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto 
       });
     }
 
-    if (action === "ocr-match") {
-      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per match gaming. Analizza l'immagine del tabellone finale ed estrai gol/kill e vincitore in JSON puro:
+    // 2. OCR VERIFICA KD STATS
+    if (action === "ocr-kd") {
+      const minKd = kdLimits?.min_kd ? Number(kdLimits.min_kd) : null;
+      const maxKd = kdLimits?.max_kd ? Number(kdLimits.max_kd) : null;
+
+      const systemPrompt = `Sei l'arbitro ufficiale anti-smurf di SquadUP. Analizza lo screenshot del profilo/statistiche del giocatore (Call of Duty, Warzone o altro gioco competitivo).
+Trova il rapporto Uccisioni/Morti (K/D ratio o E/D ratio o KD complessivo), le uccisioni totali e il Gamertag/Activision ID visibile.
+Verifica se rispetta i limiti del torneo:
+${minKd ? `- KD Minimo: ${minKd}` : "- Nessun limite minimo"}
+${maxKd ? `- KD Massimo: ${maxKd}` : "- Nessun limite massimo"}
+
+Rispondi ESCLUSIVAMENTE con un JSON puro:
 {
-  "winner": 1 o 2 o 0,
-  "score_player1": 0,
-  "score_player2": 0,
-  "player1_details": { "kills": 0, "damage": 0 },
-  "player2_details": { "kills": 0, "damage": 0 },
+  "kd_ratio": 1.75,
+  "gamer_tag": "NomeGiocatore#1234",
+  "kills": 4500,
+  "deaths": 2570,
   "confidence": 0.95,
-  "explanation": "Spiegazione sintetica"
+  "approved": true,
+  "reason": "KD 1.75 rilevato con successo e compatibile con il regolamento del torneo."
 }`;
 
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -100,7 +125,7 @@ Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto 
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://squadup.app",
-          "X-Title": "SquadUP Competitivo",
+          "X-Title": "SquadUP Arbitro IA",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
@@ -111,7 +136,72 @@ Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto 
               content: [
                 {
                   type: "text",
-                  text: `Match: ${matchInfo?.player1_name || "Giocatore 1"} vs ${matchInfo?.player2_name || "Giocatore 2"}. Modalità: ${matchInfo?.game_mode || "Competitivo"}.`,
+                  text: `Analizza questa schermata delle statistiche KD del giocatore per validare l'iscrizione al torneo.`,
+                },
+                {
+                  type: "image_url",
+                  image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
+                },
+              ],
+            },
+          ],
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!res.ok) {
+        return new Response(JSON.stringify({ fallback: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const data = await res.json();
+      const rawText = data?.choices?.[0]?.message?.content || "";
+      const parsed = JSON.parse(rawText);
+
+      return new Response(JSON.stringify({ success: true, result: parsed }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 3. OCR RISULTATI POST-GAME (Piazzamento & Kill)
+    if (action === "ocr-post-game" || action === "ocr-match") {
+      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per il match gaming competitivo.
+Analizza lo screenshot post-partita (può essere la schermata di vittoria/piazzamento "#1 Victory", classifica finale, o il resoconto kill del team).
+Estrai con la massima precisione:
+- Piazzamento finale (es. 1 se vittoria, 2 se secondi, ecc.)
+- Uccisioni totali (kill totali della squadra o del giocatore)
+- Danno totale inflitto se visibile
+
+Rispondi ESCLUSIVAMENTE con un JSON puro:
+{
+  "placement": 1,
+  "kills": 14,
+  "damage": 5400,
+  "team_name": "NomeTeam (se leggibile)",
+  "confidence": 0.95,
+  "explanation": "Piazzamento #1 con 14 kill confermato dal tabellone finale."
+}`;
+
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://squadup.app",
+          "X-Title": "SquadUP Arbitro Post-Game",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.0-flash-001",
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Tipo screenshot: ${submissionType || "Risultati Post-Game"}. Regole: ${tournamentRules || "Standard Warzone"}.`,
                 },
                 {
                   type: "image_url",

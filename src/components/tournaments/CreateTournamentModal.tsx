@@ -108,6 +108,12 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const [points2nd, setPoints2nd] = useState<number>(10);
   const [points3rd, setPoints3rd] = useState<number>(7);
 
+  // Double Lobby & KD Verification Flags
+  const [doubleLobbyEnabled, setDoubleLobbyEnabled] = useState<boolean>(false);
+  const [requireKdVerification, setRequireKdVerification] = useState<boolean>(false);
+  const [maxKdLimit, setMaxKdLimit] = useState<string>("");
+  const [minKdLimit, setMinKdLimit] = useState<string>("");
+
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -262,6 +268,10 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           owner_id: currentUser.id,
           owner_name: userProfile.name,
           leaderboard_settings: leaderboardSettings,
+          double_lobby_enabled: doubleLobbyEnabled,
+          require_kd_verification: requireKdVerification,
+          max_kd_limit: maxKdLimit ? Number(maxKdLimit) : null,
+          min_kd_limit: minKdLimit ? Number(minKdLimit) : null,
           status: "upcoming",
           bracket: initialMatches,
           matches: initialMatches,
@@ -271,6 +281,39 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         .single();
 
       if (tournErr) throw tournErr;
+
+      // 1b. Seed tournament lobbies in tournament_lobbies
+      if (newTournament) {
+        if (doubleLobbyEnabled) {
+          const half = Math.ceil(numTeams / 2);
+          await supabase.from("tournament_lobbies").insert([
+            {
+              tournament_id: newTournament.id,
+              name: "Lobby A",
+              code: "A",
+              max_teams: half,
+              status: "open",
+            },
+            {
+              tournament_id: newTournament.id,
+              name: "Lobby B",
+              code: "B",
+              max_teams: Math.max(2, numTeams - half),
+              status: "open",
+            },
+          ]);
+        } else {
+          await supabase.from("tournament_lobbies").insert([
+            {
+              tournament_id: newTournament.id,
+              name: "Lobby Principale",
+              code: "A",
+              max_teams: numTeams,
+              status: "open",
+            },
+          ]);
+        }
+      }
 
       // 2. Insert initial matches into tournament_matches table
       if (newTournament && initialMatches.length > 0) {
@@ -704,6 +747,84 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                       className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-amber-600 font-bold"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Advanced Tournament Options: Double Lobby & KD Verification */}
+              <div className="bg-[#121628] border border-cyan-500/30 p-3.5 rounded-2xl space-y-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <span className="text-xs font-extrabold text-white block">
+                        Doppia Lobby (Lobby A / Lobby B)
+                      </span>
+                      <span className="text-[10px] text-zinc-400 block">
+                        Divide automaticamente le squadre in due lobby parallele bilanciate
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={doubleLobbyEnabled}
+                    onChange={(e) => setDoubleLobbyEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-cyan-500 rounded cursor-pointer"
+                  />
+                </div>
+
+                <div className="pt-2.5 border-t border-zinc-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Target className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="text-xs font-extrabold text-white block">
+                          Richiedi Screenshot KD Obbligatorio
+                        </span>
+                        <span className="text-[10px] text-zinc-400 block">
+                          I team dovranno caricare la foto delle statistiche KD convalidata dall'arbitro IA
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={requireKdVerification}
+                      onChange={(e) => setRequireKdVerification(e.target.checked)}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {requireKdVerification && (
+                    <div className="grid grid-cols-2 gap-2 pt-1.5 pl-6 animate-fade-in">
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          KD Massimo (Anti-Smurf)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          placeholder="Es. 2.50 (lascia vuoto se illimitato)"
+                          value={maxKdLimit}
+                          onChange={(e) => setMaxKdLimit(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-700 rounded-lg text-white text-xs placeholder-zinc-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 block mb-1">
+                          KD Minimo (Skill Floor)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          placeholder="Es. 1.00 (opzionale)"
+                          value={minKdLimit}
+                          onChange={(e) => setMinKdLimit(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-700 rounded-lg text-white text-xs placeholder-zinc-500"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

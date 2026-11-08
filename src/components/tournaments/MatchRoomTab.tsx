@@ -28,10 +28,19 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
+  MessageSquare,
+  Users,
+  Sliders,
+  Filter,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MatchScreenshotOcrModal, TournamentMatchItem } from "./MatchScreenshotOcrModal";
+import { TournamentRegistrationModal } from "./TournamentRegistrationModal";
+import { TournamentTeamChatView, TeamChatData } from "./TournamentTeamChatView";
+import { LobbyManagementModal } from "./LobbyManagementModal";
+
+type RoomSubTab = "bracket" | "team_chats" | "lobby_leaderboards";
 
 export const MatchRoomTab: React.FC = () => {
   const {
@@ -46,18 +55,46 @@ export const MatchRoomTab: React.FC = () => {
     deleteTournament,
   } = useSquad();
 
-  const [matches, setMatches] = useState<TournamentMatchItem[]>([]);
-  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [activeRoomView, setActiveRoomView] = useState<RoomSubTab>("bracket");
+
+  // Modals state
+  const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+  const [isLobbyModalOpen, setIsLobbyModalOpen] = useState(false);
   const [activeMatchForOcr, setActiveMatchForOcr] = useState<TournamentMatchItem | null>(null);
-  const [showRules, setShowRules] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingTourn, setIsDeletingTourn] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
-  // Live Chat state
+  // Tournament Matches state
+  const [matches, setMatches] = useState<TournamentMatchItem[]>([]);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+
+  // General Room Chat state
   const [chatInput, setChatInput] = useState("");
   const [liveMessages, setLiveMessages] = useState<any[]>([]);
 
-  // Load tournament matches from Supabase
+  // Team Chats State
+  const [teamChats, setTeamChats] = useState<TeamChatData[]>([]);
+  const [isLoadingTeamChats, setIsLoadingTeamChats] = useState(false);
+  const [selectedTeamChat, setSelectedTeamChat] = useState<TeamChatData | null>(null);
+  const [lobbyFilter, setLobbyFilter] = useState<"all" | "A" | "B">("all");
+  const [myRegistration, setMyRegistration] = useState<any | null>(null);
+
+  // Leaderboard per Lobby state
+  const [lobbyLeaderboards, setLobbyLeaderboards] = useState<any[]>([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+
+  const rawTourn = (selectedTournament as any)?.raw || selectedTournament || {};
+  const isDoubleLobby = Boolean(rawTourn.double_lobby_enabled);
+  const requireKd = Boolean(rawTourn.require_kd_verification);
+  const tournamentRulesText = rawTourn.rules || selectedTournament?.description || "";
+
+  const isOrganizer =
+    isUniversalAdmin ||
+    (currentUser?.id && rawTourn.owner_id === currentUser.id) ||
+    (Array.isArray(rawTourn.co_organizers) && rawTourn.co_organizers.includes(currentUser?.id));
+
+  // Load matches
   const loadMatches = async () => {
     if (!selectedTournament?.id) return;
     setIsLoadingMatches(true);
@@ -82,39 +119,7 @@ export const MatchRoomTab: React.FC = () => {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-
-      if (data && data.length > 0) {
-        setMatches(data as any[]);
-      } else {
-        // If tournament table has matches in its JSON bracket/matches column, check that
-        const rawTournament = (selectedTournament as any)?.raw;
-        const initialBracket = rawTournament?.matches || rawTournament?.bracket || [];
-        if (Array.isArray(initialBracket) && initialBracket.length > 0) {
-          // Auto-seed into tournament_matches
-          const toInsert = initialBracket.map((m: any, idx: number) => ({
-            tournament_id: selectedTournament.id,
-            round_name: m.round_name || `Incontro ${idx + 1}`,
-            score_player1: 0,
-            score_player2: 0,
-            status: "pending",
-            ai_parsed_data: {
-              team1_name: m.player1_name || m.team1 || `Squadra ${idx * 2 + 1}`,
-              team2_name: m.player2_name || m.team2 || `Squadra ${idx * 2 + 2}`,
-            },
-          }));
-
-          const { data: inserted } = await supabase
-            .from("tournament_matches")
-            .insert(toInsert)
-            .select();
-
-          if (inserted) {
-            setMatches(inserted as any[]);
-          }
-        } else {
-          setMatches([]);
-        }
-      }
+      setMatches(data || []);
     } catch (err) {
       console.warn("[MatchRoom] Errore caricamento match:", err);
     } finally {
@@ -122,8 +127,56 @@ export const MatchRoomTab: React.FC = () => {
     }
   };
 
-  // Load tournament messages from Supabase
-  const loadMessages = async () => {
+  // Load Team Chats
+  const loadTeamChats = async () => {
+    if (!selectedTournament?.id) return;
+    setIsLoadingTeamChats(true);
+    try {
+      const { data, error } = await supabase
+        .from("tournament_team_chats")
+        .select("*, lobbies:lobby_id(id, name, code)")
+        .eq("tournament_id", selectedTournament.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setTeamChats((data as any[]) || []);
+
+      // Check if current user has a team chat
+      if (currentUser?.id && data) {
+        const myChat = data.find((c: any) => c.user_id === currentUser.id);
+        if (myChat) {
+          setMyRegistration(myChat);
+        }
+      }
+    } catch (err) {
+      console.warn("[MatchRoom] Errore caricamento chat squadre:", err);
+    } finally {
+      setIsLoadingTeamChats(false);
+    }
+  };
+
+  // Load Leaderboards per Lobby
+  const loadLeaderboards = async () => {
+    if (!selectedTournament?.id) return;
+    setIsLoadingLeaderboard(true);
+    try {
+      const { data, error } = await supabase
+        .from("tournament_leaderboards")
+        .select("*")
+        .eq("tournament_id", selectedTournament.id)
+        .order("total_score", { ascending: false });
+
+      if (error) throw error;
+      setLobbyLeaderboards(data || []);
+    } catch (err) {
+      console.warn("[MatchRoom] Errore classifica:", err);
+    } finally {
+      setIsLoadingLeaderboard(false);
+    }
+  };
+
+  // Load General Messages
+  const loadGeneralMessages = async () => {
     if (!selectedTournament?.id) return;
     try {
       const { data: chats } = await supabase
@@ -146,7 +199,7 @@ export const MatchRoomTab: React.FC = () => {
         }
       }
     } catch (err) {
-      console.warn("[MatchRoom] Errore caricamento messaggi:", err);
+      console.warn("[MatchRoom] Errore caricamento messaggi generali:", err);
     }
   };
 
@@ -154,46 +207,64 @@ export const MatchRoomTab: React.FC = () => {
     if (!selectedTournament?.id) return;
 
     loadMatches();
-    loadMessages();
+    loadTeamChats();
+    loadLeaderboards();
+    loadGeneralMessages();
 
-    // Subscribe to tournament_matches changes
-    const matchChannel = supabase
-      .channel(`matches-${selectedTournament.id}`)
+    // Subscribe to tournament_team_chats changes
+    const teamChatChannel = supabase
+      .channel(`team-chats-room-${selectedTournament.id}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "tournament_matches",
+          table: "tournament_team_chats",
           filter: `tournament_id=eq.${selectedTournament.id}`,
         },
         () => {
-          loadMatches();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to messages changes
-    const msgChannel = supabase
-      .channel(`messages-${selectedTournament.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "tournament_messages",
-        },
-        () => {
-          loadMessages();
+          loadTeamChats();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(matchChannel);
-      supabase.removeChannel(msgChannel);
+      supabase.removeChannel(teamChatChannel);
     };
   }, [selectedTournament?.id]);
+
+  const handleSendGeneralMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    if (!currentUser) {
+      openAuthModal("login");
+      return;
+    }
+
+    const text = chatInput.trim();
+    setChatInput("");
+    sendMatchMessage(text);
+
+    try {
+      const { data: chats } = await supabase
+        .from("tournament_match_chats")
+        .select("id")
+        .eq("tournament_id", selectedTournament?.id)
+        .limit(1);
+
+      if (chats?.[0]?.id) {
+        await supabase.from("tournament_messages").insert({
+          match_chat_id: chats[0].id,
+          sender_id: currentUser.id,
+          message: text,
+          is_screenshot: false,
+        });
+      }
+    } catch (err) {
+      console.warn("[MatchRoom] Errore invio messaggio chat:", err);
+    }
+  };
 
   const handleCreateDefaultMatches = async () => {
     if (!selectedTournament?.id || !currentUser) return;
@@ -202,7 +273,7 @@ export const MatchRoomTab: React.FC = () => {
       const defaultMatches = [
         {
           tournament_id: selectedTournament.id,
-          round_name: "Quarti di Finale - Match 1",
+          round_name: "Fase 1 - Match A1",
           score_player1: 0,
           score_player2: 0,
           status: "pending",
@@ -210,7 +281,7 @@ export const MatchRoomTab: React.FC = () => {
         },
         {
           tournament_id: selectedTournament.id,
-          round_name: "Quarti di Finale - Match 2",
+          round_name: "Fase 1 - Match A2",
           score_player1: 0,
           score_player2: 0,
           status: "pending",
@@ -218,7 +289,7 @@ export const MatchRoomTab: React.FC = () => {
         },
         {
           tournament_id: selectedTournament.id,
-          round_name: "Quarti di Finale - Match 3",
+          round_name: "Fase 1 - Match B1",
           score_player1: 0,
           score_player2: 0,
           status: "pending",
@@ -226,7 +297,7 @@ export const MatchRoomTab: React.FC = () => {
         },
         {
           tournament_id: selectedTournament.id,
-          round_name: "Quarti di Finale - Match 4",
+          round_name: "Fase 1 - Match B2",
           score_player1: 0,
           score_player2: 0,
           status: "pending",
@@ -255,37 +326,17 @@ export const MatchRoomTab: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    if (!currentUser) {
-      openAuthModal("login");
-      return;
-    }
-
-    const text = chatInput.trim();
-    setChatInput("");
-
-    sendMatchMessage(text);
-
+  const handleConfirmDelete = async () => {
+    if (!selectedTournament) return;
+    setIsDeletingTourn(true);
     try {
-      const { data: chats } = await supabase
-        .from("tournament_match_chats")
-        .select("id")
-        .eq("tournament_id", selectedTournament?.id)
-        .limit(1);
-
-      if (chats?.[0]?.id) {
-        await supabase.from("tournament_messages").insert({
-          match_chat_id: chats[0].id,
-          sender_id: currentUser.id,
-          message: text,
-          is_screenshot: false,
-        });
-      }
+      await deleteTournament(selectedTournament.id);
+      setShowDeleteConfirm(false);
+      setTournamentSubTab("active");
     } catch (err) {
-      console.warn("[MatchRoom] Errore invio messaggio chat:", err);
+      console.warn("[MatchRoom] Errore cancellazione:", err);
+    } finally {
+      setIsDeletingTourn(false);
     }
   };
 
@@ -296,14 +347,12 @@ export const MatchRoomTab: React.FC = () => {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Swords className="w-8 h-8" />
           </div>
-
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white">Nessun torneo selezionato</h3>
             <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
-              Per visualizzare gli incontri, caricare screenshot convalidati dall'arbitro IA e seguire la chat, seleziona prima un torneo.
+              Per visualizzare le lobby, convalidare i KD con IA e accedere alle chat di squadra, seleziona prima un torneo.
             </p>
           </div>
-
           <div className="pt-2">
             <button
               onClick={() => setTournamentSubTab("active")}
@@ -318,8 +367,19 @@ export const MatchRoomTab: React.FC = () => {
     );
   }
 
-  const rawTourn = (selectedTournament as any)?.raw || {};
-  const tournamentRulesText = rawTourn.rules || selectedTournament.description || "";
+  // Filtered team chats by lobby
+  const filteredTeamChats = teamChats.filter((c) => {
+    if (lobbyFilter === "all") return true;
+    const lName = c.lobbies?.name || (c.lobby_id ? "Lobby A" : "");
+    return lName.toUpperCase().includes(lobbyFilter);
+  });
+
+  // Filtered leaderboards by lobby
+  const filteredLeaderboards = lobbyLeaderboards.filter((l) => {
+    if (lobbyFilter === "all") return true;
+    const lName = l.lobby_name || "";
+    return lName.toUpperCase().includes(lobbyFilter);
+  });
 
   return (
     <div className="space-y-4">
@@ -329,11 +389,25 @@ export const MatchRoomTab: React.FC = () => {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase">
-                STANZA MATCH UFFICIALE
+                STANZA UFFICIALE SQUADUP
               </span>
               <span className="text-[10px] text-purple-300 font-semibold bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-800/40">
                 {selectedTournament.game}
               </span>
+
+              {isDoubleLobby && (
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 uppercase flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  Doppia Lobby (A & B)
+                </span>
+              )}
+
+              {requireKd && (
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 uppercase flex items-center gap-1">
+                  <Target className="w-3 h-3 text-amber-400" />
+                  Verifica KD (IA)
+                </span>
+              )}
             </div>
 
             <h3 className="text-base font-bold text-white truncate">
@@ -342,14 +416,35 @@ export const MatchRoomTab: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {(isUniversalAdmin || (currentUser?.id && rawTourn.owner_id === currentUser.id)) && (
+            {/* Register Team Button */}
+            <button
+              onClick={() => setIsRegModalOpen(true)}
+              className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>{myRegistration ? "Modifica Iscrizione" : "Iscrivi Squadra"}</span>
+            </button>
+
+            {/* Organizer Lobby Manager Trigger */}
+            {isOrganizer && isDoubleLobby && (
+              <button
+                onClick={() => setIsLobbyModalOpen(true)}
+                className="py-1.5 px-2.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                title="Gestione e bilanciamento squadre nelle lobby"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Gestione Lobby IA</span>
+              </button>
+            )}
+
+            {/* Delete Tournament */}
+            {isOrganizer && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="text-[10px] font-bold px-2.5 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/25 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
-                title="Elimina Torneo con Rimborso SCoin"
+                className="p-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/25 hover:text-white transition-all cursor-pointer"
+                title="Elimina Torneo"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>Elimina</span>
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -376,57 +471,109 @@ export const MatchRoomTab: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Room View Navigation Sub-Tabs */}
+        <div className="grid grid-cols-3 gap-1.5 pt-1">
+          <button
+            onClick={() => {
+              setActiveRoomView("bracket");
+              setSelectedTeamChat(null);
+            }}
+            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeRoomView === "bracket"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Swords className="w-3.5 h-3.5" />
+            <span>Tabellone Match</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveRoomView("team_chats");
+            }}
+            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
+              activeRoomView === "team_chats"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Chat Squadre & KD</span>
+            {teamChats.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-black text-[9px] font-black">
+                {teamChats.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveRoomView("lobby_leaderboards");
+              setSelectedTeamChat(null);
+            }}
+            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeRoomView === "lobby_leaderboards"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Classifiche Lobby</span>
+          </button>
+        </div>
       </div>
 
-      {/* SECTION: TOURNAMENT MATCHES & OCR VALIDATION */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <Swords className="w-4 h-4 text-purple-400" />
-            <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
-              Tabellone Incontri ({matches.length})
-            </h4>
+      {/* VIEW 1: BRACKET & MATCHES TAB */}
+      {activeRoomView === "bracket" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <Swords className="w-4 h-4 text-purple-400" />
+              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
+                Incontri in Tabellone ({matches.length})
+              </h4>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveRoomView("lobby_leaderboards")}
+                className="text-[11px] font-bold text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>Vedi Classifica Live</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setTournamentSubTab("leaderboard")}
-              className="text-[11px] font-bold text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Vedi Classifica Live</span>
-            </button>
-          </div>
-        </div>
+          {isLoadingMatches ? (
+            <div className="bg-[#121628]/80 border border-purple-900/30 rounded-2xl p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+              <span>Caricamento incontri dal database...</span>
+            </div>
+          ) : matches.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2.5">
+              {matches.map((m) => {
+                const team1 = m.player1_name || m.ai_parsed_data?.team1_name || "Squadra 1";
+                const team2 = m.player2_name || m.ai_parsed_data?.team2_name || "Squadra 2";
+                const isCompleted = m.status === "completed";
+                const winner = m.ai_parsed_data?.winner;
 
-        {isLoadingMatches ? (
-          <div className="bg-[#121628]/80 border border-purple-900/30 rounded-2xl p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-            <span>Caricamento incontri dal database...</span>
-          </div>
-        ) : matches.length > 0 ? (
-          <div className="grid grid-cols-1 gap-2.5">
-            {matches.map((m) => {
-              const team1 = m.player1_name || m.ai_parsed_data?.team1_name || "Squadra 1";
-              const team2 = m.player2_name || m.ai_parsed_data?.team2_name || "Squadra 2";
-              const isCompleted = m.status === "completed";
-              const winner = m.ai_parsed_data?.winner;
+                return (
+                  <div
+                    key={m.id}
+                    className={`bg-[#121628]/95 border rounded-2xl p-3.5 transition-all shadow-md ${
+                      isCompleted
+                        ? "border-emerald-500/40 bg-gradient-to-r from-emerald-950/20 via-[#121628] to-[#121628]"
+                        : "border-purple-900/40 hover:border-purple-600/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-zinc-800/70 pb-2 mb-2.5">
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800/40 uppercase">
+                        {m.round_name}
+                      </span>
 
-              return (
-                <div
-                  key={m.id}
-                  className={`bg-[#121628]/95 border rounded-2xl p-3.5 transition-all shadow-md ${
-                    isCompleted
-                      ? "border-emerald-500/40 bg-gradient-to-r from-emerald-950/20 via-[#121628] to-[#121628]"
-                      : "border-purple-900/40 hover:border-purple-600/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 border-b border-zinc-800/70 pb-2 mb-2.5">
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800/40 uppercase">
-                      {m.round_name}
-                    </span>
-
-                    <div className="flex items-center gap-2">
                       <span
                         className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                           isCompleted
@@ -444,202 +591,432 @@ export const MatchRoomTab: React.FC = () => {
                         )}
                       </span>
                     </div>
-                  </div>
 
-                  {/* Match Score Display */}
-                  <div className="grid grid-cols-3 items-center gap-2 py-1">
-                    {/* Team 1 */}
-                    <div className="text-left min-w-0">
-                      <div className="flex items-center gap-1">
-                        {isCompleted && winner === "player1" && (
-                          <Trophy className="w-3 h-3 text-amber-400 shrink-0" />
-                        )}
+                    <div className="grid grid-cols-3 items-center gap-2 py-1">
+                      <div className="text-left min-w-0">
                         <span
                           className={`text-xs font-bold truncate block ${
-                            isCompleted && winner === "player1"
-                              ? "text-amber-300"
-                              : "text-white"
+                            isCompleted && winner === "player1" ? "text-amber-300" : "text-white"
                           }`}
                         >
                           {team1}
                         </span>
+                        <span className="text-[10px] text-zinc-400">Team 1</span>
                       </div>
-                      <span className="text-[10px] text-zinc-400">Squadra Alpha</span>
-                    </div>
 
-                    {/* Central Score */}
-                    <div className="text-center shrink-0">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-zinc-900/90 border border-zinc-800 rounded-xl">
-                        <span className="text-sm font-black text-cyan-400">
-                          {m.score_player1}
-                        </span>
-                        <span className="text-zinc-500 font-bold text-xs">-</span>
-                        <span className="text-sm font-black text-rose-400">
-                          {m.score_player2}
-                        </span>
+                      <div className="text-center shrink-0">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-zinc-900/90 border border-zinc-800 rounded-xl">
+                          <span className="text-sm font-black text-cyan-400">{m.score_player1}</span>
+                          <span className="text-zinc-500 font-bold text-xs">-</span>
+                          <span className="text-sm font-black text-rose-400">{m.score_player2}</span>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Team 2 */}
-                    <div className="text-right min-w-0">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="text-right min-w-0">
                         <span
                           className={`text-xs font-bold truncate block ${
-                            isCompleted && winner === "player2"
-                              ? "text-amber-300"
-                              : "text-white"
+                            isCompleted && winner === "player2" ? "text-amber-300" : "text-white"
                           }`}
                         >
                           {team2}
                         </span>
-                        {isCompleted && winner === "player2" && (
-                          <Trophy className="w-3 h-3 text-amber-400 shrink-0" />
-                        )}
+                        <span className="text-[10px] text-zinc-400">Team 2</span>
                       </div>
-                      <span className="text-[10px] text-zinc-400">Squadra Bravo</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2.5 mt-2 border-t border-zinc-800/70 text-[11px]">
+                      {m.screenshot_url ? (
+                        <a
+                          href={m.screenshot_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          <span>Vedi Screenshot Ufficiale</span>
+                        </a>
+                      ) : (
+                        <span className="text-zinc-500 text-[10px]">Nessuno screenshot match</span>
+                      )}
+
+                      <button
+                        onClick={() => setActiveMatchForOcr(m)}
+                        className={`px-3 py-1.5 rounded-xl font-extrabold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isCompleted
+                            ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
+                            : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md"
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>{isCompleted ? "Rivedi OCR IA" : "Carica Screenshot (OCR IA)"}</span>
+                      </button>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center space-y-3">
+              <Swords className="w-8 h-8 text-purple-400 mx-auto" />
+              <div>
+                <h4 className="text-xs font-bold text-white">Nessun match ancora generato per questo torneo</h4>
+                <p className="text-[11px] text-zinc-400 max-w-xs mx-auto mt-0.5">
+                  Genera subito il tabellone di gara per avviare la competizione.
+                </p>
+              </div>
+              <button
+                onClick={handleCreateDefaultMatches}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Genera Incontri Tabellone</span>
+              </button>
+            </div>
+          )}
 
-                  {/* Action / Screenshot Row */}
-                  <div className="flex items-center justify-between gap-2 pt-2.5 mt-2 border-t border-zinc-800/70 text-[11px]">
-                    {m.screenshot_url ? (
-                      <a
-                        href={m.screenshot_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-cyan-400 hover:underline flex items-center gap-1 text-[10px]"
-                      >
-                        <ImageIcon className="w-3 h-3" />
-                        <span>Visualizza Screenshot Ufficiale</span>
-                      </a>
-                    ) : (
-                      <span className="text-zinc-500 text-[10px]">
-                        Nessuno screenshot caricato
-                      </span>
-                    )}
+          {/* General match room chat */}
+          <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3 mt-4">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
+                  Bacheca Ufficiale della Stanza Match
+                </h4>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live
+              </span>
+            </div>
 
+            <div className="h-36 overflow-y-auto space-y-2 pr-1 text-xs">
+              {liveMessages.length > 0 ? (
+                liveMessages.map((msg, index) => (
+                  <div key={msg.id || index} className="p-2 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                    <span className="font-bold text-[10px] text-cyan-300 block mb-0.5">
+                      {msg.profiles?.display_name || msg.profiles?.username || "Giocatore"}
+                    </span>
+                    <p className="text-[11px] text-zinc-200">{msg.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="h-full flex items-center justify-center text-zinc-500 text-xs italic">
+                  Nessun messaggio generale. Comunica nella stanza match.
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSendGeneralMessage} className="flex gap-2 pt-1">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Scrivi un annuncio generale..."
+                className="flex-1 px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+              />
+              <button
+                type="submit"
+                className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: TEAM CHATS & KD VERIFICATION */}
+      {activeRoomView === "team_chats" && (
+        <div className="space-y-3">
+          {selectedTeamChat ? (
+            <TournamentTeamChatView
+              chat={selectedTeamChat}
+              tournament={selectedTournament}
+              onBack={() => setSelectedTeamChat(null)}
+              onRefreshChat={loadTeamChats}
+            />
+          ) : (
+            <div className="space-y-3">
+              {/* Header and Lobby Filters */}
+              <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+                <div>
+                  <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-cyan-400" />
+                    <span>Canali Squadra Dedicati ({teamChats.length})</span>
+                  </h4>
+                  <span className="text-[10px] text-zinc-400">
+                    Ogni squadra ha una chat con l'organizzatore per verifica KD e invio risultati
+                  </span>
+                </div>
+
+                {isDoubleLobby && (
+                  <div className="flex items-center gap-1 bg-[#151a30] p-1 rounded-xl border border-zinc-800 text-xs">
                     <button
-                      onClick={() => setActiveMatchForOcr(m)}
-                      className={`px-3 py-1.5 rounded-xl font-extrabold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
-                        isCompleted
-                          ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
-                          : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-950/40"
+                      onClick={() => setLobbyFilter("all")}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                        lobbyFilter === "all" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
                       }`}
                     >
-                      <Sparkles className="w-3 h-3 text-amber-300" />
-                      <span>{isCompleted ? "Rivedi OCR IA" : "Carica Screenshot (OCR IA)"}</span>
+                      Tutte
+                    </button>
+                    <button
+                      onClick={() => setLobbyFilter("A")}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                        lobbyFilter === "A" ? "bg-cyan-600 text-white" : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      Lobby A
+                    </button>
+                    <button
+                      onClick={() => setLobbyFilter("B")}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                        lobbyFilter === "B" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      Lobby B
                     </button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center space-y-3">
-            <Swords className="w-8 h-8 text-purple-400 mx-auto" />
-            <div>
-              <h4 className="text-xs font-bold text-white">Nessun match ancora generato per questo torneo</h4>
-              <p className="text-[11px] text-zinc-400 max-w-xs mx-auto mt-0.5">
-                Genera subito il tabellone di gara iniziale per iniziare a convalidare i punteggi con l'arbitro IA.
-              </p>
-            </div>
-            <button
-              onClick={handleCreateDefaultMatches}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs rounded-xl inline-flex items-center gap-1.5 shadow-md cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Genera Incontri del Tabellone</span>
-            </button>
-          </div>
-        )}
-      </div>
+                )}
+              </div>
 
-      {/* SECTION: LIVE CHAT & REFEREE ANNOUNCEMENTS */}
-      <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md space-y-3">
-        <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
-              Chat Stanza Match & Registro Arbitrale
-            </h4>
-          </div>
-          <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live
-          </span>
-        </div>
-
-        {/* Messages List */}
-        <div className="h-44 sm:h-52 overflow-y-auto space-y-2 pr-1 text-xs">
-          {liveMessages.length > 0 ? (
-            liveMessages.map((msg, index) => {
-              const isReferee = msg.is_screenshot || msg.ai_status === "verified";
-              const senderName =
-                msg.profiles?.display_name ||
-                msg.profiles?.username ||
-                "Operatore";
-
-              return (
-                <div
-                  key={msg.id || index}
-                  className={`p-2.5 rounded-xl border text-xs ${
-                    isReferee
-                      ? "bg-purple-950/40 border-purple-500/40 text-purple-200"
-                      : "bg-zinc-900/80 border-zinc-800 text-zinc-300"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-[11px] text-white flex items-center gap-1">
-                      {isReferee && <Sparkles className="w-3 h-3 text-amber-400" />}
-                      {senderName}
-                    </span>
-                    <span className="text-[9px] text-zinc-500">
-                      {new Date(msg.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+              {/* User's quick team chat banner if registered */}
+              {myRegistration && (
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/60 via-[#181f3d] to-cyan-950/40 border border-purple-500/50 shadow-md flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-cyan-400 shrink-0">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-extrabold text-cyan-300 uppercase tracking-wider block">
+                        La Tua Chat di Squadra ({myRegistration.lobbies?.name || "Lobby A"})
+                      </span>
+                      <h4 className="text-xs font-black text-white truncate">{myRegistration.team_name}</h4>
+                    </div>
                   </div>
 
-                  <p className="leading-relaxed text-[11px]">{msg.message}</p>
-
-                  {msg.image_url && (
-                    <div className="mt-2 rounded-lg overflow-hidden border border-zinc-700 max-w-[200px]">
-                      <img
-                        src={msg.image_url}
-                        alt="Screenshot Match"
-                        className="w-full h-24 object-cover cursor-pointer"
-                        onClick={() => window.open(msg.image_url, "_blank")}
-                      />
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setSelectedTeamChat(myRegistration)}
+                    className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white font-extrabold text-xs flex items-center gap-1 shrink-0 shadow-md cursor-pointer"
+                  >
+                    <span>Apri Chat Squadra</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              );
-            })
-          ) : (
-            <div className="h-full flex items-center justify-center text-zinc-500 text-xs italic">
-              Nessun messaggio. Scrivi per comunicare con gli avversari o carica uno screenshot di match.
+              )}
+
+              {/* Team Chats List */}
+              {isLoadingTeamChats ? (
+                <div className="py-10 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                  <span>Caricamento canali di squadra...</span>
+                </div>
+              ) : filteredTeamChats.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {filteredTeamChats.map((c) => {
+                    const lName = c.lobbies?.name || (c.lobby_id ? "Lobby A" : "Lobby Principale");
+                    const isMy = c.user_id === currentUser?.id;
+
+                    return (
+                      <div
+                        key={c.id}
+                        className={`bg-[#121628]/95 border rounded-2xl p-3 space-y-2 hover:border-purple-500/50 transition-all shadow-sm ${
+                          isMy ? "border-purple-500/40 bg-purple-950/10" : "border-zinc-800"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 uppercase">
+                                {lName}
+                              </span>
+
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                  c.status === "approved"
+                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    : c.status === "rejected"
+                                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                                    : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                }`}
+                              >
+                                {c.status === "approved"
+                                  ? "Approvata"
+                                  : c.status === "rejected"
+                                  ? "Rifiutata"
+                                  : "Verifica KD"}
+                              </span>
+
+                              {c.score_validation_status === "submitted" && (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse">
+                                  Nuovi Risultati
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="text-xs font-black text-white truncate flex items-center gap-1.5">
+                              <span>{c.team_name}</span>
+                              {isMy && (
+                                <span className="text-[8px] font-bold text-purple-300 uppercase">
+                                  (Tu)
+                                </span>
+                              )}
+                            </h4>
+                          </div>
+
+                          {c.total_points > 0 && (
+                            <span className="text-xs font-black text-amber-300 shrink-0">
+                              {c.total_points} Pt
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
+                          <span className="text-[10px] text-zinc-400">
+                            {c.kd_image_url ? "Screenshot KD allegato" : "Nessun KD inviato"}
+                          </span>
+
+                          <button
+                            onClick={() => setSelectedTeamChat(c)}
+                            className="py-1 px-3 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white font-bold text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <span>Entra nella Chat</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center space-y-2">
+                  <Users className="w-8 h-8 text-zinc-600 mx-auto" />
+                  <h4 className="text-xs font-bold text-white">Nessuna squadra ancora iscritta</h4>
+                  <p className="text-[11px] text-zinc-400">
+                    Iscrivi la tua squadra per creare il canale di comunicazione con l'organizzatore.
+                  </p>
+                  <button
+                    onClick={() => setIsRegModalOpen(true)}
+                    className="py-1.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Iscrivi Squadra Ora
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
+      )}
 
-        {/* Input */}
-        <form onSubmit={handleSendMessage} className="flex gap-2 pt-1">
-          <input
-            type="text"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Comunica nella stanza match..."
-            className="flex-1 px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-          />
-          <button
-            type="submit"
-            className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
-        </form>
-      </div>
+      {/* VIEW 3: LOBBY LEADERBOARDS */}
+      {activeRoomView === "lobby_leaderboards" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+            <div className="flex items-center gap-1.5">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">
+                Classifica Live per Lobby
+              </h4>
+            </div>
+
+            {isDoubleLobby && (
+              <div className="flex items-center gap-1 bg-[#151a30] p-1 rounded-xl border border-zinc-800 text-xs">
+                <button
+                  onClick={() => setLobbyFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                    lobbyFilter === "all" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Tutte le Lobby
+                </button>
+                <button
+                  onClick={() => setLobbyFilter("A")}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                    lobbyFilter === "A" ? "bg-cyan-600 text-white" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Lobby A
+                </button>
+                <button
+                  onClick={() => setLobbyFilter("B")}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[10px] transition-colors ${
+                    lobbyFilter === "B" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Lobby B
+                </button>
+              </div>
+            )}
+          </div>
+
+          {isLoadingLeaderboard ? (
+            <div className="py-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+              <span>Caricamento classifica...</span>
+            </div>
+          ) : filteredLeaderboards.length > 0 ? (
+            <div className="space-y-2">
+              {filteredLeaderboards.map((row, idx) => (
+                <div
+                  key={row.id || idx}
+                  className="bg-[#121628]/95 border border-zinc-800 rounded-2xl p-3 flex items-center justify-between shadow-sm"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                        idx === 0
+                          ? "bg-amber-400 text-black shadow-md shadow-amber-400/30"
+                          : idx === 1
+                          ? "bg-zinc-300 text-black"
+                          : idx === 2
+                          ? "bg-amber-700 text-white"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {idx + 1}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-white truncate max-w-[140px] sm:max-w-xs">
+                          {row.team_name}
+                        </span>
+                        {row.lobby_name && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 uppercase">
+                            {row.lobby_name}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
+                        <span className="flex items-center gap-0.5">
+                          <Crosshair className="w-3 h-3 text-purple-400" />
+                          {row.total_kills || 0} Kill
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5">
+                          <Swords className="w-3 h-3 text-cyan-400" />
+                          {row.matches_played || 0} Match
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-sm font-black text-amber-300 block">
+                      {row.total_score || 0}
+                    </span>
+                    <span className="text-[9px] text-zinc-500 font-semibold uppercase">Punti</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-6 text-center text-xs text-zinc-400">
+              Nessun punteggio ancora convalidato per la lobby selezionata.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Match Screenshot OCR Modal */}
       {activeMatchForOcr && (
@@ -648,10 +1025,34 @@ export const MatchRoomTab: React.FC = () => {
           onClose={() => setActiveMatchForOcr(null)}
           match={activeMatchForOcr}
           tournamentRules={tournamentRulesText}
-          gameMode={selectedTournament.game}
-          onMatchUpdated={() => {
+          onSuccess={() => {
             loadMatches();
-            loadMessages();
+            loadLeaderboards();
+          }}
+        />
+      )}
+
+      {/* Tournament Registration Modal */}
+      <TournamentRegistrationModal
+        isOpen={isRegModalOpen}
+        onClose={() => setIsRegModalOpen(false)}
+        tournament={selectedTournament}
+        onSuccess={() => {
+          loadTeamChats();
+          loadLeaderboards();
+          setActiveRoomView("team_chats");
+        }}
+      />
+
+      {/* Lobby Management & AI Balancing Modal */}
+      {isLobbyModalOpen && (
+        <LobbyManagementModal
+          isOpen={isLobbyModalOpen}
+          onClose={() => setIsLobbyModalOpen(false)}
+          tournament={selectedTournament}
+          onSuccess={() => {
+            loadTeamChats();
+            loadLeaderboards();
           }}
         />
       )}
@@ -665,20 +1066,15 @@ export const MatchRoomTab: React.FC = () => {
             </div>
 
             <div className="text-center space-y-1">
-              <h4 className="text-base font-extrabold text-white">
-                Eliminare questo torneo?
-              </h4>
+              <h4 className="text-base font-extrabold text-white">Eliminare il torneo?</h4>
               <p className="text-xs font-semibold text-rose-300">
                 "{selectedTournament.title}"
               </p>
               <div className="text-[11px] text-zinc-300 bg-zinc-950/80 p-3 rounded-xl border border-zinc-800 text-left mt-2 space-y-1.5">
                 <span className="font-bold text-white block">Rimborsi automatici garantiti:</span>
-                <p>• <strong>100 SCoin</strong> rimborsati all'organizzatore per il costo di creazione.</p>
-                {selectedTournament.entryFeeSCoin > 0 && (
-                  <p>• <strong>{selectedTournament.entryFeeSCoin} SCoin</strong> rimborsati a ciascun partecipante iscritto.</p>
-                )}
+                <p>• <strong>100 SCoin</strong> rimborsati all'organizzatore.</p>
                 <p className="text-[10px] text-zinc-400 italic pt-1">
-                  Tutti i match e i log di questa stanza verranno cancellati definitivamente.
+                  I match, le chat di squadra, i dati delle lobby e le classifiche verranno rimossi.
                 </p>
               </div>
             </div>
@@ -688,38 +1084,18 @@ export const MatchRoomTab: React.FC = () => {
                 type="button"
                 disabled={isDeletingTourn}
                 onClick={() => setShowDeleteConfirm(false)}
-                className="py-2.5 px-3 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                className="py-2.5 px-3 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors cursor-pointer"
               >
                 Annulla
               </button>
               <button
                 type="button"
                 disabled={isDeletingTourn}
-                onClick={async () => {
-                  setIsDeletingTourn(true);
-                  try {
-                    await deleteTournament(selectedTournament.id);
-                    setShowDeleteConfirm(false);
-                    setTournamentSubTab("active");
-                  } catch (e) {
-                    // error handled in context
-                  } finally {
-                    setIsDeletingTourn(false);
-                  }
-                }}
-                className="py-2.5 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
+                onClick={handleConfirmDelete}
+                className="py-2.5 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg cursor-pointer"
               >
-                {isDeletingTourn ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Eliminazione...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Conferma & Rimborsa</span>
-                  </>
-                )}
+                {isDeletingTourn ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <span>Elimina Torneo</span>
               </button>
             </div>
           </div>

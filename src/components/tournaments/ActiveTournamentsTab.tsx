@@ -16,6 +16,8 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { Tournament } from "@/data/mockData";
 import { CreateTournamentModal } from "./CreateTournamentModal";
+import { TournamentRegistrationModal } from "./TournamentRegistrationModal";
+import { Layers, Target } from "lucide-react";
 
 export const ActiveTournamentsTab: React.FC = () => {
   const {
@@ -29,6 +31,7 @@ export const ActiveTournamentsTab: React.FC = () => {
   } = useSquad();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [tournamentPendingDelete, setTournamentPendingDelete] = useState<Tournament | null>(null);
+  const [tournamentForRegistration, setTournamentForRegistration] = useState<Tournament | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSelectTournament = (tournament: Tournament) => {
@@ -101,6 +104,20 @@ export const ActiveTournamentsTab: React.FC = () => {
                       >
                         {isLive ? "In Corso" : "Aperto"}
                       </span>
+
+                      {Boolean((tournament as any)?.raw?.double_lobby_enabled) && (
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 uppercase flex items-center gap-1">
+                          <Layers className="w-2.5 h-2.5 text-cyan-400" />
+                          Doppia Lobby
+                        </span>
+                      )}
+
+                      {Boolean((tournament as any)?.raw?.require_kd_verification) && (
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 uppercase flex items-center gap-1">
+                          <Target className="w-2.5 h-2.5 text-amber-400" />
+                          Verifica KD
+                        </span>
+                      )}
                     </div>
 
                     <h4 className="text-sm font-bold text-white tracking-wide truncate">
@@ -152,8 +169,17 @@ export const ActiveTournamentsTab: React.FC = () => {
                     className="flex-1 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
                     <Swords className="w-3.5 h-3.5" />
-                    <span>Entra nella Stanza Match</span>
+                    <span>Stanza Match & Chat</span>
                     <ChevronRight className="w-4 h-4 ml-1" />
+                  </button>
+
+                  <button
+                    onClick={() => setTournamentForRegistration(tournament)}
+                    className="py-2 px-3 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                    title="Iscrivi la tua Squadra al Torneo"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Iscriviti</span>
                   </button>
 
                   {(isUniversalAdmin || (currentUser?.id && (tournament as any)?.raw?.owner_id === currentUser.id)) && (
@@ -196,6 +222,19 @@ export const ActiveTournamentsTab: React.FC = () => {
           refreshUserData();
         }}
       />
+
+      {/* Tournament Registration Modal */}
+      {tournamentForRegistration && (
+        <TournamentRegistrationModal
+          isOpen={!!tournamentForRegistration}
+          onClose={() => setTournamentForRegistration(null)}
+          tournament={tournamentForRegistration}
+          onSuccess={() => {
+            refreshUserData();
+            handleSelectTournament(tournamentForRegistration);
+          }}
+        />
+      )}
 
       {/* Delete Tournament Confirmation Dialog */}
       {tournamentPendingDelete && (

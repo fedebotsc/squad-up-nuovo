@@ -18,6 +18,9 @@ export const LeaderboardTab: React.FC = () => {
   const { leaderboard, selectedTournament, userProfile } = useSquad();
   const [dbLeaderboard, setDbLeaderboard] = useState<LeaderboardRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [lobbyFilter, setLobbyFilter] = useState<"all" | "A" | "B">("all");
+
+  const isDoubleLobby = Boolean((selectedTournament as any)?.raw?.double_lobby_enabled);
 
   const fetchLiveLeaderboard = async () => {
     if (!selectedTournament?.id) return;
@@ -64,12 +67,20 @@ export const LeaderboardTab: React.FC = () => {
     };
   }, [selectedTournament?.id]);
 
+  // Filter dbLeaderboard by lobby
+  const filteredDbLeaderboard = dbLeaderboard.filter((item: any) => {
+    if (lobbyFilter === "all") return true;
+    const lName = item.lobby_name || "";
+    return lName.toUpperCase().includes(lobbyFilter);
+  });
+
   // Merge DB entries or context entries
   const displayEntries =
-    dbLeaderboard.length > 0
-      ? dbLeaderboard.map((item, idx) => ({
+    filteredDbLeaderboard.length > 0
+      ? filteredDbLeaderboard.map((item: any, idx) => ({
           rank: idx + 1,
           teamName: item.team_name,
+          lobbyName: item.lobby_name,
           kills: item.total_kills || 0,
           points: item.total_score || 0,
           matches: item.matches_played || 0,
@@ -80,6 +91,7 @@ export const LeaderboardTab: React.FC = () => {
       : leaderboard.map((e, idx) => ({
           rank: idx + 1,
           teamName: e.teamName,
+          lobbyName: null,
           kills: e.kills,
           points: e.points,
           matches: 1,
@@ -88,14 +100,44 @@ export const LeaderboardTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1">
         <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-300">
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
           <span>CLASSIFICA LIVE TORNEO</span>
         </div>
+
         <div className="flex items-center gap-2">
+          {isDoubleLobby && (
+            <div className="flex items-center gap-1 bg-[#151a30] p-1 rounded-xl border border-zinc-800 text-xs">
+              <button
+                onClick={() => setLobbyFilter("all")}
+                className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition-colors ${
+                  lobbyFilter === "all" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Tutte
+              </button>
+              <button
+                onClick={() => setLobbyFilter("A")}
+                className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition-colors ${
+                  lobbyFilter === "A" ? "bg-cyan-600 text-white" : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Lobby A
+              </button>
+              <button
+                onClick={() => setLobbyFilter("B")}
+                className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition-colors ${
+                  lobbyFilter === "B" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Lobby B
+              </button>
+            </div>
+          )}
+
           {selectedTournament && (
-            <span className="text-[10px] text-cyan-400 font-semibold truncate max-w-[150px]">
+            <span className="text-[10px] text-cyan-400 font-semibold truncate max-w-[120px]">
               {selectedTournament.title}
             </span>
           )}
@@ -141,7 +183,7 @@ export const LeaderboardTab: React.FC = () => {
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           className={`text-xs font-extrabold truncate max-w-[140px] sm:max-w-xs ${
                             isMine ? "text-cyan-300" : "text-white"
@@ -149,6 +191,11 @@ export const LeaderboardTab: React.FC = () => {
                         >
                           {entry.teamName}
                         </span>
+                        {entry.lobbyName && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300 uppercase">
+                            {entry.lobbyName}
+                          </span>
+                        )}
                         {isMine && (
                           <span className="text-[9px] font-bold uppercase px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300">
                             Tu
