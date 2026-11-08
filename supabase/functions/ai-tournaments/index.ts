@@ -196,29 +196,49 @@ Rispondi ESCLUSIVAMENTE con un JSON puro valido:
       });
     }
 
-    // 3. OCR RISULTATI POST-GAME (Piazzamento & Kill con calcolo punteggio automatico)
+    // 3. OCR RISULTATI POST-GAME (Uccisioni Effettive vs Eliminazioni + Roster Dettagliato)
     if (action === "ocr-post-game" || action === "calculate-post-game-score") {
       const placementImg = placementBase64 || imageBase64;
       const killsImg = killsBase64 || imageBase64;
 
-      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per il match gaming post-partita.
-Analizza con estrema precisione lo/gli screenshot post-partita:
-1. Posizione Finale (Placement): Individua il piazzamento della squadra (es. 1° posto, 2° posto, 3° posto, top 10, ecc.). Se leggi ad esempio "#1 VICTORY ROYALE" o "1° Classificato", placement = 1. Se leggi ad esempio "3°", placement = 3.
-2. Kill di Squadra Totali: Individua la somma o il numero totale di eliminazioni / uccisioni realizzate dalla squadra.
+      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per il match gaming post-partita di Call of Duty Warzone.
+Analizza con estrema precisione lo/gli screenshot post-partita (tabellone / scoreboard di squadra).
+
+IMPORTANTE - REGOLA CRITICA SU UCCISIONI vs ELIMINAZIONI:
+Nel tabellone di Warzone sono presenti sia "Eliminazioni" che "Uccisioni".
+DEVI RIGOROSAMENTE IGNORARE LE ELIMINAZIONI.
+Le Eliminazioni NON devono essere usate per il calcolo delle kill personali o di squadra.
+Bisogna estrarre ed utilizzare UNICAMENTE il valore della colonna "UCCISIONI" (Kills reali).
+
+Per ogni riga giocatore della squadra presente nella schermata, leggi e registra separatamente:
+1. "clan_tag": il tag del clan tra parentesi quadre se presente (es. "[R|SE]")
+2. "player_name": il nome / Gamertag del giocatore (es. "PiNTusSniPer_lxa")
+3. "kills": il valore numerico dalla colonna "UCCISIONI" (es. 6). NON prendere la colonna Eliminazioni!
+4. "damage": danno inflitto se visibile
+
+Somma Automatica delle Uccisioni:
+Il punteggio delle kill di squadra ("team_kills") deve essere calcolato sommando ESCLUSIVAMENTE i valori della colonna "UCCISIONI" dei singoli membri della squadra.
+
+Piazzamento Finale (Placement):
+Estrai il numero del piazzamento finale della squadra (es. 1 se vittoria "#1", 2 se secondi, 3 se terzi, ecc.).
 
 Rispondi ESCLUSIVAMENTE con un JSON puro valido:
 {
   "placement": 3,
-  "kills": 8,
-  "damage": 3200,
+  "team_kills": 14,
+  "players": [
+    { "clan_tag": "[R|SE]", "player_name": "PiNTusSniPer_lxa", "kills": 6, "damage": 2400 },
+    { "clan_tag": "[R|SE]", "player_name": "Compagno1", "kills": 5, "damage": 1950 },
+    { "clan_tag": "[R|SE]", "player_name": "Compagno2", "kills": 3, "damage": 1200 }
+  ],
   "confidence": 0.95,
-  "explanation": "Piazzamento rilevato: 3° Posto. Kill totali rilevate: 8 eliminazioni."
+  "explanation": "Piazzamento #3 estratto. Rilevate 14 uccisioni effettive totali sommando la colonna UCCISIONI dei membri."
 }`;
 
       const contentPayload: any[] = [
         {
           type: "text",
-          text: `Estrai il piazzamento finale (numero) e le kill totali della squadra dai seguenti screenshot post-partita.`,
+          text: `Estrai il piazzamento finale e per ogni giocatore il Tag Clan, il Nome e le UCCISIONI (dalla colonna UCCISIONI, NON eliminazioni!). Somma le uccisioni effettive.`,
         },
       ];
 
@@ -236,7 +256,7 @@ Rispondi ESCLUSIVAMENTE con un JSON puro valido:
       if (killsImg && killsImg !== placementImg) {
         contentPayload.push({
           type: "text",
-          text: "Foto 2 (Kill Totali Squadra):",
+          text: "Foto 2 (Tabellone Uccisioni Squadra):",
         });
         contentPayload.push({
           type: "image_url",
@@ -275,7 +295,13 @@ Rispondi ESCLUSIVAMENTE con un JSON puro valido:
 
       // Score Calculation Engine
       const placement = Math.max(1, Number(parsed.placement) || 1);
-      const kills = Math.max(0, Number(parsed.kills) || 0);
+
+      // Extract players array and sum strictly actual kills
+      const playersList = Array.isArray(parsed.players) ? parsed.players : [];
+      let computedTeamKills = playersList.reduce((acc: number, p: any) => acc + (Number(p.kills) || 0), 0);
+      if (computedTeamKills === 0 && Number(parsed.team_kills) > 0) {
+        computedTeamKills = Number(parsed.team_kills);
+      }
 
       const placementPointsMap = scoringSettings?.placement_points || {
         "1": 10,
@@ -290,17 +316,29 @@ Rispondi ESCLUSIVAMENTE con un JSON puro valido:
       const placementPts =
         placementPointsMap[String(placement)] ??
         (placement <= 10 ? (placementPointsMap.top10 ?? 1) : 0);
-      const killPts = kills * killMultiplier;
+      const killPts = computedTeamKills * killMultiplier;
       const totalPoints = placementPts + killPts;
 
-      const summaryMessage = `Risultato registrato: ${placement}° Posizione (${placementPts} pt) + ${kills} Kills (${killPts} pt) = ${totalPoints} Punti Totali`;
+      // Construct detailed chat breakdown
+      const playerLines = playersList.map((p: any) => {
+        const clan = p.clan_tag ? `${p.clan_tag} ` : "";
+        return `• ${clan}${p.player_name || "Giocatore"} - ${p.kills ?? 0} Uccisioni`;
+      });
+
+      const playerBreakdownText = playerLines.length > 0
+        ? `👥 Dettaglio Squadra (Colonna "Uccisioni"):\n${playerLines.join("\n")}\n⚔️ Totale Uccisioni Effettive: ${computedTeamKills} Uccisioni`
+        : `⚔️ Totale Uccisioni Effettive: ${computedTeamKills} Uccisioni`;
+
+      const summaryMessage = `🎮 Risultato registrato: ${placement}° Posizione (${placementPts} pt) + ${computedTeamKills} Uccisioni (${killPts} pt) = ${totalPoints} Punti Totali`;
 
       return new Response(
         JSON.stringify({
           success: true,
           result: {
             placement,
-            kills,
+            kills: computedTeamKills,
+            players: playersList,
+            player_breakdown_text: playerBreakdownText,
             damage: parsed.damage || 0,
             confidence: parsed.confidence || 0.95,
             placement_points: placementPts,

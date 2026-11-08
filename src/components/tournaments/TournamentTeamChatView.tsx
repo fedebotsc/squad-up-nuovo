@@ -437,6 +437,8 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         killPoints: calc.killPoints,
         totalPoints: calc.totalPoints,
         summaryMessage: calc.summaryMessage,
+        playerBreakdownText: postGameAnalysis?.player_breakdown_text,
+        players: postGameAnalysis?.players,
         placementUrl,
         killsUrl,
         senderId: currentUser?.id,
@@ -777,29 +779,63 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
 
           {/* Live Breakdown Result Card */}
           {postGameAnalysis && (
-            <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-500/40 space-y-1.5 animate-fade-in text-xs">
+            <div className="p-3.5 rounded-2xl bg-purple-950/50 border border-purple-500/50 space-y-2.5 animate-fade-in text-xs">
               <div className="flex items-center justify-between text-purple-200">
-                <span className="font-bold flex items-center gap-1 text-cyan-300">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Resoconto Punti Calcolato dall'IA:</span>
+                <span className="font-extrabold flex items-center gap-1.5 text-cyan-300">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Arbitro IA: Risultati Estratti (Warzone)</span>
                 </span>
-                <span className="font-black text-amber-300 text-sm">
-                  +{postGameAnalysis.total_points} PT
+                <span className="font-black text-amber-300 text-sm px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  +{postGameAnalysis.total_points} PT Totali
                 </span>
               </div>
 
-              <p className="text-[11px] font-semibold text-zinc-200 bg-black/40 p-2 rounded-lg font-mono">
+              {/* Roster Breakdown (Uccisioni Effettive per giocatore) */}
+              {postGameAnalysis.players && postGameAnalysis.players.length > 0 && (
+                <div className="bg-black/50 p-2.5 rounded-xl border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 pb-1 border-b border-zinc-800/80">
+                    <span>Membro Squadra</span>
+                    <span className="text-amber-400 font-black">Colonna "Uccisioni"</span>
+                  </div>
+                  {postGameAnalysis.players.map((p, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-[11px] py-0.5"
+                    >
+                      <span className="font-semibold text-zinc-200 truncate max-w-[200px]">
+                        {p.clan_tag ? (
+                          <strong className="text-cyan-400 mr-1">{p.clan_tag}</strong>
+                        ) : null}
+                        {p.player_name}
+                      </span>
+                      <span className="font-black text-amber-300 bg-amber-950/60 px-2 py-0.2 rounded border border-amber-500/30">
+                        {p.kills} Uccisioni
+                      </span>
+                    </div>
+                  ))}
+
+                  <div className="pt-1.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px] font-bold">
+                    <span className="text-zinc-300">⚔️ Somma Uccisioni Effettive:</span>
+                    <span className="text-amber-300 font-extrabold">
+                      {postGameAnalysis.kills} Uccisioni (escluse Eliminazioni)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary message */}
+              <p className="text-[11px] font-semibold text-zinc-200 bg-zinc-900/80 p-2 rounded-xl font-mono border border-zinc-800">
                 {postGameAnalysis.summary_message}
               </p>
 
-              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                <div className="flex items-center justify-between bg-zinc-900/60 p-1.5 rounded-lg">
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
                   <span className="text-zinc-400">Piazzamento:</span>
                   <span className="font-bold text-white">#{postGameAnalysis.placement} ({postGameAnalysis.placement_points} pt)</span>
                 </div>
-                <div className="flex items-center justify-between bg-zinc-900/60 p-1.5 rounded-lg">
-                  <span className="text-zinc-400">Kill Squadra:</span>
-                  <span className="font-bold text-purple-300">{postGameAnalysis.kills} kill ({postGameAnalysis.kill_points} pt)</span>
+                <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
+                  <span className="text-zinc-400">Punti Uccisioni:</span>
+                  <span className="font-bold text-purple-300">+{postGameAnalysis.kill_points} pt ({postGameAnalysis.kills} x {rawTourn.leaderboard_settings?.kill_points || 1}pt)</span>
                 </div>
               </div>
             </div>
