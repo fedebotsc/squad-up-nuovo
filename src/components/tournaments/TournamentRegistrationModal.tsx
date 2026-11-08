@@ -111,18 +111,22 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
       return;
     }
 
-    if (requireKd && kdAnalysis && !kdAnalysis.approved) {
-      setErrorMsg(
-        `Impossibile registrarsi: ${kdAnalysis.reason}. Contatta l'organizzatore se ritieni ci sia un errore.`
-      );
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
       // 1. Upload KD screenshot to storage if provided
       let uploadedKdUrl = "";
+      if (kdFile) {
+        uploadedKdUrl = await uploadTournamentProof(kdFile, "kd");
+      }
+
+      // Determine approval outcome from KD analysis
+      const isApproved = requireKd ? Boolean(kdAnalysis?.approved) : true;
+      const approvalStatus = isApproved ? "approved" : "rejected";
+      const rejectionReason = !isApproved
+        ? kdAnalysis?.reason ||
+          "La foto non mostra chiaramente le statistiche di gioco o la voce K/D non rispetta i limiti stabiliti dal torneo."
+        : null;
       if (kdFile) {
         uploadedKdUrl = await uploadTournamentProof(kdFile, "kd");
       }
@@ -162,7 +166,8 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
           lobby_name: targetLobbyName,
           kd_ratio: kdAnalysis?.kd_ratio || null,
           kd_screenshot_url: uploadedKdUrl || null,
-          approval_status: requireKd ? (kdAnalysis?.approved ? "approved" : "pending") : "approved",
+          approval_status: approvalStatus,
+          rejection_reason: rejectionReason,
         })
         .select()
         .single();
@@ -183,7 +188,8 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
           registration_id: regData?.id || null,
           team_name: cleanTeamName,
           user_id: currentUser.id,
-          status: requireKd ? (kdAnalysis?.approved ? "approved" : "pending_approval") : "approved",
+          status: approvalStatus,
+          rejection_reason: rejectionReason,
           kd_image_url: uploadedKdUrl || null,
         })
         .select()
@@ -196,9 +202,15 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
       // 5. Post initial message in team chat with KD analysis
       if (teamChat) {
         const welcomeContent = requireKd
-          ? `🎮 Squadra "${cleanTeamName}" registrata in ${targetLobbyName}.\n` +
-            `📸 Screenshot KD inviato: KD ${kdAnalysis?.kd_ratio ?? "N/D"}.\n` +
-            `🤖 Arbitro IA: ${kdAnalysis?.reason ?? "In attesa di revisione."}`
+          ? isApproved
+            ? `🎯 Verifica KD APPROVATA dall'Arbitro IA!\n` +
+              `• Voce K/D rilevata: ${kdAnalysis?.kd_ratio ?? "N/D"}\n` +
+              `• Esito: ✅ CONFORME AI LIMITI\n` +
+              `🏆 L'iscrizione della squadra "${cleanTeamName}" in ${targetLobbyName} è APPROVATA e l'accesso al torneo è SBLOCCATO!`
+            : `⚠️ Verifica KD RIFIUTATA dall'Arbitro IA:\n` +
+              `• Motivo: ${rejectionReason}\n` +
+              `• Esito: ❌ ISCRIZIONE RIFIUTATA\n\n` +
+              `Puoi caricare uno screenshot nitido e conforme con la voce 'K/D' o 'Rapporto Kill/Morte' direttamente in questa chat per richiedere una nuova revisione.`
           : `🎮 Squadra "${cleanTeamName}" iscritta con successo in ${targetLobbyName}. Benvenuti nel torneo!`;
 
         await supabase.from("tournament_chat_messages").insert({

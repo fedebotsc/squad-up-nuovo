@@ -16,10 +16,12 @@ serve(async (req) => {
       userDescription,
       extraInstructions,
       imageBase64,
+      placementBase64,
+      killsBase64,
       mimeType,
-      matchInfo,
       kdLimits,
       tournamentRules,
+      scoringSettings,
       submissionType,
     } = await req.json();
 
@@ -53,7 +55,7 @@ Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto 
   "leaderboard_settings": {
     "format": "teams",
     "kill_points": 1,
-    "placement_points": { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3, "top10": 1 }
+    "placement_points": { "1": 10, "2": 7, "3": 5, "4": 4, "5": 3, "top10": 1 }
   },
   "initial_matches": [
     { "round_name": "Quarti di Finale - Match 1", "player1_name": "Squadra Alpha", "player2_name": "Squadra Bravo" }
@@ -97,26 +99,55 @@ Il tuo compito è analizzare la richiesta ed emettere ESCLUSIVAMENTE un oggetto 
       });
     }
 
-    // 2. OCR VERIFICA KD STATS
+    // 2. OCR VERIFICA KD STATS (Cerca esplicitamente "K/D" o "Rapporto Kill/Morte")
     if (action === "ocr-kd") {
       const minKd = kdLimits?.min_kd ? Number(kdLimits.min_kd) : null;
       const maxKd = kdLimits?.max_kd ? Number(kdLimits.max_kd) : null;
 
-      const systemPrompt = `Sei l'arbitro ufficiale anti-smurf di SquadUP. Analizza lo screenshot del profilo/statistiche del giocatore (Call of Duty, Warzone o altro gioco competitivo).
-Trova il rapporto Uccisioni/Morti (K/D ratio o E/D ratio o KD complessivo), le uccisioni totali e il Gamertag/Activision ID visibile.
-Verifica se rispetta i limiti del torneo:
-${minKd ? `- KD Minimo: ${minKd}` : "- Nessun limite minimo"}
-${maxKd ? `- KD Massimo: ${maxKd}` : "- Nessun limite massimo"}
+      const systemPrompt = `Sei l'arbitro ufficiale anti-smurf di SquadUP per Call of Duty e Warzone.
+Il tuo compito principale è esaminare l'immagine e CERCARE ESPLICITAMENTE una delle seguenti voci:
+- "K/D"
+- "KD"
+- "Rapporto K/M"
+- "Rapporto Kill/Morte"
+- "Rapporto Uccisioni/Morti"
+- "Eliminazioni / Morti" (E/D)
 
-Rispondi ESCLUSIVAMENTE con un JSON puro:
+REGOLE DI VALUTAZIONE OBBLIGATORIE:
+1. Se la foto NON mostra chiaramente le statistiche di gioco o il valore del K/D non è chiaramente visibile e leggibile:
+   - "valid_stats_image": false
+   - "approved": false
+   - "reason": "La foto non mostra chiaramente le statistiche di gioco o la voce K/D / Rapporto Kill-Morte."
+
+2. Se la voce K/D è visibile:
+   - Estrai il valore numerico (es. 1.85) nel campo "kd_ratio".
+   - Estrai il Gamertag o Activision ID se leggibile nel campo "gamer_tag".
+   - Limiti torneo da verificare:
+     ${minKd !== null ? `* Limite Minimo KD: ${minKd}` : "* Nessun limite minimo stabilito"}
+     ${maxKd !== null ? `* Limite Massimo KD: ${maxKd}` : "* Nessun limite massimo stabilito"}
+
+   - Se il KD rilevato è SUPERIORE al limite massimo consentito (${maxKd}):
+     "approved": false
+     "reason": "K/D rilevato di " + kd_ratio + ", superiore al tetto massimo consentito di " + maxKd + " per questo torneo."
+
+   - Se il KD rilevato è INFERIORE al minimo (${minKd}):
+     "approved": false
+     "reason": "K/D rilevato di " + kd_ratio + ", inferiore al requisito minimo di " + minKd + " stabilito per il torneo."
+
+   - Se il KD è CONFORME:
+     "approved": true
+     "reason": "K/D " + kd_ratio + " verificato e conforme al regolamento del torneo."
+
+Rispondi ESCLUSIVAMENTE con un JSON puro valido:
 {
+  "valid_stats_image": true,
   "kd_ratio": 1.75,
-  "gamer_tag": "NomeGiocatore#1234",
+  "gamer_tag": "Player#1234",
   "kills": 4500,
   "deaths": 2570,
   "confidence": 0.95,
   "approved": true,
-  "reason": "KD 1.75 rilevato con successo e compatibile con il regolamento del torneo."
+  "reason": "K/D 1.75 rilevato con successo e compatibile con le regole del torneo."
 }`;
 
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -125,7 +156,7 @@ Rispondi ESCLUSIVAMENTE con un JSON puro:
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://squadup.app",
-          "X-Title": "SquadUP Arbitro IA",
+          "X-Title": "SquadUP Arbitro IA KD",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
@@ -136,7 +167,7 @@ Rispondi ESCLUSIVAMENTE con un JSON puro:
               content: [
                 {
                   type: "text",
-                  text: `Analizza questa schermata delle statistiche KD del giocatore per validare l'iscrizione al torneo.`,
+                  text: `Cerca la voce K/D o Rapporto Kill/Morte e verifica la conformità dello screenshot.`,
                 },
                 {
                   type: "image_url",
@@ -165,24 +196,53 @@ Rispondi ESCLUSIVAMENTE con un JSON puro:
       });
     }
 
-    // 3. OCR RISULTATI POST-GAME (Piazzamento & Kill)
-    if (action === "ocr-post-game" || action === "ocr-match") {
-      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per il match gaming competitivo.
-Analizza lo screenshot post-partita (può essere la schermata di vittoria/piazzamento "#1 Victory", classifica finale, o il resoconto kill del team).
-Estrai con la massima precisione:
-- Piazzamento finale (es. 1 se vittoria, 2 se secondi, ecc.)
-- Uccisioni totali (kill totali della squadra o del giocatore)
-- Danno totale inflitto se visibile
+    // 3. OCR RISULTATI POST-GAME (Piazzamento & Kill con calcolo punteggio automatico)
+    if (action === "ocr-post-game" || action === "calculate-post-game-score") {
+      const placementImg = placementBase64 || imageBase64;
+      const killsImg = killsBase64 || imageBase64;
 
-Rispondi ESCLUSIVAMENTE con un JSON puro:
+      const systemPrompt = `Sei l'arbitro ufficiale SquadUP per il match gaming post-partita.
+Analizza con estrema precisione lo/gli screenshot post-partita:
+1. Posizione Finale (Placement): Individua il piazzamento della squadra (es. 1° posto, 2° posto, 3° posto, top 10, ecc.). Se leggi ad esempio "#1 VICTORY ROYALE" o "1° Classificato", placement = 1. Se leggi ad esempio "3°", placement = 3.
+2. Kill di Squadra Totali: Individua la somma o il numero totale di eliminazioni / uccisioni realizzate dalla squadra.
+
+Rispondi ESCLUSIVAMENTE con un JSON puro valido:
 {
-  "placement": 1,
-  "kills": 14,
-  "damage": 5400,
-  "team_name": "NomeTeam (se leggibile)",
+  "placement": 3,
+  "kills": 8,
+  "damage": 3200,
   "confidence": 0.95,
-  "explanation": "Piazzamento #1 con 14 kill confermato dal tabellone finale."
+  "explanation": "Piazzamento rilevato: 3° Posto. Kill totali rilevate: 8 eliminazioni."
 }`;
+
+      const contentPayload: any[] = [
+        {
+          type: "text",
+          text: `Estrai il piazzamento finale (numero) e le kill totali della squadra dai seguenti screenshot post-partita.`,
+        },
+      ];
+
+      if (placementImg) {
+        contentPayload.push({
+          type: "text",
+          text: "Foto 1 (Posizione Finale / Piazzamento):",
+        });
+        contentPayload.push({
+          type: "image_url",
+          image_url: { url: `data:${mimeType || "image/jpeg"};base64,${placementImg}` },
+        });
+      }
+
+      if (killsImg && killsImg !== placementImg) {
+        contentPayload.push({
+          type: "text",
+          text: "Foto 2 (Kill Totali Squadra):",
+        });
+        contentPayload.push({
+          type: "image_url",
+          image_url: { url: `data:${mimeType || "image/jpeg"};base64,${killsImg}` },
+        });
+      }
 
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -190,25 +250,13 @@ Rispondi ESCLUSIVAMENTE con un JSON puro:
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://squadup.app",
-          "X-Title": "SquadUP Arbitro Post-Game",
+          "X-Title": "SquadUP Arbitro Post-Game Score",
         },
         body: JSON.stringify({
           model: "google/gemini-2.0-flash-001",
           messages: [
             { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Tipo screenshot: ${submissionType || "Risultati Post-Game"}. Regole: ${tournamentRules || "Standard Warzone"}.`,
-                },
-                {
-                  type: "image_url",
-                  image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
-                },
-              ],
-            },
+            { role: "user", content: contentPayload },
           ],
           temperature: 0.1,
           response_format: { type: "json_object" },
@@ -225,9 +273,45 @@ Rispondi ESCLUSIVAMENTE con un JSON puro:
       const rawText = data?.choices?.[0]?.message?.content || "";
       const parsed = JSON.parse(rawText);
 
-      return new Response(JSON.stringify({ success: true, result: parsed }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Score Calculation Engine
+      const placement = Math.max(1, Number(parsed.placement) || 1);
+      const kills = Math.max(0, Number(parsed.kills) || 0);
+
+      const placementPointsMap = scoringSettings?.placement_points || {
+        "1": 10,
+        "2": 7,
+        "3": 5,
+        "4": 4,
+        "5": 3,
+        top10: 1,
+      };
+      const killMultiplier = Number(scoringSettings?.kill_points) || 1;
+
+      const placementPts =
+        placementPointsMap[String(placement)] ??
+        (placement <= 10 ? (placementPointsMap.top10 ?? 1) : 0);
+      const killPts = kills * killMultiplier;
+      const totalPoints = placementPts + killPts;
+
+      const summaryMessage = `Risultato registrato: ${placement}° Posizione (${placementPts} pt) + ${kills} Kills (${killPts} pt) = ${totalPoints} Punti Totali`;
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          result: {
+            placement,
+            kills,
+            damage: parsed.damage || 0,
+            confidence: parsed.confidence || 0.95,
+            placement_points: placementPts,
+            kill_points: killPts,
+            total_points: totalPoints,
+            summary_message: summaryMessage,
+            explanation: parsed.explanation,
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(JSON.stringify({ error: "Invalid action" }), {

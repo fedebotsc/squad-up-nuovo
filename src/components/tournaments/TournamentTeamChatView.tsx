@@ -22,6 +22,10 @@ import {
   User,
   Shield,
   Eye,
+  RefreshCw,
+  Plus,
+  Flame,
+  Check,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSquad } from "@/context/SquadContext";
@@ -29,7 +33,9 @@ import { toast } from "@/components/ui/use-toast";
 import {
   uploadTournamentProof,
   verifyKDProofWithAI,
-  verifyPostGameProofWithAI,
+  verifyPostGameProofsAndCalculateScore,
+  calculateTournamentScore,
+  commitPostGameScoreToDatabase,
   KDVerificationResult,
   PostGameVerificationResult,
 } from "@/services/tournamentVerificationService";
@@ -43,15 +49,18 @@ export interface TeamChatData {
   user_id: string;
   status: "pending_approval" | "approved" | "rejected";
   kd_image_url: string | null;
+  rejection_reason?: string | null;
   placement_screenshot_url: string | null;
   kills_screenshot_url: string | null;
   reported_placement: number | null;
   reported_kills: number | null;
   verified_placement: number | null;
   verified_kills: number | null;
+  placement_score?: number;
+  kills_score?: number;
   total_points: number;
   score_validation_status: "none" | "submitted" | "verified" | "rejected";
-  score_rejection_reason: string | null;
+  score_details?: any;
   created_at: string;
   lobbies?: {
     id: string;
@@ -73,7 +82,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
   onRefreshChat,
   onBack,
 }) => {
-  const { currentUser, userProfile, isUniversalAdmin } = useSquad();
+  const { currentUser, isUniversalAdmin } = useSquad();
   const rawTourn = tournament.raw || tournament;
 
   const isOrganizer =
@@ -105,10 +114,9 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
   const [postGameAnalysis, setPostGameAnalysis] = useState<PostGameVerificationResult | null>(null);
   const [isSubmittingPostGame, setIsSubmittingPostGame] = useState(false);
 
-  // Organizer manual score validation state
+  // Editable scores for adjustments
   const [editPlacement, setEditPlacement] = useState<number>(chat.reported_placement || 1);
   const [editKills, setEditKills] = useState<number>(chat.reported_kills || 0);
-  const [isValidatingScore, setIsValidatingScore] = useState(false);
 
   // Load chat messages
   const loadMessages = async () => {
@@ -181,16 +189,16 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     }
   };
 
-  // Re-run AI KD check
-  const handleReanalyzeKd = async () => {
-    if (!chat.kd_image_url) return;
+  /**
+   * 1. VERIFICA KD STATS CON IA VISION:
+   * Analizza l'immagine cercando esplicitamente la voce "K/D" o "Rapporto Kill/Morte".
+   * Se non rispetta i limiti stabiliti o la foto è poco chiara -> status = 'rejected' con messaggio di rifiuto dettagliato.
+   * Se è conforme -> status = 'approved' e sblocca l'accesso al torneo!
+   */
+  const handleUploadAndVerifyKd = async (file: File) => {
     setIsAnalyzingKd(true);
-
     try {
-      // Fetch image and create blob
-      const response = await fetch(chat.kd_image_url);
-      const blob = await response.blob();
-      const file = new File([blob], "kd_proof.jpg", { type: blob.type || "image/jpeg" });
+      const uploadedUrl = await uploadTournamentProof(file, "kd");
 
       const result = await verifyKDProofWithAI(file, {
         min_kd: rawTourn.min_kd_limit ? Number(rawTourn.min_kd_limit) : null,
@@ -199,32 +207,71 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
 
       setKdAnalysisResult(result);
 
-      // Post update message in chat
+      const newStatus = result.approved ? "approved" : "rejected";
+      const rejectionReason = !result.approved ? result.reason : null;
+
+      // Update tournament_team_chats
+      await supabase
+        .from("tournament_team_chats")
+        .update({
+          status: newStatus,
+          kd_image_url: uploadedUrl,
+          rejection_reason: rejectionReason,
+        })
+        .eq("id", chat.id);
+
+      // Update tournament_registrations (unlocks or locks tournament view)
+      if (chat.registration_id) {
+        await supabase
+          .from("tournament_registrations")
+          .update({
+            approval_status: newStatus,
+            rejection_reason: rejectionReason,
+            kd_ratio: result.kd_ratio,
+            kd_screenshot_url: uploadedUrl,
+          })
+          .eq("id", chat.registration_id);
+      }
+
+      // Post official AI analysis message in chat
+      const chatMessage = result.approved
+        ? `🎯 Verifica KD APPROVATA dall'Arbitro IA!\n` +
+          `• Voce K/D rilevata: ${result.kd_ratio.toFixed(2)} (${result.confidence}% confidenza)\n` +
+          `• Esito: ✅ CONFORME AI LIMITI\n` +
+          `🏆 L'iscrizione della squadra "${chat.team_name}" in ${lobbyName} è APPROVATA e l'accesso al torneo è SBLOCCATO!`
+        : `⚠️ Verifica KD RIFIUTATA dall'Arbitro IA:\n` +
+          `• Motivo: ${result.reason}\n` +
+          `• Esito: ❌ ISCRIZIONE RIFIUTATA\n\n` +
+          `Carica un nuovo screenshot nitido che mostri chiaramente la voce 'K/D' o 'Rapporto Kill/Morte' conforme ai limiti stabiliti per richiedere una nuova revisione.`;
+
       await supabase.from("tournament_chat_messages").insert({
         chat_id: chat.id,
         sender_id: currentUser?.id,
-        message_type: "system_ai",
-        content: `🤖 Nuova Analisi Arbitro IA:\nKD Rilevato: ${result.kd_ratio.toFixed(2)} (${result.confidence}% confidenza).\nEsito: ${result.approved ? "✅ CONFORME" : "❌ NON CONFORME"}\n${result.reason}`,
+        message_type: "kd_verification",
+        image_url: uploadedUrl,
+        image_type: "kd_proof",
+        content: chatMessage,
         ai_verification_result: result,
       });
 
       if (result.approved) {
         toast({
-          title: "KD Verificato dall'IA! 🎯",
-          description: `Rapporto KD: ${result.kd_ratio.toFixed(2)}. Conforme alle regole.`,
+          title: "KD Approvato con Successo! 🏆",
+          description: `Accesso al torneo sbloccato per ${chat.team_name}.`,
         });
       } else {
         toast({
-          title: "Attenzione KD",
+          title: "KD Non Conforme",
           description: result.reason,
           variant: "destructive",
         });
       }
 
+      onRefreshChat?.();
       loadMessages();
     } catch (err: any) {
       toast({
-        title: "Analisi IA non riuscita",
+        title: "Errore verifica KD",
         description: err.message,
         variant: "destructive",
       });
@@ -233,12 +280,32 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     }
   };
 
-  // Organizer manual approval / rejection of KD & team
+  // Re-run AI KD check on already uploaded image
+  const handleReanalyzeKd = async () => {
+    if (!chat.kd_image_url) return;
+    setIsAnalyzingKd(true);
+
+    try {
+      const response = await fetch(chat.kd_image_url);
+      const blob = await response.blob();
+      const file = new File([blob], "kd_proof.jpg", { type: blob.type || "image/jpeg" });
+      await handleUploadAndVerifyKd(file);
+    } catch (err: any) {
+      toast({
+        title: "Analisi IA non riuscita",
+        description: err.message,
+        variant: "destructive",
+      });
+      setIsAnalyzingKd(false);
+    }
+  };
+
+  // Organizer manual approval / rejection of team
   const handleSetTeamStatus = async (status: "approved" | "rejected", reason?: string) => {
     try {
       await supabase
         .from("tournament_team_chats")
-        .update({ status })
+        .update({ status, rejection_reason: reason || null })
         .eq("id", chat.id);
 
       if (chat.registration_id) {
@@ -257,7 +324,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         message_type: "system_ai",
         content:
           status === "approved"
-            ? `🛡️ L'organizzatore ha APPROVATO l'iscrizione del team "${chat.team_name}" in ${lobbyName}.`
+            ? `🛡️ L'organizzatore ha APPROVATO ufficialmente l'iscrizione del team "${chat.team_name}" in ${lobbyName}. Accesso sbloccato!`
             : `⚠️ L'organizzatore ha RIFIUTATO l'iscrizione del team "${chat.team_name}". ${reason || ""}`,
       });
 
@@ -277,12 +344,17 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     }
   };
 
-  // Analyze Post-Game screenshots with AI
+  /**
+   * 2. ANALISI SCREENSHOT POST-GAME E MOTORE CALCOLO PUNTEGGI
+   * Legge Foto Posizione Finale (Placement) + Foto Kill di Squadra.
+   * Recupera le regole del torneo (es. 1° = 10pt, 2° = 7pt, 1pt per kill).
+   * Esegue la somma automatica: Punti Totali = Punti Posizionamento + Punti Kill.
+   */
   const handleAnalyzePostGameWithAI = async () => {
     if (!placementFile && !killsFile) {
       toast({
         title: "Screenshot mancanti",
-        description: "Carica almeno uno screenshot (posizione o kill) per avviare l'analisi IA.",
+        description: "Carica la foto della posizione finale e/o delle kill per l'analisi IA.",
         variant: "destructive",
       });
       return;
@@ -291,10 +363,15 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     setIsAnalyzingPostGame(true);
 
     try {
-      const targetFile = placementFile || killsFile!;
-      const result = await verifyPostGameProofWithAI(
-        targetFile,
-        placementFile ? "placement" : "kills",
+      const scoringSettings = rawTourn.leaderboard_settings || {
+        kill_points: 1,
+        placement_points: { "1": 10, "2": 7, "3": 5, "4": 4, "5": 3, top10: 1 },
+      };
+
+      const result = await verifyPostGameProofsAndCalculateScore(
+        placementFile,
+        killsFile,
+        scoringSettings,
         rawTourn.rules
       );
 
@@ -303,20 +380,26 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
       setEditKills(result.kills);
 
       toast({
-        title: "Arbitro IA: Risultati Estratti! ⚡",
-        description: `Piazzamento: #${result.placement} • Kill: ${result.kills}`,
+        title: "Arbitro IA: Punteggio Calcolato! ⚡",
+        description: result.summary_message,
       });
     } catch (err: any) {
-      console.warn("[PostGame OCR] Fallback:", err);
+      toast({
+        title: "Analisi post-game non riuscita",
+        description: err.message,
+        variant: "destructive",
+      });
     } finally {
       setIsAnalyzingPostGame(false);
     }
   };
 
-  // Submit Post-Game screenshots to team chat
-  const handleSubmitPostGame = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!placementFile && !killsFile) return;
+  /**
+   * 3. REGISTRAZIONE AUTOMATICA RISULTATO NEL DATABASE E AGGIORNAMENTO CLASSIFICA
+   * Invia il resoconto automatico in chat e salva i punti nella classifica della lobby.
+   */
+  const handleConfirmAndCommitScore = async () => {
+    if (!placementFile && !killsFile && !postGameAnalysis) return;
 
     setIsSubmittingPostGame(true);
 
@@ -331,140 +414,56 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         killsUrl = await uploadTournamentProof(killsFile, "kills");
       }
 
-      const pRank = postGameAnalysis?.placement || editPlacement || 1;
-      const kCount = postGameAnalysis?.kills || editKills || 0;
+      const scoringSettings = rawTourn.leaderboard_settings || {
+        kill_points: 1,
+        placement_points: { "1": 10, "2": 7, "3": 5, "4": 4, "5": 3, top10: 1 },
+      };
 
-      // Update tournament_team_chats
-      await supabase
-        .from("tournament_team_chats")
-        .update({
-          placement_screenshot_url: placementUrl,
-          kills_screenshot_url: killsUrl,
-          reported_placement: pRank,
-          reported_kills: kCount,
-          score_validation_status: "submitted",
-        })
-        .eq("id", chat.id);
+      const finalRank = postGameAnalysis?.placement || editPlacement || 1;
+      const finalKills = postGameAnalysis?.kills || editKills || 0;
 
-      // Post message with proofs in chat
-      await supabase.from("tournament_chat_messages").insert({
-        chat_id: chat.id,
-        sender_id: currentUser?.id,
-        message_type: "post_game_submission",
-        image_url: placementUrl || killsUrl,
-        image_type: "placement_proof",
-        content:
-          `📊 Nuovi Risultati Post-Game Inviati:\n` +
-          `• Piazzamento Finale: #${pRank}\n` +
-          `• Kill Totali Squadra: ${kCount}\n` +
-          `• Stato: In attesa di convalida arbitro ${lobbyName}`,
-        ai_verification_result: postGameAnalysis,
+      const calc = calculateTournamentScore(finalRank, finalKills, scoringSettings);
+
+      await commitPostGameScoreToDatabase({
+        chatId: chat.id,
+        registrationId: chat.registration_id,
+        tournamentId: rawTourn.id,
+        teamName: chat.team_name,
+        lobbyId: chat.lobby_id,
+        lobbyName,
+        placement: finalRank,
+        kills: finalKills,
+        placementPoints: calc.placementPoints,
+        killPoints: calc.killPoints,
+        totalPoints: calc.totalPoints,
+        summaryMessage: calc.summaryMessage,
+        placementUrl,
+        killsUrl,
+        senderId: currentUser?.id,
+        currentChatTotalPoints: chat.total_points || 0,
       });
 
       toast({
-        title: "Screenshot Inviati con Successo! 🎮",
-        description: "L'organizzatore della lobby convaliderà i punteggi per la classifica.",
+        title: "Punteggio Registrato con Successo! 🏆",
+        description: `${calc.summaryMessage}. Classifica aggiornata.`,
       });
 
       setShowPostGameForm(false);
       setPlacementFile(null);
       setKillsFile(null);
+      setPlacementPreview(null);
+      setKillsPreview(null);
+      setPostGameAnalysis(null);
       onRefreshChat?.();
       loadMessages();
     } catch (err: any) {
       toast({
-        title: "Errore invio post-game",
+        title: "Errore registrazione punteggio",
         description: err.message,
         variant: "destructive",
       });
     } finally {
       setIsSubmittingPostGame(false);
-    }
-  };
-
-  // Organizer validates and commits score into Leaderboard for this lobby
-  const handleValidateAndAwardScore = async () => {
-    setIsValidatingScore(true);
-
-    try {
-      const scoringSettings = rawTourn.leaderboard_settings || {};
-      const killMultiplier = Number(scoringSettings.kill_points) || 1;
-      const placementPointsMap = scoringSettings.placement_points || { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3, top10: 1 };
-
-      const finalRank = Number(editPlacement) || 1;
-      const finalKills = Number(editKills) || 0;
-
-      const placementPts = placementPointsMap[String(finalRank)] ?? (finalRank <= 10 ? (placementPointsMap.top10 ?? 1) : 0);
-      const killPts = finalKills * killMultiplier;
-      const totalPointsAwarded = placementPts + killPts;
-
-      // 1. Update team chat status
-      await supabase
-        .from("tournament_team_chats")
-        .update({
-          verified_placement: finalRank,
-          verified_kills: finalKills,
-          total_points: (chat.total_points || 0) + totalPointsAwarded,
-          score_validation_status: "verified",
-        })
-        .eq("id", chat.id);
-
-      // 2. Upsert / increment tournament_leaderboards for that lobby
-      const teamId = `team_${chat.team_name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-
-      const { data: existingLeaderboard } = await supabase
-        .from("tournament_leaderboards")
-        .select("*")
-        .eq("tournament_id", rawTourn.id)
-        .eq("team_id", teamId)
-        .maybeSingle();
-
-      const newKills = (existingLeaderboard?.total_kills || 0) + finalKills;
-      const newScore = (existingLeaderboard?.total_score || 0) + totalPointsAwarded;
-      const newMatches = (existingLeaderboard?.matches_played || 0) + 1;
-
-      await supabase.from("tournament_leaderboards").upsert(
-        {
-          tournament_id: rawTourn.id,
-          team_id: teamId,
-          team_name: chat.team_name,
-          lobby_id: chat.lobby_id,
-          lobby_name: lobbyName,
-          total_kills: newKills,
-          total_score: newScore,
-          matches_played: newMatches,
-        },
-        { onConflict: "tournament_id,team_id" }
-      );
-
-      // 3. Post official confirmation message in chat
-      await supabase.from("tournament_chat_messages").insert({
-        chat_id: chat.id,
-        sender_id: currentUser?.id,
-        message_type: "system_ai",
-        content:
-          `✅ PUNTEGGIO CONVALIDATO PER ${lobbyName.toUpperCase()}!\n` +
-          `• Piazzamento verificato: #${finalRank} (+${placementPts} pt)\n` +
-          `• Kill verificate: ${finalKills} (+${killPts} pt)\n` +
-          `• Punti Totali Partita: +${totalPointsAwarded} SCoin/Punti Classifica!\n` +
-          `La classifica live di ${lobbyName} è stata aggiornata.`,
-      });
-
-      toast({
-        title: "Punteggio Convalidato! 🏆",
-        description: `Assegnati +${totalPointsAwarded} pt alla squadra "${chat.team_name}" in ${lobbyName}.`,
-      });
-
-      onRefreshChat?.();
-      loadMessages();
-    } catch (err: any) {
-      toast({
-        title: "Errore convalida punteggio",
-        description: err.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsValidatingScore(false);
     }
   };
 
@@ -479,7 +478,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer"
             >
               ←
             </button>
@@ -507,12 +506,19 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
                 {chat.status === "pending_approval" && <Clock className="w-3 h-3" />}
                 <span>
                   {chat.status === "approved"
-                    ? "Approvata"
+                    ? "Iscrizione Approvata"
                     : chat.status === "rejected"
-                    ? "Rifiutata"
-                    : "In Attesa Approvazione"}
+                    ? "Iscrizione Rifiutata"
+                    : "In Attesa di Approvazione"}
                 </span>
               </span>
+
+              {chat.total_points > 0 && (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-amber-400" />
+                  {chat.total_points} PT Totali
+                </span>
+              )}
             </div>
 
             <h3 className="text-sm font-extrabold text-white truncate flex items-center gap-2">
@@ -526,8 +532,27 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
           </div>
         </div>
 
-        {/* Action button: Post Game modal toggle */}
+        {/* Action buttons: KD Upload / Post Game toggle */}
         <div className="flex items-center gap-2 shrink-0">
+          <label className="py-1.5 px-3 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer">
+            {isAnalyzingKd ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+            ) : (
+              <Target className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            <span>Carica KD</span>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={isAnalyzingKd}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleUploadAndVerifyKd(f);
+              }}
+              className="hidden"
+            />
+          </label>
+
           <button
             onClick={() => setShowPostGameForm(!showPostGameForm)}
             className="py-1.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
@@ -538,8 +563,38 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         </div>
       </div>
 
-      {/* TOP CARDS: KD Verification HUD + Post-Game Banner */}
+      {/* TOP CARDS: KD Verification HUD + Status Banner */}
       <div className="py-2.5 space-y-2 shrink-0 overflow-y-auto max-h-[220px]">
+        {/* Rejection Alert Banner if rejected */}
+        {chat.status === "rejected" && (
+          <div className="p-3 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 min-w-0">
+              <span className="font-extrabold text-rose-300 block">
+                Iscrizione Rifiutata dall'Arbitro IA
+              </span>
+              <p className="text-[11px] text-zinc-300">
+                {chat.rejection_reason ||
+                  "Lo screenshot inviato non rispetta i limiti stabiliti dal torneo o non mostra chiaramente le statistiche K/D."}
+              </p>
+              <label className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold cursor-pointer transition-colors">
+                <UploadCloud className="w-3 h-3" />
+                <span>Carica Nuovo Screenshot KD Conforme</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={isAnalyzingKd}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUploadAndVerifyKd(f);
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+        )}
+
         {/* KD Verification Card */}
         {chat.kd_image_url && (
           <div className="bg-[#121629] border border-amber-500/30 rounded-2xl p-2.5 flex items-center justify-between gap-3 text-xs">
@@ -566,8 +621,9 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
                   <span>Screenshot Statistiche KD</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 truncate">
-                  {rawTourn.max_kd_limit ? `Limite Max: ${rawTourn.max_kd_limit} KD • ` : ""}
-                  Foto inviata per verifica arbitrale
+                  {rawTourn.max_kd_limit ? `Max: ${rawTourn.max_kd_limit} KD • ` : ""}
+                  {rawTourn.min_kd_limit ? `Min: ${rawTourn.min_kd_limit} KD • ` : ""}
+                  Analisi visiva Arbitro IA attiva
                 </p>
               </div>
             </div>
@@ -584,7 +640,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
                 ) : (
                   <Sparkles className="w-3 h-3 text-cyan-400" />
                 )}
-                <span>Analizza con IA</span>
+                <span>Rianalizza con IA</span>
               </button>
 
               {isOrganizer && chat.status !== "approved" && (
@@ -599,140 +655,50 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
             </div>
           </div>
         )}
-
-        {/* Post-Game Results Validation Card (for Organizer) */}
-        {chat.score_validation_status === "submitted" && (
-          <div className="bg-[#121933] border border-cyan-500/40 rounded-2xl p-3 space-y-2.5">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-black text-cyan-300">
-                <Swords className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Nuovi Risultati Partita Inviati ({lobbyName})</span>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40">
-                Da Convalidare
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {chat.placement_screenshot_url && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-400 block font-semibold">1. Piazzamento:</span>
-                  <a
-                    href={chat.placement_screenshot_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block h-16 rounded-xl overflow-hidden border border-zinc-800 hover:border-cyan-500 transition-colors"
-                  >
-                    <img
-                      src={chat.placement_screenshot_url}
-                      alt="Piazzamento"
-                      className="w-full h-full object-cover"
-                    />
-                  </a>
-                </div>
-              )}
-
-              {chat.kills_screenshot_url && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-400 block font-semibold">2. Kill Totali:</span>
-                  <a
-                    href={chat.kills_screenshot_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block h-16 rounded-xl overflow-hidden border border-zinc-800 hover:border-cyan-500 transition-colors"
-                  >
-                    <img
-                      src={chat.kills_screenshot_url}
-                      alt="Kill Screenshot"
-                      className="w-full h-full object-cover"
-                    />
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* If organizer: editable controls to validate */}
-            {isOrganizer ? (
-              <div className="bg-zinc-950/70 p-2 rounded-xl border border-zinc-800 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">Piazzamento (#)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={150}
-                      value={editPlacement}
-                      onChange={(e) => setEditPlacement(Number(e.target.value))}
-                      className="w-full p-1 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-xs font-bold text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-zinc-400 block mb-0.5">Kill Totali</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={99}
-                      value={editKills}
-                      onChange={(e) => setEditKills(Number(e.target.value))}
-                      className="w-full p-1 bg-zinc-900 border border-zinc-700 rounded-lg text-purple-300 text-xs font-bold text-center"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={isValidatingScore}
-                  onClick={handleValidateAndAwardScore}
-                  className="w-full py-1.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
-                >
-                  {isValidatingScore ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  )}
-                  <span>Convalida Punteggio per {lobbyName}</span>
-                </button>
-              </div>
-            ) : (
-              <p className="text-[10px] text-zinc-400 italic">
-                In attesa che l'organizzatore o il gestore di {lobbyName} convalidi i punti.
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* POST-GAME SUBMISSION FORM (Modal/Drawer) */}
+      {/* POST-GAME SUBMISSION FORM (Placement + Kills double photo) */}
       {showPostGameForm && (
         <div className="bg-[#151c36] border border-cyan-500/50 rounded-2xl p-3.5 my-2 space-y-3 shadow-xl shrink-0 animate-fade-in">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
             <div className="flex items-center gap-1.5 text-xs font-black text-white">
               <Trophy className="w-4 h-4 text-amber-400" />
-              <span>Carica Screenshot Post-Game ({lobbyName})</span>
+              <span>Verifica Screenshot Post-Game & Calcolo Punti ({lobbyName})</span>
             </div>
             <button
               onClick={() => setShowPostGameForm(false)}
-              className="text-zinc-400 hover:text-white"
+              className="text-zinc-400 hover:text-white cursor-pointer"
             >
               ✕
             </button>
           </div>
 
           <p className="text-[11px] text-zinc-300 leading-snug">
-            Carica le due foto ufficiali al termine della partita per calcolare i punti:
+            Carica le due foto di fine partita per far calcolare automaticamente all'IA i punti in classifica:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Foto 1: Piazzamento */}
+            {/* Foto 1: Posizione Finale (Placement) */}
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-zinc-300 block">
-                1. Posizione Finale (Es. #1 Vittoria)
+              <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                <Trophy className="w-3 h-3 text-amber-400" />
+                <span>Foto 1: Posizione Finale (Placement)</span>
               </span>
-              <label className="border border-dashed border-zinc-700 hover:border-cyan-400 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 cursor-pointer bg-zinc-900/60 hover:bg-zinc-900 text-center">
-                <UploadCloud className="w-5 h-5 text-cyan-400" />
-                <span className="text-[10px] font-semibold text-zinc-200 truncate max-w-[120px]">
-                  {placementFile ? placementFile.name : "Carica Piazzamento"}
-                </span>
+              <label className="border border-dashed border-zinc-700 hover:border-cyan-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-zinc-900/60 hover:bg-zinc-900 text-center relative overflow-hidden h-24 transition-colors">
+                {placementPreview ? (
+                  <img
+                    src={placementPreview}
+                    alt="Piazzamento preview"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <UploadCloud className="w-5 h-5 text-cyan-400" />
+                    <span className="text-[10px] font-semibold text-zinc-300 truncate max-w-[150px]">
+                      {placementFile ? placementFile.name : "Carica Foto Piazzamento (#1, #3...)"}
+                    </span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
@@ -748,16 +714,27 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
               </label>
             </div>
 
-            {/* Foto 2: Kill Totali */}
+            {/* Foto 2: Kill di Squadra */}
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-zinc-300 block">
-                2. Kill Totali del Team
+              <span className="text-[10px] font-bold text-purple-300 flex items-center gap-1">
+                <Target className="w-3 h-3 text-purple-400" />
+                <span>Foto 2: Kill di Squadra Totali</span>
               </span>
-              <label className="border border-dashed border-zinc-700 hover:border-purple-400 rounded-xl p-2.5 flex flex-col items-center justify-center gap-1 cursor-pointer bg-zinc-900/60 hover:bg-zinc-900 text-center">
-                <UploadCloud className="w-5 h-5 text-purple-400" />
-                <span className="text-[10px] font-semibold text-zinc-200 truncate max-w-[120px]">
-                  {killsFile ? killsFile.name : "Carica Kill Totali"}
-                </span>
+              <label className="border border-dashed border-zinc-700 hover:border-purple-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-zinc-900/60 hover:bg-zinc-900 text-center relative overflow-hidden h-24 transition-colors">
+                {killsPreview ? (
+                  <img
+                    src={killsPreview}
+                    alt="Kill preview"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <UploadCloud className="w-5 h-5 text-purple-400" />
+                    <span className="text-[10px] font-semibold text-zinc-300 truncate max-w-[150px]">
+                      {killsFile ? killsFile.name : "Carica Foto Kill Totali Team"}
+                    </span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
@@ -775,41 +752,72 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
           </div>
 
           {/* AI Pre-scan Button */}
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800">
             <button
               type="button"
               disabled={isAnalyzingPostGame || (!placementFile && !killsFile)}
               onClick={handleAnalyzePostGameWithAI}
-              className="py-1.5 px-3 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="py-1.5 px-3 rounded-xl bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               {isAnalyzingPostGame ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
               ) : (
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
               )}
-              <span>Analizza Risultati con Arbitro IA</span>
+              <span>Analizza Foto & Calcola Punti con IA</span>
             </button>
 
             {postGameAnalysis && (
-              <span className="text-[10px] text-emerald-300 font-bold">
-                ✓ Estratti: #{postGameAnalysis.placement} ({postGameAnalysis.kills} kill)
+              <span className="text-[10px] text-emerald-300 font-extrabold flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                <span>Calcolati: +{postGameAnalysis.total_points} PT Totali</span>
               </span>
             )}
           </div>
 
-          {/* Submit */}
+          {/* Live Breakdown Result Card */}
+          {postGameAnalysis && (
+            <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-500/40 space-y-1.5 animate-fade-in text-xs">
+              <div className="flex items-center justify-between text-purple-200">
+                <span className="font-bold flex items-center gap-1 text-cyan-300">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Resoconto Punti Calcolato dall'IA:</span>
+                </span>
+                <span className="font-black text-amber-300 text-sm">
+                  +{postGameAnalysis.total_points} PT
+                </span>
+              </div>
+
+              <p className="text-[11px] font-semibold text-zinc-200 bg-black/40 p-2 rounded-lg font-mono">
+                {postGameAnalysis.summary_message}
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div className="flex items-center justify-between bg-zinc-900/60 p-1.5 rounded-lg">
+                  <span className="text-zinc-400">Piazzamento:</span>
+                  <span className="font-bold text-white">#{postGameAnalysis.placement} ({postGameAnalysis.placement_points} pt)</span>
+                </div>
+                <div className="flex items-center justify-between bg-zinc-900/60 p-1.5 rounded-lg">
+                  <span className="text-zinc-400">Kill Squadra:</span>
+                  <span className="font-bold text-purple-300">{postGameAnalysis.kills} kill ({postGameAnalysis.kill_points} pt)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Confirm & Save Button */}
           <button
             type="button"
-            disabled={isSubmittingPostGame || (!placementFile && !killsFile)}
-            onClick={handleSubmitPostGame}
-            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+            disabled={isSubmittingPostGame || (!placementFile && !killsFile && !postGameAnalysis)}
+            onClick={handleConfirmAndCommitScore}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-cyan-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/40 transition-all cursor-pointer"
           >
             {isSubmittingPostGame ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-4 h-4 text-emerald-300" />
             )}
-            <span>Invia Risultati per la Verifica in {lobbyName}</span>
+            <span>Registra Punteggio Ufficiale in Classifica {lobbyName}</span>
           </button>
         </div>
       )}
@@ -819,28 +827,72 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500 text-xs">
             <MessageSquare className="w-8 h-8 text-zinc-600 mb-2 opacity-50" />
-            <p className="font-semibold text-zinc-400">Canale di Squadra ({lobbyName})</p>
+            <p className="font-semibold text-zinc-400">Canale Ufficiale di Squadra ({lobbyName})</p>
             <p className="text-[11px] max-w-xs mt-1">
-              Comunica con l'organizzatore, invia chiarimenti sul KD e ricevi la convalida dei punteggi.
+              Invia lo screenshot del KD per sbloccare l'accesso al torneo e carica i risultati post-partita per il calcolo automatico dei punti.
             </p>
           </div>
         ) : (
           messages.map((msg) => {
             const isMe = msg.sender_id === currentUser?.id;
-            const isSystem = msg.message_type === "system_ai" || msg.message_type === "kd_verification";
+            const isSystem =
+              msg.message_type === "system_ai" ||
+              msg.message_type === "kd_verification" ||
+              msg.message_type === "post_game_submission";
             const senderName = msg.profiles?.display_name || msg.profiles?.username || "Giocatore";
 
             if (isSystem) {
+              const isKd = msg.message_type === "kd_verification";
+              const isPostGame = msg.message_type === "post_game_submission";
+
               return (
                 <div
                   key={msg.id}
-                  className="p-2.5 rounded-xl bg-purple-950/30 border border-purple-500/30 text-xs text-purple-200 space-y-1 my-1"
+                  className={`p-3 rounded-2xl border text-xs space-y-1.5 my-1.5 animate-fade-in ${
+                    isKd
+                      ? msg.content.includes("APPROVATA")
+                        ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
+                        : "bg-rose-950/30 border-rose-500/40 text-rose-200"
+                      : isPostGame
+                      ? "bg-cyan-950/30 border-cyan-500/40 text-cyan-200"
+                      : "bg-purple-950/30 border-purple-500/30 text-purple-200"
+                  }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-cyan-300 text-[11px]">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Sistema Arbitrale SquadUP</span>
+                  <div className="flex items-center justify-between font-bold text-[11px]">
+                    <div className="flex items-center gap-1.5 text-cyan-300">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>
+                        {isKd
+                          ? "Arbitro IA • Verifica Statistiche KD"
+                          : isPostGame
+                          ? "Arbitro IA • Calcolo Risultati Partita"
+                          : "Sistema Arbitrale SquadUP"}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-zinc-400">
+                      {new Date(msg.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
-                  <p className="whitespace-pre-line text-[11px] text-zinc-200 leading-relaxed">
+
+                  {msg.image_url && (
+                    <a
+                      href={msg.image_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block max-w-xs rounded-xl overflow-hidden border border-white/20 hover:scale-105 transition-transform"
+                    >
+                      <img
+                        src={msg.image_url}
+                        alt="Prova inviata"
+                        className="max-h-36 w-full object-cover"
+                      />
+                    </a>
+                  )}
+
+                  <p className="whitespace-pre-line text-[11px] leading-relaxed text-zinc-100 font-medium">
                     {msg.content}
                   </p>
                 </div>
@@ -899,7 +951,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         <button
           type="submit"
           disabled={isSending || !messageInput.trim()}
-          className="p-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white transition-all cursor-pointer shrink-0"
+          className="p-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white transition-colors cursor-pointer"
         >
           {isSending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
