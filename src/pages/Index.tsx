@@ -7,6 +7,7 @@ import { TournamentsSection } from "@/components/tournaments/TournamentsSection"
 import { VoiceSection } from "@/components/voice/VoiceSection";
 import { DirectMessagesSection } from "@/components/chat/DirectMessagesSection";
 import { ClanSection } from "@/components/clan/ClanSection";
+import { ShopSection } from "@/components/shop/ShopSection";
 import { ProfileSection } from "@/components/profile/ProfileSection";
 import { AuthModal } from "@/components/auth/AuthModal";
 
@@ -35,6 +36,7 @@ const MainContent: React.FC = () => {
         {activeTab === "voice" && <VoiceSection />}
         {activeTab === "messages" && <DirectMessagesSection />}
         {activeTab === "clan" && <ClanSection />}
+        {activeTab === "shop" && <ShopSection />}
         {activeTab === "profile" && <ProfileSection />}
       </div>
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { useSquad, NavTab } from "@/context/SquadContext";
-import { Home, Trophy, Users, Shield, User, MessageCircle } from "lucide-react";
+import { Home, Trophy, Users, Shield, User, ShoppingBag, MessageCircle } from "lucide-react";
 
 interface TabItem {
   id: NavTab;
@@ -32,14 +32,15 @@ export const BottomNavbar: React.FC = () => {
       dotAlert: Boolean(activeVoiceRoomId && !isMuted),
     },
     {
-      id: "messages",
-      label: "Direct",
-      icon: MessageCircle,
-    },
-    {
       id: "clan",
       label: "Clan",
       icon: Shield,
+    },
+    {
+      id: "shop",
+      label: "Shop",
+      icon: ShoppingBag,
+      badge: "HOT",
     },
     {
       id: "profile",

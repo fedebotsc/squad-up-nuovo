@@ -245,7 +245,7 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
           className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 hover:from-amber-400 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer"
         >
           <Crown className="w-4 h-4 text-amber-300" />
-          <span>Sblocca Ruoli con Upgrade Clan</span>
+          <span>Vai allo Shop per Potenziare il Clan</span>
         </button>
       </div>
     );

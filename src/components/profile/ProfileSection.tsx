@@ -22,6 +22,7 @@ import {
   Zap,
   ShieldAlert,
   Award,
+  ShoppingBag,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +45,7 @@ export const ProfileSection: React.FC = () => {
     signOut,
     followedUserIds,
     followedClanIds,
+    setActiveTab: setSquadNavTab,
   } = useSquad();
 
   const [followersCount, setFollowersCount] = useState<number>(0);
@@ -345,28 +347,28 @@ export const ProfileSection: React.FC = () => {
 
       {/* QUICK ACTIONS GRID: SHOP, PRO, CUSTOMIZER, REVIEWS */}
       <div className="grid grid-cols-2 gap-2">
-        {/* Shop SCoin */}
+        {/* Vai allo Shop Centrale */}
         <button
-          onClick={() => setShowShop(true)}
+          onClick={() => setSquadNavTab("shop")}
           className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/10 via-[#14182c] to-[#0f1322] border border-amber-500/40 hover:border-amber-400 text-left transition-all cursor-pointer group shadow-md"
         >
           <div className="flex items-center justify-between mb-1.5">
             <div className="p-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              <Coins className="w-4 h-4 text-amber-400" />
+              <ShoppingBag className="w-4 h-4 text-amber-400" />
             </div>
             <span className="text-[10px] font-black text-amber-400 px-1.5 py-0.5 rounded bg-amber-500/10">
-              1€ = 100 SC
+              SHOP UFFICIALE
             </span>
           </div>
           <span className="text-xs font-black text-white block group-hover:text-amber-300 transition-colors">
-            Shop SCoin
+            Vai allo Shop
           </span>
-          <span className="text-[10px] text-zinc-400">Ricarica wallet e premi</span>
+          <span className="text-[10px] text-zinc-400">Ricariche SCoin e Pass</span>
         </button>
 
         {/* Abbonamenti Pro & Clan */}
         <button
-          onClick={() => setShowSubscription(true)}
+          onClick={() => setSquadNavTab("shop")}
           className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/10 via-[#14182c] to-[#0f1322] border border-purple-500/40 hover:border-purple-400 text-left transition-all cursor-pointer group shadow-md"
         >
           <div className="flex items-center justify-between mb-1.5">
@@ -485,11 +487,11 @@ export const ProfileSection: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setShowShop(true)}
-              className="py-2 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+              onClick={() => setSquadNavTab("shop")}
+              className="py-2 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>Ricarica</span>
+              <ShoppingBag className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Vai allo Shop</span>
             </button>
           </div>
 

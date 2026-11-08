@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search, Bell } from "lucide-react";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
+import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
 import { AVATAR_FRAMES } from "@/components/profile/ProfileCustomizerModal";
 
 export const TopHeader: React.FC = () => {
@@ -12,9 +13,11 @@ export const TopHeader: React.FC = () => {
     currentUser,
     userProfile,
     openAuthModal,
+    unreadNotificationsCount,
   } = useSquad();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const frameBorder = AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)?.borderClass || "border-purple-500/60";
 
   return (
@@ -69,6 +72,20 @@ export const TopHeader: React.FC = () => {
             <Search className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
           </button>
 
+          {/* Notifications Bell Button */}
+          <button
+            onClick={() => setIsNotificationsOpen(true)}
+            title="Centro Notifiche"
+            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-amber-400 transition-colors cursor-pointer shadow-sm relative group"
+          >
+            <Bell className="w-4 h-4 text-zinc-300 group-hover:text-amber-300 group-hover:scale-110 transition-transform" />
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#0b0e17] shadow-sm">
+                {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+              </span>
+            )}
+          </button>
+
           {/* Direct Messages Shortcut (Instagram style) */}
           <button
             onClick={() => setActiveTab("messages")}
@@ -78,9 +95,10 @@ export const TopHeader: React.FC = () => {
             <Send className="w-4 h-4 rotate-12 text-zinc-400 hover:text-cyan-400 transition-colors" />
           </button>
 
-          {/* SCoin Wallet Chip */}
+          {/* SCoin Wallet Chip (Redirects to Shop) */}
           <button
-            onClick={() => setActiveTab("profile")}
+            onClick={() => setActiveTab("shop")}
+            title="Vai allo Shop SquadUP"
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
           >
             <Coins className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
@@ -124,6 +142,12 @@ export const TopHeader: React.FC = () => {
       <GlobalSearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
+      />
+
+      {/* Notifications Drawer (Supabase notifications) */}
+      <NotificationsDrawer
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
       />
     </header>
   );

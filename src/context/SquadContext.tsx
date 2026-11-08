@@ -22,7 +22,7 @@ import {
   calculateTenureMonths,
 } from "@/components/profile/tenureRewardsData";
 
-export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "profile";
+export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "shop" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
 
 export interface UserProfileData {
@@ -153,6 +153,10 @@ interface SquadContextType {
   claimTenureReward: (milestoneMonths: 3 | 6 | 9 | 12) => Promise<boolean>;
   equipAvatarFrame: (frameId: string) => Promise<boolean>;
 
+  // Notifications
+  unreadNotificationsCount: number;
+  refreshNotificationsCount: () => Promise<void>;
+
   // Universal Admin & Deletion
   isUniversalAdmin: boolean;
   deleteTournament: (tournamentId: string) => Promise<boolean>;
@@ -220,6 +224,27 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Follow system state
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
   const [followedClanIds, setFollowedClanIds] = useState<string[]>([]);
+
+  // Notifications state
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+
+  const refreshNotificationsCount = useCallback(async () => {
+    if (!currentUser) {
+      setUnreadNotificationsCount(0);
+      return;
+    }
+    try {
+      const { count } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", currentUser.id)
+        .eq("is_read", false);
+
+      setUnreadNotificationsCount(count ?? 0);
+    } catch {
+      // non-blocking
+    }
+  }, [currentUser]);
 
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
@@ -694,16 +719,18 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     refreshUserData();
     loadDatabaseContent();
+    refreshNotificationsCount();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setCurrentUser(session?.user ?? null);
       refreshUserData();
+      refreshNotificationsCount();
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [refreshUserData, loadDatabaseContent]);
+  }, [refreshUserData, loadDatabaseContent, refreshNotificationsCount]);
 
   // Clean audio track termination on unmount
   useEffect(() => {
@@ -2026,6 +2053,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         donateToClan,
         claimTenureReward,
         equipAvatarFrame,
+        unreadNotificationsCount,
+        refreshNotificationsCount,
         isUniversalAdmin: currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com",
         deleteTournament,
         deleteStory,
