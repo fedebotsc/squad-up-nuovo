@@ -493,26 +493,59 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setTransactions([]);
           }
 
-          // Fetch followed profiles and clans
-          const { data: userFollows } = await supabase
-            .from("follows")
-            .select("following_user_id, following_clan_id")
-            .eq("follower_id", user.id);
+          // Fetch followed profiles and clans from both follows and clan_followers tables
+          const [{ data: userFollows }, { data: clanFollowRows }] = await Promise.all([
+            supabase
+              .from("follows")
+              .select("following_user_id, following_clan_id")
+              .eq("follower_id", user.id),
+            supabase
+              .from("clan_followers")
+              .select("clan_id")
+              .eq("user_id", user.id),
+          ]);
 
+          const dbClanIds = new Set<string>();
           if (userFollows) {
             setFollowedUserIds(
               userFollows
                 .filter((f: any) => f.following_user_id)
                 .map((f: any) => f.following_user_id as string)
             );
-            setFollowedClanIds(
-              userFollows
-                .filter((f: any) => f.following_clan_id)
-                .map((f: any) => f.following_clan_id as string)
-            );
+            userFollows.forEach((f: any) => {
+              if (f.following_clan_id) dbClanIds.add(f.following_clan_id);
+            });
           } else {
             setFollowedUserIds([]);
-            setFollowedClanIds([]);
+          }
+
+          if (clanFollowRows) {
+            clanFollowRows.forEach((c: any) => {
+              if (c.clan_id) dbClanIds.add(c.clan_id);
+            });
+          }
+
+          // Local storage fallback sync
+          try {
+            const cachedClans = JSON.parse(
+              localStorage.getItem(`squadup_followed_clans_${user.id}`) || "[]"
+            );
+            if (Array.isArray(cachedClans)) {
+              cachedClans.forEach((id: string) => dbClanIds.add(id));
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          const finalClanList = Array.from(dbClanIds);
+          setFollowedClanIds(finalClanList);
+          try {
+            localStorage.setItem(
+              `squadup_followed_clans_${user.id}`,
+              JSON.stringify(finalClanList)
+            );
+          } catch (e) {
+            // ignore
           }
         }
       } else {
@@ -1786,16 +1819,35 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return false;
     }
 
-    setFollowedClanIds((prev) => (prev.includes(targetClanId) ? prev : [...prev, targetClanId]));
+    setFollowedClanIds((prev) => {
+      const updated = prev.includes(targetClanId) ? prev : [...prev, targetClanId];
+      try {
+        localStorage.setItem(`squadup_followed_clans_${currentUser.id}`, JSON.stringify(updated));
+      } catch (e) {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
-      const { error } = await supabase.from("follows").insert({
+      // 1. Insert into follows table
+      const { error: err1 } = await supabase.from("follows").insert({
         follower_id: currentUser.id,
         following_clan_id: targetClanId,
       });
 
-      if (error && error.code !== "23505") {
-        console.warn("[SquadContext] Errore follow clan:", error);
+      if (err1 && err1.code !== "23505") {
+        console.warn("[SquadContext] Errore follows insert:", err1);
+      }
+
+      // 2. Also record in clan_followers table
+      const { error: err2 } = await supabase.from("clan_followers").insert({
+        clan_id: targetClanId,
+        user_id: currentUser.id,
+      });
+
+      if (err2 && err2.code !== "23505") {
+        console.warn("[SquadContext] Errore clan_followers insert:", err2);
       }
 
       toast({
@@ -1804,7 +1856,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return true;
     } catch (err) {
-      console.error(err);
+      console.error("[SquadContext] Errore follow clan:", err);
       return false;
     }
   };
@@ -1812,14 +1864,30 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const unfollowClan = async (targetClanId: string): Promise<boolean> => {
     if (!currentUser) return false;
 
-    setFollowedClanIds((prev) => prev.filter((id) => id !== targetClanId));
+    setFollowedClanIds((prev) => {
+      const updated = prev.filter((id) => id !== targetClanId);
+      try {
+        localStorage.setItem(`squadup_followed_clans_${currentUser.id}`, JSON.stringify(updated));
+      } catch (e) {
+        // ignore
+      }
+      return updated;
+    });
 
     try {
+      // 1. Remove from follows
       await supabase
         .from("follows")
         .delete()
         .eq("follower_id", currentUser.id)
         .eq("following_clan_id", targetClanId);
+
+      // 2. Remove from clan_followers
+      await supabase
+        .from("clan_followers")
+        .delete()
+        .eq("user_id", currentUser.id)
+        .eq("clan_id", targetClanId);
 
       toast({
         title: "Follow Clan Rimosso",
@@ -1827,9 +1895,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return true;
     } catch (err) {
-      console.error(err);
+      console.error("[SquadContext] Errore unfollow clan:", err);
       return false;
     }
+  };
   };
 
   const donateToClan = async (amount: number): Promise<boolean> => {

@@ -36,6 +36,8 @@ import { DailyQuestsTab } from "./DailyQuestsTab";
 import { ClanCustomizerModal } from "./ClanCustomizerModal";
 import { ClanNotificationModal } from "./ClanNotificationModal";
 import { RewardsHub } from "@/components/rewards/RewardsHub";
+import { ExploreClansView } from "./ExploreClansView";
+import { Compass, Search } from "lucide-react";
 
 export const ClanSection: React.FC = () => {
   const {
@@ -53,6 +55,7 @@ export const ClanSection: React.FC = () => {
     setActiveTab: setSquadNavTab,
   } = useSquad();
 
+  const [clanMainTab, setClanMainTab] = useState<"my_clan" | "explore">("my_clan");
   const [activeTab, setActiveTab] = useState<"overview" | "chat" | "voice" | "roles" | "quests" | "rewards">("overview");
 
   const [selectedDonation, setSelectedDonation] = useState<number>(50);
@@ -135,19 +138,69 @@ export const ClanSection: React.FC = () => {
     }
   };
 
+  // Top Switch Segmented Control for Clan Hub vs Explore
+  const renderTopSwitch = () => (
+    <div className="bg-[#121628] p-1 rounded-2xl border border-purple-900/40 grid grid-cols-2 gap-1 shadow-inner">
+      <button
+        onClick={() => setClanMainTab("my_clan")}
+        className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          clanMainTab === "my_clan"
+            ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-900/40"
+            : "text-zinc-400 hover:text-zinc-200"
+        }`}
+      >
+        <Shield className="w-3.5 h-3.5" />
+        <span>{clanData ? `Il Mio Clan [${clanData.tag}]` : "Il Mio Clan"}</span>
+      </button>
+
+      <button
+        onClick={() => setClanMainTab("explore")}
+        className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          clanMainTab === "explore"
+            ? "bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white shadow-md shadow-cyan-900/40"
+            : "text-zinc-400 hover:text-cyan-300"
+        }`}
+      >
+        <Compass className="w-3.5 h-3.5 text-cyan-400" />
+        <span>Esplora Clan</span>
+      </button>
+    </div>
+  );
+
+  // If Explore Tab is active, render ExploreClansView
+  if (clanMainTab === "explore") {
+    return (
+      <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+        {renderTopSwitch()}
+        <ExploreClansView />
+
+        {/* Modal Fonda Clan */}
+        <CreateClanModal
+          isOpen={showCreateClan}
+          onClose={() => setShowCreateClan(false)}
+          currentUser={currentUser}
+          sCoinBalance={sCoinBalance}
+          onSuccess={refreshUserData}
+        />
+      </div>
+    );
+  }
+
   // EMPTY STATE (NOT IN A CLAN)
   if (!clanData) {
     return (
-      <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
-        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-8 text-center space-y-4 shadow-lg">
+      <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+        {renderTopSwitch()}
+
+        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-7 text-center space-y-4 shadow-lg">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Shield className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-white">Nessun Clan Trovato</h3>
+            <h3 className="text-base font-bold text-white">Nessun Clan Associato</h3>
             <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
-              Non fai ancora parte di un clan attivo su SquadUP. Fonda la tua squadra con scelta livello (Base, Pro, Elite) o unisciti a una legione!
+              Non fai ancora parte di un clan attivo su SquadUP. Fonda la tua squadra con livello Base, Pro o Elite, oppure esplora i clan esistenti e seguili!
             </p>
           </div>
 
@@ -164,6 +217,14 @@ export const ClanSection: React.FC = () => {
             >
               <PlusCircle className="w-3.5 h-3.5 text-cyan-300" />
               <span>Fonda un Nuovo Clan (Base, Pro o Elite)</span>
+            </button>
+
+            <button
+              onClick={() => setClanMainTab("explore")}
+              className="w-full py-2.5 bg-zinc-900/80 hover:bg-zinc-800 text-cyan-300 border border-cyan-500/30 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>Esplora e Segui Clan della Community</span>
             </button>
           </div>
         </div>
@@ -192,6 +253,8 @@ export const ClanSection: React.FC = () => {
   // AUTHENTIC CLAN VIEW
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+      {renderTopSwitch()}
+
       {/* Clan Hero Card with Custom Banner */}
       <div
         className={`relative rounded-3xl overflow-hidden border border-purple-500/50 p-4 shadow-xl ${
@@ -341,6 +404,16 @@ export const ClanSection: React.FC = () => {
             >
               <Bell className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Notifiche</span>
+            </button>
+
+            {/* Quick Explore Other Clans Button */}
+            <button
+              onClick={() => setClanMainTab("explore")}
+              title="Esplora tutti i clan della community"
+              className="py-1 px-2.5 rounded-xl text-[11px] font-bold bg-[#14182e] hover:bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+            >
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Esplora Clan</span>
             </button>
           </div>
 

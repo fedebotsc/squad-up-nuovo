@@ -274,8 +274,28 @@ function fallbackGenerateTournament(
   // 5. Prize description
   let prizeDescription = "2.500 SCoin + Ruolo Campione Verificato Discord";
   if (text.includes("scoin") || text.includes("monete") || text.includes("euro") || text.includes("premio")) {
-    prizeDescription = "Montepremi monte-cassa: 3.000 SCoin distribuiti ai primi 3 classificati";
+    prizeDescription = "Montepremi: 3.000 SCoin distribuiti ai primi 3 classificati";
   }
+
+  // 6. Formulate full, professional rules including extracted requirements
+  const generatedRulesList = [
+    "1. Puntualità: tutti i componenti devono essere presenti nella stanza match 15 minuti prima dell'inizio.",
+    "2. Arbitraggio OCR: al termine del match il capitano deve caricare lo screenshot chiaro del tabellone di gara.",
+    "3. Anti-Cheat & Fair Play: severamente vietato l'uso di cheat, macro, glitch o exploit a pena di squalifica immediata.",
+  ];
+
+  if (text.includes("riot") || text.includes("scudo")) {
+    generatedRulesList.push("4. Restrizioni Armi: vietato l'utilizzo dello scudo antisommossa (Riot Shield).");
+  }
+  if (text.includes("kd") || text.includes("k/d")) {
+    generatedRulesList.push("5. Verifica KD: screenshot delle statistiche obbligatorio per certificare il rispetto del cap K/D.");
+  }
+  if (text.includes("host")) {
+    generatedRulesList.push("6. Host: alternanza dell'host neutrale ad ogni round per garantire parità di connessione.");
+  }
+  generatedRulesList.push("7. Convalida: i risultati finali saranno registrati e ufficializzati automaticamente dall'arbitro IA.");
+
+  const completeRules = generatedRulesList.join("\n");
 
   return {
     name: tournamentName,
@@ -283,8 +303,7 @@ function fallbackGenerateTournament(
     type,
     team_limit: teamLimit,
     prize_description: prizeDescription,
-    rules:
-      "1. Tutti i partecipanti devono presentarsi nella stanza vocale o chat 15 minuti prima del match.\n2. Al termine di ogni partita, il capitano deve caricare lo screenshot del tabellone per la verifica automatica.\n3. È severamente vietato l'uso di cheat, glitch o comportamenti tossici a pena di squalifica immediata.\n4. In caso di disconnessione entro i primi 60 secondi di partita, il match potrà essere riavviato.",
+    rules: completeRules,
     starts_in_hours: 24,
     phases_summary:
       type === "groups_and_knockout"
