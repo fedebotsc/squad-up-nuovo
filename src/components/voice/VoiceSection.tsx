@@ -23,7 +23,7 @@ import { agoraVoiceService } from "@/services/agoraService";
 
 export const VoiceSection: React.FC = () => {
   const {
-    activeVoiceRoom,
+    activeVoiceRoomId,
     voiceRooms,
     joinVoiceRoom,
     leaveVoiceRoom,
@@ -36,6 +36,8 @@ export const VoiceSection: React.FC = () => {
     userSpeaking,
     agoraAppId,
   } = useSquad();
+
+  const activeVoiceRoom = voiceRooms.find((r) => r.id === activeVoiceRoomId) || null;
 
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");

@@ -268,7 +268,7 @@ class AgoraVoiceService {
   }
 
   public isPublishingAudio(): boolean {
-    return Boolean(this.localAudioTrack && !this.localAudioTrack.isMuted);
+    return Boolean(this.localAudioTrack && !this.localAudioTrack.muted);
   }
 
   public onSpeakingChange(callback: (isSpeaking: boolean, volume: number) => void): void {

@@ -153,8 +153,9 @@ export interface ClanMember {
 
 export interface Transaction {
   id: string;
-  type: "win" | "entry" | "donation" | "reward" | "admin_credit" | "p2p_transfer" | "shop_purchase";
+  type: "win" | "entry" | "donation" | "reward" | "admin_credit" | "p2p_transfer" | "shop_purchase" | "daily_bonus";
   title: string;
+  description?: string;
   amount: number;
   date: string;
   isPositive: boolean;

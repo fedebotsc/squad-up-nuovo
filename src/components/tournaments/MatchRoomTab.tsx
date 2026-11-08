@@ -33,6 +33,9 @@ import {
   Sliders,
   Filter,
   ArrowRight,
+  Lock,
+  Clock,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,6 +88,10 @@ export const MatchRoomTab: React.FC = () => {
   const [lobbyLeaderboards, setLobbyLeaderboards] = useState<any[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
 
+  // User Registration & Access State
+  const [userRegistration, setUserRegistration] = useState<any | null>(null);
+  const [isLoadingReg, setIsLoadingReg] = useState<boolean>(true);
+
   const rawTourn = (selectedTournament as any)?.raw || selectedTournament || {};
   const isDoubleLobby = Boolean(rawTourn.double_lobby_enabled);
   const requireKd = Boolean(rawTourn.require_kd_verification);
@@ -94,6 +101,83 @@ export const MatchRoomTab: React.FC = () => {
     isUniversalAdmin ||
     (currentUser?.id && rawTourn.owner_id === currentUser.id) ||
     (Array.isArray(rawTourn.co_organizers) && rawTourn.co_organizers.includes(currentUser?.id));
+
+  // Check current user registration status for this tournament
+  const checkUserRegistration = async () => {
+    if (!selectedTournament?.id) {
+      setUserRegistration(null);
+      setIsLoadingReg(false);
+      return;
+    }
+
+    if (!currentUser?.id) {
+      setUserRegistration(null);
+      setIsLoadingReg(false);
+      return;
+    }
+
+    setIsLoadingReg(true);
+    try {
+      const { data: reg, error } = await supabase
+        .from("tournament_registrations")
+        .select("*")
+        .eq("tournament_id", selectedTournament.id)
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+      if (reg) {
+        setUserRegistration(reg);
+        setMyRegistration(reg);
+      } else {
+        const { data: chatReg } = await supabase
+          .from("tournament_team_chats")
+          .select("*, lobbies:lobby_id(id, name, code)")
+          .eq("tournament_id", selectedTournament.id)
+          .eq("user_id", currentUser.id)
+          .maybeSingle();
+
+        if (chatReg) {
+          const pseudoReg = {
+            id: chatReg.id,
+            team_name: chatReg.team_name,
+            approval_status: chatReg.status || "pending_approval",
+            lobby_name: chatReg.lobbies?.name || "Lobby A",
+            created_at: chatReg.created_at,
+            kd_ratio: null,
+          };
+          setUserRegistration(pseudoReg);
+          setMyRegistration(pseudoReg);
+        } else {
+          setUserRegistration(null);
+        }
+      }
+    } catch (err) {
+      console.warn("[MatchRoom] Errore verifica iscrizione:", err);
+    } finally {
+      setIsLoadingReg(false);
+    }
+  };
+
+  const isApproved = Boolean(
+    userRegistration &&
+      (userRegistration.approval_status === "approved" ||
+        userRegistration.approval_status === "approvata")
+  );
+
+  const isPending = Boolean(
+    userRegistration &&
+      (userRegistration.approval_status === "pending" ||
+        userRegistration.approval_status === "pending_approval" ||
+        userRegistration.approval_status === "in_attesa")
+  );
+
+  const isRejected = Boolean(
+    userRegistration &&
+      (userRegistration.approval_status === "rejected" ||
+        userRegistration.approval_status === "rifiutata")
+  );
+
+  const hasAccess = Boolean(isOrganizer || isApproved);
 
   // Load matches
   const loadMatches = async () => {
@@ -207,10 +291,30 @@ export const MatchRoomTab: React.FC = () => {
   useEffect(() => {
     if (!selectedTournament?.id) return;
 
+    checkUserRegistration();
     loadMatches();
     loadTeamChats();
     loadLeaderboards();
     loadGeneralMessages();
+
+    // Subscribe to tournament_registrations changes for live approval unlock
+    const regChannel = supabase
+      .channel(`user-reg-sync-${selectedTournament.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tournament_registrations",
+          filter: `tournament_id=eq.${selectedTournament.id}`,
+        },
+        () => {
+          checkUserRegistration();
+          loadTeamChats();
+          loadMatches();
+        }
+      )
+      .subscribe();
 
     // Subscribe to tournament_team_chats changes
     const teamChatChannel = supabase
@@ -225,14 +329,16 @@ export const MatchRoomTab: React.FC = () => {
         },
         () => {
           loadTeamChats();
+          checkUserRegistration();
         }
       )
       .subscribe();
 
     return () => {
+      supabase.removeChannel(regChannel);
       supabase.removeChannel(teamChatChannel);
     };
-  }, [selectedTournament?.id]);
+  }, [selectedTournament?.id, currentUser?.id]);
 
   const handleSendGeneralMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -473,61 +579,202 @@ export const MatchRoomTab: React.FC = () => {
           </div>
         )}
 
-        {/* Room View Navigation Sub-Tabs */}
-        <div className="grid grid-cols-3 gap-1.5 pt-1">
-          <button
-            onClick={() => {
-              setActiveRoomView("bracket");
-              setSelectedTeamChat(null);
-            }}
-            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeRoomView === "bracket"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
-                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
-            }`}
-          >
-            <Swords className="w-3.5 h-3.5" />
-            <span>Tabellone Match</span>
-          </button>
+        {/* Room View Navigation Sub-Tabs (shown only when user has approved access or is organizer) */}
+        {hasAccess && (
+          <div className="grid grid-cols-3 gap-1.5 pt-1">
+            <button
+              onClick={() => {
+                setActiveRoomView("bracket");
+                setSelectedTeamChat(null);
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeRoomView === "bracket"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>Tabellone Match</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setActiveRoomView("team_chats");
-            }}
-            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
-              activeRoomView === "team_chats"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
-                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Chat Squadre & KD</span>
-            {teamChats.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-black text-[9px] font-black">
-                {teamChats.length}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => {
+                setActiveRoomView("team_chats");
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
+                activeRoomView === "team_chats"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Chat Squadre & KD</span>
+              {teamChats.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-black text-[9px] font-black">
+                  {teamChats.length}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => {
-              setActiveRoomView("lobby_leaderboards");
-              setSelectedTeamChat(null);
-            }}
-            className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeRoomView === "lobby_leaderboards"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
-                : "bg-zinc-900/80 text-zinc-400 hover:text-white"
-            }`}
-          >
-            <Trophy className="w-3.5 h-3.5 text-amber-400" />
-            <span>Classifiche Lobby</span>
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setActiveRoomView("lobby_leaderboards");
+                setSelectedTeamChat(null);
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeRoomView === "lobby_leaderboards"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <span>Classifiche Lobby</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* VIEW 1: BRACKET & MATCHES TAB */}
-      {activeRoomView === "bracket" && (
+      {/* ACCESS CONTROL: IF NOT ORGANIZER AND NOT APPROVED */}
+      {!hasAccess ? (
+        <div className="bg-[#121628]/95 border border-purple-900/40 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-xl animate-fade-in">
+          <div className="relative w-16 h-16 mx-auto">
+            <div
+              className={`absolute inset-0 rounded-2xl blur-md animate-pulse ${
+                isPending ? "bg-amber-500/30" : "bg-purple-600/30"
+              }`}
+            />
+            <div
+              className={`relative w-full h-full rounded-2xl bg-[#0f1322] border flex items-center justify-center ${
+                isPending ? "border-amber-500/50 text-amber-400" : "border-purple-500/50 text-purple-400"
+              }`}
+            >
+              <Lock className="w-8 h-8" />
+            </div>
+          </div>
+
+          {isLoadingReg ? (
+            <div className="py-6 flex items-center justify-center gap-2 text-xs text-zinc-400">
+              <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+              <span>Verifica iscrizione in corso...</span>
+            </div>
+          ) : isPending ? (
+            <div className="space-y-3.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-black uppercase tracking-wider">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Iscrizione in Attesa di Approvazione</span>
+              </div>
+
+              <h4 className="text-base font-extrabold text-white">
+                Contenuti del Torneo Riservati
+              </h4>
+
+              <p className="text-xs text-zinc-300 max-w-sm mx-auto leading-relaxed">
+                La tua iscrizione per la squadra <strong className="text-amber-300">"{userRegistration?.team_name}"</strong> è stata registrata con successo ed è in fase di revisione da parte degli organizzatori.
+              </p>
+
+              <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/30 text-left max-w-sm mx-auto space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">Lobby Assegnata:</span>
+                  <span className="font-bold text-cyan-300">{userRegistration?.lobby_name || "Lobby A"}</span>
+                </div>
+                {userRegistration?.kd_ratio && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-400">KD Inviato:</span>
+                    <span className="font-bold text-amber-300">{userRegistration.kd_ratio}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs border-t border-amber-900/40 pt-2">
+                  <span className="text-zinc-400">Stato Approvazione:</span>
+                  <span className="font-bold text-amber-400">In attesa dell'organizzatore ⏳</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-800/40 text-[11px] text-zinc-300 max-w-sm mx-auto flex items-start gap-2 text-left">
+                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  L'accesso al tabellone delle partite, alle lobby e ai dettagli interni della competizione sarà sbloccato solo dopo che l'iscrizione sarà stata ufficialmente accettata.
+                </span>
+              </div>
+
+              <div className="pt-2 flex justify-center">
+                <button
+                  onClick={() => setIsRegModalOpen(true)}
+                  className="py-2 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Modifica Dati Iscrizione
+                </button>
+              </div>
+            </div>
+          ) : isRejected ? (
+            <div className="space-y-3.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-black uppercase tracking-wider">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Iscrizione Non Approvata</span>
+              </div>
+
+              <h4 className="text-base font-extrabold text-white">
+                Candidatura Non Accettata
+              </h4>
+
+              <p className="text-xs text-zinc-300 max-w-sm mx-auto leading-relaxed">
+                {userRegistration?.rejection_reason ||
+                  "La candidatura non soddisfa i requisiti del torneo o la lobby ha raggiunto la capienza massima."}
+              </p>
+
+              <button
+                onClick={() => setIsRegModalOpen(true)}
+                className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+              >
+                Invia Nuova Iscrizione
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-black uppercase tracking-wider">
+                <Lock className="w-3 h-3" />
+                <span>Accesso Riservato</span>
+              </div>
+
+              <h4 className="text-base font-extrabold text-white">
+                Tabellone e Lobby Riservati ai Partecipanti
+              </h4>
+
+              <p className="text-xs text-zinc-300 max-w-sm mx-auto leading-relaxed">
+                Questo torneo è protetto. I partecipanti che non sono ancora iscritti o la cui iscrizione è in attesa di approvazione non possono visualizzare il tabellone, le lobby o i dettagli interni della competizione.
+              </p>
+
+              <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-800/40 text-[11px] text-zinc-300 max-w-sm mx-auto flex items-start gap-2 text-left">
+                <ShieldAlert className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <span>
+                  L'accesso ai contenuti del torneo sarà sbloccato solo dopo che la tua iscrizione sarà stata inviata e ufficialmente accettata dagli organizzatori.
+                </span>
+              </div>
+
+              <div className="pt-2">
+                {currentUser ? (
+                  <button
+                    onClick={() => setIsRegModalOpen(true)}
+                    className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center justify-center gap-2 mx-auto shadow-lg shadow-purple-900/40 transition-all cursor-pointer"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Iscrivi la tua Squadra per Sbloccare i Contenuti</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => openAuthModal("signup")}
+                    className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center justify-center gap-2 mx-auto shadow-lg shadow-purple-900/40 transition-all cursor-pointer"
+                  >
+                    <span>Accedi o Registrati per Iscriverti</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* VIEW 1: BRACKET & MATCHES TAB */}
+          {activeRoomView === "bracket" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">
@@ -1018,6 +1265,8 @@ export const MatchRoomTab: React.FC = () => {
           )}
         </div>
       )}
+        </>
+      )}
 
       {/* Match Screenshot OCR Modal */}
       {activeMatchForOcr && (
@@ -1026,7 +1275,7 @@ export const MatchRoomTab: React.FC = () => {
           onClose={() => setActiveMatchForOcr(null)}
           match={activeMatchForOcr}
           tournamentRules={tournamentRulesText}
-          onSuccess={() => {
+          onMatchUpdated={() => {
             loadMatches();
             loadLeaderboards();
           }}

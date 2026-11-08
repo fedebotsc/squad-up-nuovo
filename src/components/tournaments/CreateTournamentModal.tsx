@@ -271,7 +271,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         status: newTournament.status as any,
         description: newTournament.rules,
         raw: newTournament,
-      });
+      } as any);
       setTournamentSubTab("match_room");
 
       onSuccess?.();

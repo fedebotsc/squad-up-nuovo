@@ -8,6 +8,7 @@ import {
   LeaderboardEntry,
   MatchChatMessage,
   VoiceRoom,
+  VoiceMember,
   ClanData,
   ClanMember,
   Transaction,
@@ -44,6 +45,7 @@ export interface UserProfileData {
   rank: string;
   level: number;
   activisionName?: string;
+  activisionId?: string;
   bio?: string;
   unlockedTitles?: string[];
   activeTitle?: string | null;
@@ -178,6 +180,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Auth Modal State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const isUniversalAdmin = currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com";
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalTab, setAuthModalTab] = useState<"login" | "signup" | "forgot_password" | "reset_password">("signup");
 
@@ -1361,15 +1364,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (error) throw error;
 
       if (data) {
+        const prof = (data as any).profiles;
         const newComment: PostComment = {
           id: data.id,
           postId: data.post_id,
           userId: data.user_id,
           author: {
             id: user.id,
-            name: data.profiles?.display_name || data.profiles?.username || userProfile.name,
-            handle: data.profiles?.username ? `@${data.profiles.username}` : `@${userProfile.name}`,
-            avatar: data.profiles?.avatar_url || userProfile.avatar,
+            name: prof?.display_name || prof?.username || userProfile.name,
+            handle: prof?.username ? `@${prof.username}` : `@${userProfile.name}`,
+            avatar: prof?.avatar_url || userProfile.avatar,
           },
           content: data.content,
           createdAt: "Adesso",
@@ -1555,6 +1559,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const joinVoiceRoom = async (roomId: string) => {
+    const myVoiceMember: VoiceMember = {
+      id: currentUser?.id || userProfile.id || "me",
+      name: userProfile.name,
+      avatar: userProfile.avatar,
+      isSpeaking: false,
+      isMuted: false,
+      isDeafened: false,
+      ping: 25,
+    };
+
     let targetRoom = voiceRooms.find((r) => r.id === roomId);
     if (!targetRoom) {
       targetRoom = {
@@ -1562,7 +1576,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         name: `Canale Vocale #${roomId.slice(0, 6)}`,
         game: "Warzone",
         channelType: "Aperto a tutti",
-        activeMembers: [userProfile],
+        activeMembers: [myVoiceMember],
         maxCapacity: 4,
         status: "open",
       };
@@ -1577,7 +1591,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               );
               return {
                 ...r,
-                activeMembers: already ? r.activeMembers : [...r.activeMembers, userProfile],
+                activeMembers: already ? r.activeMembers : [...r.activeMembers, myVoiceMember],
               };
             }
             if (activeVoiceRoomId && r.id === activeVoiceRoomId && r.id !== roomId) {
@@ -1593,7 +1607,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           .filter((r) => {
             if (r.id !== roomId && r.activeMembers.length === 0) {
               if (r.id.length > 20) {
-                supabase.from("squad_rooms").delete().eq("id", r.id).catch(console.error);
+                void supabase.from("squad_rooms").delete().eq("id", r.id);
               }
               return false;
             }
@@ -1630,6 +1644,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const trimmedName = name.trim() || `Stanza ${userProfile.name}`;
     let newRoom: VoiceRoom;
 
+    const myVoiceMember: VoiceMember = {
+      id: currentUser?.id || userProfile.id || "me",
+      name: userProfile.name,
+      avatar: userProfile.avatar,
+      isSpeaking: false,
+      isMuted: false,
+      isDeafened: false,
+      ping: 25,
+    };
+
     if (currentUser) {
       try {
         const { data: inserted, error: insErr } = await supabase
@@ -1650,7 +1674,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             name: inserted.name,
             game: inserted.category || category,
             channelType: "Aperto a tutti",
-            activeMembers: [userProfile],
+            activeMembers: [myVoiceMember],
             maxCapacity: 4,
             status: inserted.status,
           };
@@ -1660,7 +1684,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             name: trimmedName,
             game: category,
             channelType: "Aperto a tutti",
-            activeMembers: [userProfile],
+            activeMembers: [myVoiceMember],
             maxCapacity: 4,
             status: "open",
           };
@@ -1671,7 +1695,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           name: trimmedName,
           game: category,
           channelType: "Aperto a tutti",
-          activeMembers: [userProfile],
+          activeMembers: [myVoiceMember],
           maxCapacity: 4,
           status: "open",
         };
@@ -1682,7 +1706,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         name: trimmedName,
         game: category,
         channelType: "Aperto a tutti",
-        activeMembers: [userProfile],
+        activeMembers: [myVoiceMember],
         maxCapacity: 4,
         status: "open",
       };
@@ -1718,14 +1742,14 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // Automatically delete room if empty
         if (!target || target.activeMembers.length === 0) {
           if (leavingRoomId.length > 20) {
-            supabase
+            void supabase
               .from("squad_rooms")
               .delete()
               .eq("id", leavingRoomId)
-              .then(() => {
-                console.log("[SquadContext] Stanza vocale vuota eliminata:", leavingRoomId);
-              })
-              .catch(console.error);
+              .then(({ error }) => {
+                if (error) console.error(error);
+                else console.log("[SquadContext] Stanza vocale vuota eliminata:", leavingRoomId);
+              });
           }
           toast({
             title: "Stanza Eliminata",
@@ -1898,7 +1922,6 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.error("[SquadContext] Errore unfollow clan:", err);
       return false;
     }
-  };
   };
 
   const donateToClan = async (amount: number): Promise<boolean> => {

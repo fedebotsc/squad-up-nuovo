@@ -121,7 +121,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
         },
         () => {
           fetchNotifications();
-          refreshNotificationsCount(currentUser.id);
+          refreshNotificationsCount();
         }
       )
       .subscribe();

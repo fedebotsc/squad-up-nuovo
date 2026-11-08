@@ -134,9 +134,6 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
       });
     } catch (err: any) {
       console.error("[MatchOCR] Errore analisi:", err);
-      if (err.message && err.message.toLowerCase().includes("chiave")) {
-        setIsKeyModalOpen(true);
-      }
       toast({
         title: "Errore durante l'analisi OCR",
         description: err.message || "Impossibile analizzare l'immagine con Gemini Flash.",

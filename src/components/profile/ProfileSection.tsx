@@ -55,16 +55,19 @@ export const ProfileSection: React.FC = () => {
       setFollowersCount(0);
       return;
     }
-    supabase
+    void supabase
       .from("follows")
       .select("*", { count: "exact", head: true })
       .eq("following_user_id", currentUser.id)
-      .then(({ count }) => {
+      .then(({ count, error }) => {
+        if (error) {
+          console.error(error);
+          return;
+        }
         if (typeof count === "number") {
           setFollowersCount(count);
         }
-      })
-      .catch(console.error);
+      });
   }, [currentUser?.id]);
 
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
@@ -552,7 +555,7 @@ export const ProfileSection: React.FC = () => {
 
                         <div className="min-w-0">
                           <span className="font-semibold text-zinc-200 block truncate max-w-[170px]">
-                            {t.description}
+                            {t.description || t.title}
                           </span>
                           <span className="text-[10px] text-zinc-400">{t.date}</span>
                         </div>
