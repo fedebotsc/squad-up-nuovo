@@ -678,7 +678,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // 2. Fetch Stories from Supabase
       const { data: storiesData } = await supabase
         .from("stories")
-        .select("*, profiles:user_id(id, username, display_name, avatar_url)")
+        .select("*, profiles:stories_user_id_fkey(id, username, display_name, avatar_url)")
         .gt("expires_at", new Date().toISOString())
         .order("created_at", { ascending: false });
 
