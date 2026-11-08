@@ -96,6 +96,7 @@ interface SquadContextType {
   tournaments: Tournament[];
   selectedTournament: Tournament | null;
   setSelectedTournament: (tournament: Tournament | null) => void;
+  refreshTournaments: () => Promise<void>;
   leaderboard: LeaderboardEntry[];
   matchChat: MatchChatMessage[];
   sendMatchMessage: (text: string) => Promise<void>;
@@ -514,15 +515,15 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (tournamentsData && tournamentsData.length > 0) {
         const mapped = tournamentsData.map((t: any) => ({
           id: t.id,
-          title: t.title || "Torneo SquadUP",
-          game: t.game || "Warzone",
-          category: t.category || "Battle Royale",
+          title: t.name || t.title || "Torneo SquadUP",
+          game: t.game_mode || t.game || "Warzone Competitivo",
+          category: t.type || t.category || "Battle Royale",
           banner: t.banner_url,
           status: (t.status as any) || "iscrizioni",
-          prizePoolSCoin: t.prize_pool_scoin || 0,
-          entryFeeSCoin: t.entry_fee_scoin || 0,
-          teamsJoined: t.teams_joined || 0,
-          maxTeams: t.max_teams || 64,
+          prizePoolSCoin: t.prize_pool_scoin || (t.prize_description ? 1000 : 0),
+          entryFeeSCoin: t.entry_fee_sc ?? t.entry_fee_scoin ?? 0,
+          teamsJoined: Array.isArray(t.teams) ? t.teams.length : (t.teams_joined || 0),
+          maxTeams: t.team_limit || t.max_teams || 64,
           startsAt: t.starts_at
             ? new Date(t.starts_at).toLocaleDateString([], {
                 day: "2-digit",
@@ -531,8 +532,9 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 minute: "2-digit",
               })
             : "A breve",
-          mode: t.mode || "Squads",
-          description: t.description || "",
+          mode: t.game_mode || t.mode || "Squads",
+          description: t.rules || t.description || t.prize_description || "",
+          raw: t,
         }));
         setTournaments(mapped);
         setSelectedTournament(mapped[0] || null);
@@ -1352,6 +1354,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         tournaments,
         selectedTournament,
         setSelectedTournament,
+        refreshTournaments: loadDatabaseContent,
         leaderboard,
         matchChat,
         sendMatchMessage,

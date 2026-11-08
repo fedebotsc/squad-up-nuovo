@@ -1,12 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSquad, TournamentSubTab } from "@/context/SquadContext";
 import { ActiveTournamentsTab } from "./ActiveTournamentsTab";
 import { MatchRoomTab } from "./MatchRoomTab";
 import { LeaderboardTab } from "./LeaderboardTab";
-import { Trophy, Swords, BarChart3 } from "lucide-react";
+import { Trophy, Swords, BarChart3, Sparkles, Key } from "lucide-react";
+import { OpenRouterKeyModal } from "@/components/common/OpenRouterKeyModal";
+import { getOpenRouterApiKey } from "@/services/openRouterService";
 
 export const TournamentsSection: React.FC = () => {
   const { tournamentSubTab, setTournamentSubTab } = useSquad();
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const hasKey = !!getOpenRouterApiKey();
 
   const tabs: { id: TournamentSubTab; label: string; icon: React.ElementType }[] = [
     { id: "active", label: "Tornei Attivi", icon: Trophy },
@@ -16,6 +20,27 @@ export const TournamentsSection: React.FC = () => {
 
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+      {/* Top AI Bar */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-300">
+          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+          <span>SquadUP Esport • Arbitraggio OCR Gemini Flash</span>
+        </div>
+
+        <button
+          onClick={() => setIsKeyModalOpen(true)}
+          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
+            hasKey
+              ? "bg-purple-950/60 border-purple-500/40 text-purple-300"
+              : "bg-amber-950/60 border-amber-500/40 text-amber-300 animate-pulse"
+          }`}
+          title="Configura chiave OpenRouter"
+        >
+          <Key className="w-3 h-3" />
+          <span>{hasKey ? "OpenRouter OK" : "API Key IA"}</span>
+        </button>
+      </div>
+
       {/* Subtab Segmented Control */}
       <div className="bg-[#121628] p-1 rounded-2xl border border-purple-900/40 grid grid-cols-3 gap-1 shadow-inner">
         {tabs.map((tab) => {
@@ -45,6 +70,12 @@ export const TournamentsSection: React.FC = () => {
       {tournamentSubTab === "active" && <ActiveTournamentsTab />}
       {tournamentSubTab === "match_room" && <MatchRoomTab />}
       {tournamentSubTab === "leaderboard" && <LeaderboardTab />}
+
+      {/* OpenRouter Key Modal */}
+      <OpenRouterKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+      />
     </div>
   );
 };

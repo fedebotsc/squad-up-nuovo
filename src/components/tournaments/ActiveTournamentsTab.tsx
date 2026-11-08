@@ -35,17 +35,18 @@ export const ActiveTournamentsTab: React.FC = () => {
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
             Tornei Disponibili ({tournaments.length})
           </span>
-          <span className="text-[11px] text-cyan-400 font-medium">
-            SquadUP Competitivo
+          <span className="text-[11px] text-cyan-400 font-medium flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-300" />
+            <span>SquadUP Competitivo • IA & OCR</span>
           </span>
         </div>
 
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(139,92,246,0.3)] transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-[0_0_15px_rgba(139,92,246,0.35)] transition-all cursor-pointer"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Crea Torneo</span>
+          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+          <span>Crea Torneo con IA</span>
         </button>
       </div>
 

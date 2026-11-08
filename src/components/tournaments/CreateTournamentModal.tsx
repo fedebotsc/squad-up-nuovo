@@ -6,18 +6,28 @@ import {
   Calendar,
   Users,
   Coins,
-  ShieldAlert,
   Loader2,
   Sparkles,
   FileText,
   Target,
   Sliders,
-  User,
   Clock,
+  Key,
+  CheckCircle2,
+  Edit3,
+  Layers,
+  ArrowRight,
+  Wand2,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import {
+  generateTournamentWithAI,
+  getOpenRouterApiKey,
+  GeneratedTournamentStructure,
+} from "@/services/openRouterService";
+import { OpenRouterKeyModal } from "@/components/common/OpenRouterKeyModal";
 
 interface CreateTournamentModalProps {
   isOpen: boolean;
@@ -25,12 +35,31 @@ interface CreateTournamentModalProps {
   onSuccess?: () => void;
 }
 
-const GAME_MODES = [
-  "Warzone Ritorno (Resurgence)",
-  "Warzone Battle Royale",
-  "MW3 Cerca e Distruggi (S&D)",
-  "MW3 CDL Variante Competitiva",
-  "Black Ops 6 Gunfight 2v2",
+const AI_PROMPT_PRESETS = [
+  {
+    label: "Warzone Resurgence Trios",
+    icon: "🔥",
+    prompt:
+      "Torneo di Warzone Resurgence a 8 squadre (Trios). Eliminazione diretta con Quarti, Semifinali e Finale. 2 punti per ogni kill di squadra, 15 pt per la vittoria, 10 pt per il 2° posto. Partenza domani alle ore 21:00.",
+  },
+  {
+    label: "EA FC 24 Champions Cup",
+    icon: "⚽",
+    prompt:
+      "Torneo EA FC 24 1v1 con 8 giocatori divisi in 2 gironi da 4 (andata e ritorno), poi semifinali incrociate e finale secca. 3 punti per vittoria, 1 per pareggio. Regole competitive standard FUT.",
+  },
+  {
+    label: "Call of Duty CDL S&D",
+    icon: "🎯",
+    prompt:
+      "Torneo competitivo CDL Cerca e Distruggi 4v4 a 4 squadre. Bracket a doppia eliminazione con Winner e Loser bracket. Regolamento ufficiale CDL: vietate armi bannate, cambio host alternato.",
+  },
+  {
+    label: "Rocket League 2v2",
+    icon: "🏎️",
+    prompt:
+      "Torneo Rocket League 2v2 con 8 team. Quarti e Semifinali Best of 3, Finalissima Best of 5. Assegna punti gol e assist.",
+  },
 ];
 
 export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
@@ -38,51 +67,116 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { currentUser, userProfile, openAuthModal } = useSquad();
+  const { currentUser, userProfile, openAuthModal, refreshTournaments } = useSquad();
 
-  // Basic Tournament Info
+  // Mode: "ai" (OpenRouter Gemini Flash) or "manual"
+  const [creationMode, setCreationMode] = useState<"ai" | "manual">("ai");
+
+  // AI Prompt State
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [generatedTournament, setGeneratedTournament] = useState<GeneratedTournamentStructure | null>(null);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+
+  // Manual & Editable form fields
   const [title, setTitle] = useState("");
-  const [tournamentType, setTournamentType] = useState<"teams" | "solo">("teams");
-  const [gameMode, setGameMode] = useState(GAME_MODES[0]);
-  const [teamLimit, setTeamLimit] = useState<number>(10);
-  const [entryFeeSC, setEntryFeeSC] = useState<number>(0);
-  const [prizeDescription, setPrizeDescription] = useState("1.000 SCoin + Badge Campioni");
+  const [gameMode, setGameMode] = useState("Warzone Resurgence");
+  const [tournamentType, setTournamentType] = useState<"elimination" | "groups_and_knockout" | "championship" | "round_robin">("elimination");
+  const [teamLimit, setTeamLimit] = useState<number>(8);
+  const [prizeDescription, setPrizeDescription] = useState("1.500 SCoin + Badge Campioni");
   const [rules, setRules] = useState(
-    "1. Carica gli screenshot del posizionamento e delle kill nella Stanza Match entro 15 minuti dal termine.\n2. Vietato l'uso di hack o exploit.\n3. Squad composta da operatori registrati."
+    "1. Carica gli screenshot del tabellone finale nella Stanza Match entro 15 minuti.\n2. Vietato ogni tipo di hack o exploit.\n3. Risultati convalidati dall'arbitro IA multimodale."
   );
-
-  // Free 24h Date & Time
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   });
   const [startHour, setStartHour] = useState("21:00");
+  const [phasesSummary, setPhasesSummary] = useState("Eliminazione diretta a tabellone unico");
 
-  // Advanced Scoring Configuration
+  // Scoring
   const [killPoints, setKillPoints] = useState<number>(1);
   const [points1st, setPoints1st] = useState<number>(15);
   const [points2nd, setPoints2nd] = useState<number>(10);
   const [points3rd, setPoints3rd] = useState<number>(7);
-  const [points4th, setPoints4th] = useState<number>(5);
-  const [points5th, setPoints5th] = useState<number>(3);
-  const [pointsTop10, setPointsTop10] = useState<number>(1);
 
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Handle AI Generation via OpenRouter Gemini Flash
+  const handleGenerateWithAI = async () => {
+    if (!aiPrompt.trim()) {
+      toast({
+        title: "Descrizione mancante",
+        description: "Inserisci qualche dettaglio su come desideri il torneo (gioco, partecipanti, regole...).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const hasKey = !!getOpenRouterApiKey();
+    if (!hasKey) {
+      setIsKeyModalOpen(true);
+      return;
+    }
+
+    setIsAiGenerating(true);
+
+    try {
+      const generated = await generateTournamentWithAI(aiPrompt);
+      setGeneratedTournament(generated);
+
+      // Populate editable fields with AI generated content
+      setTitle(generated.name);
+      setGameMode(generated.game_mode);
+      setTournamentType(generated.type || "elimination");
+      setTeamLimit(generated.team_limit || 8);
+      setPrizeDescription(generated.prize_description || "1.000 SCoin + Ruolo Campione");
+      setRules(generated.rules);
+      setPhasesSummary(generated.phases_summary || "Fase a eliminazione diretta");
+
+      if (generated.leaderboard_settings) {
+        setKillPoints(generated.leaderboard_settings.kill_points ?? 1);
+        setPoints1st(generated.leaderboard_settings.placement_points?.["1"] ?? 15);
+        setPoints2nd(generated.leaderboard_settings.placement_points?.["2"] ?? 10);
+        setPoints3rd(generated.leaderboard_settings.placement_points?.["3"] ?? 7);
+      }
+
+      toast({
+        title: "Struttura Torneo Generata! ⚡",
+        description: `L'IA ha configurato "${generated.name}" con ${generated.initial_matches?.length || 0} match iniziali. Puoi rivedere e confermare.`,
+      });
+    } catch (err: any) {
+      console.error("[CreateTournament AI] Errore generazione:", err);
+      if (err.message && err.message.toLowerCase().includes("chiave")) {
+        setIsKeyModalOpen(true);
+      }
+      toast({
+        title: "Errore generazione IA",
+        description: err.message || "Impossibile generare il torneo tramite OpenRouter.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  // Save Tournament & Initial Matches to Supabase
+  const handleSaveTournament = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!currentUser) {
       openAuthModal("signup");
       return;
     }
 
-    if (!title.trim()) {
+    const finalTitle = title.trim();
+    if (!finalTitle) {
       toast({
         title: "Titolo richiesto",
-        description: "Inserisci un nome per il torneo.",
+        description: "Inserisci o genera un nome per il torneo.",
         variant: "destructive",
       });
       return;
@@ -92,7 +186,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     if (isNaN(numTeams) || numTeams < 2) {
       toast({
         title: "Numero partecipanti non valido",
-        description: "Inserisci almeno 2 squadre o giocatori.",
+        description: "Inserisci almeno 2 partecipanti o squadre.",
         variant: "destructive",
       });
       return;
@@ -101,49 +195,76 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     setIsLoading(true);
 
     try {
-      // Assemble full timestamp from date + 24h hour
       const fullDateStr = `${startDate}T${startHour}:00`;
       const parsedStartsAt = new Date(fullDateStr).toISOString();
 
       const leaderboardSettings = {
-        format: tournamentType,
+        format: "teams",
         kill_points: Number(killPoints) || 1,
         placement_points: {
           "1": Number(points1st) || 15,
           "2": Number(points2nd) || 10,
           "3": Number(points3rd) || 7,
-          "4": Number(points4th) || 5,
-          "5": Number(points5th) || 3,
-          top10: Number(pointsTop10) || 1,
+          top10: 1,
         },
       };
+
+      const initialMatches = generatedTournament?.initial_matches || [
+        { round_name: "Match 1", player1_name: "Squadra 1", player2_name: "Squadra 2" },
+        { round_name: "Match 2", player1_name: "Squadra 3", player2_name: "Squadra 4" },
+      ];
 
       // 1. Insert into public.tournaments
       const { data: newTournament, error: tournErr } = await supabase
         .from("tournaments")
         .insert({
-          name: title.trim(),
-          game_mode: `${gameMode} (${tournamentType === "solo" ? "Singolo" : "A Squadre"})`,
+          name: finalTitle,
+          game_mode: gameMode.trim(),
+          type: tournamentType,
           starts_at: parsedStartsAt,
           team_limit: numTeams,
           prize_description: prizeDescription.trim(),
           rules: rules.trim(),
-          entry_fee_sc: Number(entryFeeSC) || 0,
+          entry_fee_sc: 0,
           creation_cost_sc: 0,
           owner_id: currentUser.id,
           owner_name: userProfile.name,
           leaderboard_settings: leaderboardSettings,
           status: "upcoming",
-          bracket: [],
+          bracket: initialMatches,
+          matches: initialMatches,
           teams: [],
-          matches: [],
         })
         .select()
         .single();
 
       if (tournErr) throw tournErr;
 
-      // 2. Automatically create match chat room for this tournament
+      // 2. Insert initial matches into tournament_matches table
+      if (newTournament && initialMatches.length > 0) {
+        const matchesToInsert = initialMatches.map((m) => ({
+          tournament_id: newTournament.id,
+          round_name: m.round_name || "Fase Iniziale",
+          score_player1: 0,
+          score_player2: 0,
+          status: "pending",
+          ai_parsed_data: {
+            team1_name: m.player1_name || "Team 1",
+            team2_name: m.player2_name || "Team 2",
+            phases_summary: phasesSummary,
+          },
+        }));
+
+        const { error: matchInsertErr } = await supabase
+          .from("tournament_matches")
+          .insert(matchesToInsert);
+
+        if (matchInsertErr) {
+          console.warn("[CreateTournament] Warning inserimento tournament_matches:", matchInsertErr);
+        }
+      }
+
+      // 3. Create match chat room
       if (newTournament) {
         await supabase.from("tournament_match_chats").insert({
           tournament_id: newTournament.id,
@@ -151,10 +272,10 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           room_name: `Stanza Arbitraggio & Match: ${newTournament.name}`,
         });
 
-        // 3. Insert initial tournament leaderboard entry for the organizer squad
+        // 4. Initial leaderboard entry
         await supabase.from("tournament_leaderboards").insert({
           tournament_id: newTournament.id,
-          team_id: `team_${currentUser.id.slice(0, 6)}`,
+          team_id: `team_${currentUser.id.slice(0, 8)}`,
           team_name: userProfile.clanTag
             ? `[${userProfile.clanTag}] ${userProfile.name}`
             : `${userProfile.name}'s Squad`,
@@ -164,9 +285,11 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         });
       }
 
+      await refreshTournaments();
+
       toast({
         title: "Torneo Pubblicato con Successo! 🏆",
-        description: `"${title}" (${tournamentType === "solo" ? "Singolo" : "Squadre"}, ${numTeams} posti) è ora attivo nella lobby.`,
+        description: `"${finalTitle}" è ora attivo nella lobby con tabellone e convalida IA.`,
       });
 
       if (onSuccess) onSuccess();
@@ -183,315 +306,427 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     }
   };
 
+  const hasApiKey = !!getOpenRouterApiKey();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-md rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 sm:p-5 shadow-[0_0_40px_rgba(139,92,246,0.3)] overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Ambient Top Glow */}
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-64 h-24 bg-gradient-to-r from-purple-600/30 via-cyan-500/20 to-amber-500/20 blur-2xl pointer-events-none" />
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+        <div className="relative w-full max-w-xl rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 sm:p-6 shadow-[0_0_40px_rgba(139,92,246,0.3)] overflow-hidden max-h-[92vh] flex flex-col">
+          {/* Ambient Top Glow */}
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-80 h-24 bg-gradient-to-r from-purple-600/30 via-cyan-500/20 to-amber-500/20 blur-2xl pointer-events-none" />
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full text-zinc-400 hover:text-white bg-zinc-900 transition-colors z-10 cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* Header */}
-        <div className="text-center pb-3 border-b border-zinc-800">
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-[10px] font-extrabold text-purple-300 uppercase tracking-wider mb-1">
-            <Trophy className="w-3.5 h-3.5 text-amber-400" />
-            Organizza Competizione
-          </div>
-          <h3 className="text-base font-extrabold text-white">Crea Nuovo Torneo</h3>
-          <p className="text-[11px] text-zinc-400">
-            Imposta regole personalizzate, orario libero e punteggio IA per i partecipanti
-          </p>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-3.5 py-3 pr-1 text-xs">
-          {/* Format: Solo vs Teams */}
-          <div>
-            <label className="text-[11px] font-bold text-zinc-300 block mb-1.5">
-              Modalità Partecipazione
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setTournamentType("teams")}
-                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  tournamentType === "teams"
-                    ? "border-purple-500 bg-purple-950/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.25)]"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Users className="w-4 h-4 text-purple-400" />
-                <span>A Squadre (Team)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTournamentType("solo")}
-                className={`py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  tournamentType === "solo"
-                    ? "border-cyan-500 bg-cyan-950/50 text-white shadow-[0_0_15px_rgba(6,182,212,0.25)]"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <User className="w-4 h-4 text-cyan-400" />
-                <span>Singolo (Solo / 1v1)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-              Nome Torneo *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="es. Warzone Elite Cup #4, Summer Championship..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-[#121628] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 text-xs"
-            />
-          </div>
-
-          {/* Game Mode */}
-          <div>
-            <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-              Gioco / Modalità
-            </label>
-            <select
-              value={gameMode}
-              onChange={(e) => setGameMode(e.target.value)}
-              className="w-full bg-[#121628] border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 text-xs cursor-pointer"
-            >
-              {GAME_MODES.map((mode) => (
-                <option key={mode} value={mode} className="bg-zinc-900 text-white">
-                  {mode}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Free Number of Teams Input (No rigid limits) */}
-          <div className="bg-[#121629] p-3 rounded-2xl border border-zinc-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Numero {tournamentType === "solo" ? "Giocatori" : "Squadre"} (Libero)</span>
-              </label>
-              <span className="text-[10px] text-zinc-400">Qualsiasi valore (min. 2)</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={2}
-                max={500}
-                value={teamLimit}
-                onChange={(e) => setTeamLimit(Math.max(2, parseInt(e.target.value) || 2))}
-                className="w-24 bg-zinc-900 border border-purple-500/40 rounded-xl px-3 py-2 text-white font-extrabold text-sm focus:outline-none focus:border-purple-400 text-center"
-              />
-
-              {/* Quick suggestions */}
-              <div className="flex flex-wrap gap-1 flex-1">
-                {[4, 7, 10, 12, 15, 20, 32].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setTeamLimit(preset)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
-                      teamLimit === preset
-                        ? "bg-purple-600 border-purple-400 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Free 24h Date & Time Selection (00:00 - 24:00) */}
-          <div className="bg-[#121629] p-3 rounded-2xl border border-zinc-800 space-y-2">
-            <label className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Data e Orario di Inizio (Formato 24 Ore Libero)</span>
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">Giorno Torneo</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none focus:border-purple-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">Orario (00:00 - 24:00)</span>
-                <input
-                  type="time"
-                  step="300"
-                  value={startHour}
-                  onChange={(e) => setStartHour(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none focus:border-purple-500 text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Entry Fee & Prize */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-                Entry Fee (SCoin)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={50}
-                placeholder="0 = Gratuito"
-                value={entryFeeSC}
-                onChange={(e) => setEntryFeeSC(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full bg-[#121628] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-                Montepremi (Descrizione)
-              </label>
-              <input
-                type="text"
-                placeholder="es. 1.000 SCoin + Badge"
-                value={prizeDescription}
-                onChange={(e) => setPrizeDescription(e.target.value)}
-                className="w-full bg-[#121628] border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 text-xs"
-              />
-            </div>
-          </div>
-
-          {/* Advanced Points Configuration (Kill + 1°, 2°, 3°, 4°, 5°, Top 10) */}
-          <div className="bg-[#121629] p-3 rounded-2xl border border-purple-900/40 space-y-2.5">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
-              <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-purple-400" />
-                Punteggi Avanzati IA & Piazzamento
-              </span>
-              <span className="text-[10px] text-zinc-400">Punti assegnati</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">Punti per Kill</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={killPoints}
-                  onChange={(e) => setKillPoints(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1.5 text-white text-center font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-amber-400 block mb-0.5">1° Posto (Win)</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={points1st}
-                  onChange={(e) => setPoints1st(Math.max(1, parseInt(e.target.value) || 15))}
-                  className="w-full bg-zinc-900 border border-amber-500/40 rounded-xl px-2 py-1.5 text-amber-300 text-center font-black text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">2° Posto</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={points2nd}
-                  onChange={(e) => setPoints2nd(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1.5 text-white text-center font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">3° Posto</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={points3rd}
-                  onChange={(e) => setPoints3rd(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1.5 text-white text-center font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">4° Posto</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={points4th}
-                  onChange={(e) => setPoints4th(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1.5 text-white text-center font-bold text-xs"
-                />
-              </div>
-
-              <div>
-                <span className="text-[10px] text-zinc-400 block mb-0.5">5° Posto (Top 5)</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={points5th}
-                  onChange={(e) => setPoints5th(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2 py-1.5 text-white text-center font-bold text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Rules Text */}
-          <div>
-            <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-              Regolamento del Torneo
-            </label>
-            <textarea
-              rows={3}
-              value={rules}
-              onChange={(e) => setRules(e.target.value)}
-              className="w-full bg-[#121628] border border-zinc-800 rounded-xl p-2.5 text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-purple-500 text-xs"
-            />
-          </div>
-
-          {/* Submit */}
+          {/* Close Button */}
           <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all cursor-pointer mt-2"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-full text-zinc-400 hover:text-white bg-zinc-900/90 transition-colors z-10 cursor-pointer"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Pubblicazione in corso...</span>
-              </>
-            ) : (
-              <>
-                <Trophy className="w-4 h-4 text-amber-300" />
-                <span>Pubblica Torneo Ufficiale</span>
-              </>
-            )}
+            <X className="w-4 h-4" />
           </button>
-        </form>
+
+          {/* Header */}
+          <div className="pb-3 border-b border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-[10px] font-extrabold text-purple-300 uppercase tracking-wider mb-1">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                Organizzatore Tornei
+              </div>
+
+              {/* OpenRouter Key quick toggle */}
+              <button
+                type="button"
+                onClick={() => setIsKeyModalOpen(true)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 border transition-all ${
+                  hasApiKey
+                    ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
+                    : "bg-amber-950/40 border-amber-500/40 text-amber-300 hover:border-amber-400 animate-pulse"
+                }`}
+              >
+                <Key className="w-3 h-3" />
+                <span>{hasApiKey ? "OpenRouter Attivo" : "Configura API Key"}</span>
+              </button>
+            </div>
+
+            <h3 className="text-base sm:text-lg font-extrabold text-white">
+              Crea Torneo con IA & Arbitraggio OCR
+            </h3>
+            <p className="text-[11px] text-zinc-400">
+              Descrivi il torneo in linguaggio naturale: Gemini Flash configurerà partecipanti, regole e fasi.
+            </p>
+
+            {/* Mode Switch Tabs */}
+            <div className="flex items-center gap-2 mt-3 p-1 bg-zinc-950/80 rounded-xl border border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setCreationMode("ai")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  creationMode === "ai"
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Wand2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>Assistente IA (OpenRouter)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreationMode("manual")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  creationMode === "manual"
+                    ? "bg-zinc-800 text-white shadow-md border border-zinc-700"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Modulo Manuale</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Scrollable Body */}
+          <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 text-xs">
+            {creationMode === "ai" && (
+              <div className="space-y-4">
+                {/* AI Prompt Input Box */}
+                <div className="space-y-2 bg-gradient-to-br from-purple-950/30 via-[#121628] to-cyan-950/20 border border-purple-500/30 rounded-2xl p-3.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-purple-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Descrivi il torneo che vuoi realizzare:</span>
+                    </label>
+                    <span className="text-[10px] text-zinc-400">Gemini Flash Multimodal</span>
+                  </div>
+
+                  <textarea
+                    rows={4}
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="Es: Vorrei organizzare un torneo di Warzone Resurgence a 8 squadre. Eliminazione diretta dai quarti alla finale. Assegna 2 punti per ogni kill e 15 punti per la vittoria finale. Il torneo partirà domani sera alle 21:00 con un montepremi di 2.000 SCoin..."
+                    className="w-full p-3 rounded-xl bg-zinc-950/90 border border-purple-900/60 text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 text-xs leading-relaxed resize-none"
+                  />
+
+                  {/* Preset Quick Chips */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Oppure prova uno schema rapido:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {AI_PROMPT_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setAiPrompt(preset.prompt)}
+                          className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-500/50 text-[11px] font-medium text-zinc-300 transition-all flex items-center gap-1"
+                        >
+                          <span>{preset.icon}</span>
+                          <span>{preset.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI Generate Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      disabled={isAiGenerating || !aiPrompt.trim()}
+                      onClick={handleGenerateWithAI}
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 disabled:opacity-50 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_18px_rgba(139,92,246,0.4)] transition-all cursor-pointer"
+                    >
+                      {isAiGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+                          <span>Gemini Flash sta elaborando regolamento e bracket...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                          <span>Genera Struttura Torneo con IA</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* AI Result Structured Preview */}
+                {generatedTournament && (
+                  <div className="bg-[#121628] border border-emerald-500/40 rounded-2xl p-4 space-y-3.5 shadow-md animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-extrabold text-emerald-300">
+                          Struttura Generata dall'IA
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-medium">
+                        Rivedi e personalizza prima di salvare
+                      </span>
+                    </div>
+
+                    {/* Summary Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="bg-zinc-900/80 border border-zinc-800 p-2 rounded-xl text-center">
+                        <span className="text-[10px] text-zinc-400 block font-medium">Gioco/Modo</span>
+                        <span className="text-xs font-bold text-white truncate block">
+                          {generatedTournament.game_mode}
+                        </span>
+                      </div>
+
+                      <div className="bg-zinc-900/80 border border-zinc-800 p-2 rounded-xl text-center">
+                        <span className="text-[10px] text-zinc-400 block font-medium">Partecipanti</span>
+                        <span className="text-xs font-bold text-purple-300 block">
+                          {generatedTournament.team_limit} Squadre
+                        </span>
+                      </div>
+
+                      <div className="bg-zinc-900/80 border border-zinc-800 p-2 rounded-xl text-center">
+                        <span className="text-[10px] text-zinc-400 block font-medium">Formato</span>
+                        <span className="text-xs font-bold text-cyan-300 block uppercase">
+                          {generatedTournament.type}
+                        </span>
+                      </div>
+
+                      <div className="bg-zinc-900/80 border border-zinc-800 p-2 rounded-xl text-center">
+                        <span className="text-[10px] text-zinc-400 block font-medium">Match Iniziali</span>
+                        <span className="text-xs font-bold text-amber-300 block">
+                          {generatedTournament.initial_matches?.length || 0} Incontri
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Phases Summary */}
+                    {generatedTournament.phases_summary && (
+                      <div className="bg-purple-950/30 border border-purple-800/30 p-2.5 rounded-xl text-[11px] text-purple-200">
+                        <strong className="text-white block mb-0.5">Fasi del Torneo:</strong>
+                        {generatedTournament.phases_summary}
+                      </div>
+                    )}
+
+                    {/* Initial Matches List Preview */}
+                    {generatedTournament.initial_matches && generatedTournament.initial_matches.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-zinc-300 block">
+                          Tabellone Iniziale Generato ({generatedTournament.initial_matches.length} Match):
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {generatedTournament.initial_matches.map((m, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5 flex items-center justify-between text-[11px]"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[9px] font-bold text-purple-400 block uppercase">
+                                  {m.round_name}
+                                </span>
+                                <span className="font-semibold text-white truncate block">
+                                  {m.player1_name} <span className="text-rose-400 font-bold">vs</span> {m.player2_name}
+                                </span>
+                              </div>
+                              <Swords className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Editable Configuration Fields (Visible in Manual or after AI generation) */}
+            <form onSubmit={handleSaveTournament} id="tournament-form" className="space-y-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-200 pt-1 border-t border-zinc-800/80">
+                <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Dettagli e Regole del Torneo</span>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                  Nome Torneo *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Es. Warzone Resurgence Community Clash"
+                  className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              {/* Game Mode & Max Teams */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                    Gioco e Modalità
+                  </label>
+                  <input
+                    type="text"
+                    value={gameMode}
+                    onChange={(e) => setGameMode(e.target.value)}
+                    placeholder="Es. Warzone Resurgence Trios"
+                    className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                    Numero Massimo Partecipanti
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={128}
+                    value={teamLimit}
+                    onChange={(e) => setTeamLimit(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Date & Start Hour */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                    Data di Inizio
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                    Ora di Inizio (24h)
+                  </label>
+                  <input
+                    type="time"
+                    value={startHour}
+                    onChange={(e) => setStartHour(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Prize */}
+              <div>
+                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                  Montepremi e Riconoscimenti
+                </label>
+                <input
+                  type="text"
+                  value={prizeDescription}
+                  onChange={(e) => setPrizeDescription(e.target.value)}
+                  placeholder="Es. 2.000 SCoin + Badge Campioni"
+                  className="w-full px-3 py-2 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              {/* Rules */}
+              <div>
+                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                  Regolamento Ufficiale (usato dall'Arbitro IA per l'OCR)
+                </label>
+                <textarea
+                  rows={3}
+                  value={rules}
+                  onChange={(e) => setRules(e.target.value)}
+                  className="w-full p-2.5 bg-zinc-950/90 border border-zinc-800 rounded-xl text-white text-xs focus:outline-none focus:border-purple-500 resize-none leading-relaxed"
+                />
+              </div>
+
+              {/* Scoring Rules */}
+              <div className="bg-zinc-950/60 border border-zinc-800 p-3 rounded-2xl space-y-2">
+                <span className="text-[11px] font-bold text-zinc-300 block">
+                  Assegnazione Punteggi Classifica Live:
+                </span>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <span className="text-[9px] text-zinc-400 block font-semibold">Pt / Kill</span>
+                    <input
+                      type="number"
+                      value={killPoints}
+                      onChange={(e) => setKillPoints(Number(e.target.value))}
+                      className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-purple-300 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-400 block font-semibold">1° Posto</span>
+                    <input
+                      type="number"
+                      value={points1st}
+                      onChange={(e) => setPoints1st(Number(e.target.value))}
+                      className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-amber-300 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-400 block font-semibold">2° Posto</span>
+                    <input
+                      type="number"
+                      value={points2nd}
+                      onChange={(e) => setPoints2nd(Number(e.target.value))}
+                      className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-zinc-300 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-zinc-400 block font-semibold">3° Posto</span>
+                    <input
+                      type="number"
+                      value={points3rd}
+                      onChange={(e) => setPoints3rd(Number(e.target.value))}
+                      className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-amber-600 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          {/* Footer Submit Button */}
+          <div className="pt-3 border-t border-zinc-800 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2.5 px-4 rounded-xl border border-zinc-800 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs transition-colors"
+            >
+              Annulla
+            </button>
+
+            <button
+              type="submit"
+              form="tournament-form"
+              disabled={isLoading || !title.trim()}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 disabled:opacity-50 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all cursor-pointer"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+                  <span>Salvataggio su Supabase in corso...</span>
+                </>
+              ) : (
+                <>
+                  <Trophy className="w-4 h-4 text-amber-300" />
+                  <span>Crea e Pubblica Torneo su Supabase</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+
+      {/* OpenRouter API Key Modal */}
+      <OpenRouterKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        onSaved={() => {
+          if (aiPrompt.trim()) {
+            handleGenerateWithAI();
+          }
+        }}
+      />
+    </>
   );
 };
