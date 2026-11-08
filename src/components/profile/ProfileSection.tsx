@@ -20,12 +20,14 @@ import {
   Star,
   Plus,
   Zap,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { ProfileCustomizerModal, AVATAR_FRAMES } from "./ProfileCustomizerModal";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 import { SCoinShopModal } from "@/components/shop/SCoinShopModal";
 import { PlayerReviewsModal } from "./PlayerReviewsModal";
+import { UniversalAdminModal } from "@/components/admin/UniversalAdminModal";
 
 export const ProfileSection: React.FC = () => {
   const {
@@ -34,6 +36,7 @@ export const ProfileSection: React.FC = () => {
     transactions,
     clanData,
     currentUser,
+    isUniversalAdmin,
     openAuthModal,
     signOut,
   } = useSquad();
@@ -45,6 +48,7 @@ export const ProfileSection: React.FC = () => {
   const [showSubscription, setShowSubscription] = useState(false);
   const [showShop, setShowShop] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
+  const [showUniversalAdmin, setShowUniversalAdmin] = useState(false);
 
   const rewards = [
     {
@@ -144,18 +148,18 @@ export const ProfileSection: React.FC = () => {
 
       {/* Player Profile Card with Custom Banner & Frame */}
       <div className="relative rounded-3xl overflow-hidden border border-purple-500/50 bg-[#0d1022] shadow-2xl">
-        {/* Profile Banner */}
-        <div className="relative h-28 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
+        {/* Profile Banner - Resized for optimal height and artwork display */}
+        <div className="relative h-36 sm:h-44 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
           {userProfile.bannerUrl ? (
             <img
               src={userProfile.bannerUrl}
               alt="Banner profilo"
-              className="w-full h-full object-cover opacity-85"
+              className="w-full h-full object-cover opacity-90"
             />
           ) : (
             <div className="w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-800/40 via-purple-950 to-[#0d1022]" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1022] via-[#0d1022]/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1022] via-[#0d1022]/30 to-transparent" />
 
           {/* Quick Customizer Icon button on Banner */}
           {currentUser && (
@@ -170,16 +174,16 @@ export const ProfileSection: React.FC = () => {
           )}
         </div>
 
-        {/* Profile Body Content */}
-        <div className="px-4 pb-4 -mt-10 relative">
+        {/* Profile Body Content - Compact avatar positioned to avoid covering banner */}
+        <div className="px-4 pb-4 -mt-7 sm:-mt-8 relative">
           <div className="flex items-end justify-between gap-3">
             <div className="flex items-end gap-3 min-w-0">
               {/* Avatar with Custom Frame & Glow */}
               <div className="relative shrink-0">
                 <div
-                  className={`w-18 h-18 rounded-2xl overflow-hidden bg-purple-950/80 border-2 ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
                     frameObj.borderClass
-                  } ${frameObj.glowClass || ""} shadow-xl`}
+                  } ${frameObj.glowClass || ""} shadow-xl ring-2 ring-[#0d1022]`}
                 >
                   {userProfile.avatar ? (
                     <img
@@ -189,7 +193,7 @@ export const ProfileSection: React.FC = () => {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-purple-300">
-                      <User className="w-9 h-9" />
+                      <User className="w-7 h-7" />
                     </div>
                   )}
                 </div>
@@ -199,17 +203,22 @@ export const ProfileSection: React.FC = () => {
               </div>
 
               {/* Name & Title */}
-              <div className="min-w-0 pb-1">
+              <div className="min-w-0 pb-0.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h2 className="text-base font-black text-white truncate max-w-[140px]">
                     {userProfile.name}
                   </h2>
-                  {isPro && (
+                  {isUniversalAdmin ? (
+                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
+                      <Crown className="w-2.5 h-2.5 text-amber-400" />
+                      GOD MODE
+                    </span>
+                  ) : isPro ? (
                     <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
                       <Crown className="w-2.5 h-2.5 text-amber-400" />
                       PRO
                     </span>
-                  )}
+                  ) : null}
                   {clanData?.tag && (
                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
                       [{clanData.tag}]
@@ -219,6 +228,30 @@ export const ProfileSection: React.FC = () => {
 
                 <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-0.5 flex-wrap">
                   <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
+                  <span>•</span>
+                  <span className="text-zinc-400">{userProfile.tag}</span>
+                </div>
+
+                {userProfile.activisionName && (
+                  <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1 w-fit">
+                    <Gamepad2 className="w-3 h-3 text-cyan-400" />
+                    <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Logout button */}
+            {currentUser && (
+              <button
+                onClick={signOut}
+                title="Disconnetti"
+                className="p-2 rounded-xl bg-zinc-900/80 hover:bg-rose-500/20 border border-zinc-800 hover:border-rose-500/40 text-zinc-400 hover:text-rose-300 transition-colors cursor-pointer shrink-0 mb-1"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
                   <span>•</span>
                   <span className="text-zinc-400">{userProfile.tag}</span>
                 </div>
@@ -273,6 +306,29 @@ export const ProfileSection: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Universal Admin Card for fedezdesimone@gmail.com */}
+      {isUniversalAdmin && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-[#1a142e] to-purple-950/40 border border-amber-500/50 rounded-3xl p-4 shadow-xl flex items-center justify-between gap-3 animate-fade-in">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-amber-300 font-black text-xs">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span>Universal God Mode Attivo</span>
+            </div>
+            <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+              Hai SCoin infiniti e puoi accreditare SCoin a qualsiasi utente o eliminare qualsiasi torneo con rimborso.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowUniversalAdmin(true)}
+            className="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.4)] shrink-0 transition-all cursor-pointer"
+          >
+            <ShieldAlert className="w-4 h-4 text-black" />
+            <span>Pannello God Mode</span>
+          </button>
+        </div>
+      )}
 
       {/* QUICK ACTIONS GRID: SHOP, PRO, CUSTOMIZER, REVIEWS */}
       <div className="grid grid-cols-2 gap-2">
@@ -397,9 +453,21 @@ export const ProfileSection: React.FC = () => {
               </span>
               <div className="flex items-center gap-2">
                 <Coins className="w-6 h-6 text-amber-400 animate-pulse" />
-                <span className="text-2xl font-black text-white">
-                  {sCoinBalance.toLocaleString()} <span className="text-sm font-bold text-amber-300">SC</span>
-                </span>
+                <div className="text-2xl font-black text-white">
+                  {isUniversalAdmin ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-3xl font-black text-amber-300 leading-none">∞</span>
+                      <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                        SC Infiniti (God Mode)
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {sCoinBalance.toLocaleString()}{" "}
+                      <span className="text-sm font-bold text-amber-300">SC</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -563,6 +631,11 @@ export const ProfileSection: React.FC = () => {
       <PlayerReviewsModal
         isOpen={showReviews}
         onClose={() => setShowReviews(false)}
+      />
+
+      <UniversalAdminModal
+        isOpen={showUniversalAdmin}
+        onClose={() => setShowUniversalAdmin(false)}
       />
     </div>
   );

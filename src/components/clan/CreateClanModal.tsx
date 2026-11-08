@@ -1,7 +1,21 @@
 import React, { useState } from "react";
-import { Shield, Crown, Sparkles, Loader2, Check, AlertCircle, Info, Calendar } from "lucide-react";
+import {
+  Shield,
+  Crown,
+  Sparkles,
+  Loader2,
+  Check,
+  AlertCircle,
+  Info,
+  Calendar,
+  Users,
+  Volume2,
+  Trophy,
+  Zap,
+} from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useSquad } from "@/context/SquadContext";
 
 interface CreateClanModalProps {
   isOpen: boolean;
@@ -18,10 +32,11 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
   sCoinBalance,
   onSuccess,
 }) => {
+  const { isUniversalAdmin } = useSquad();
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [description, setDescription] = useState("");
-  const [tier, setTier] = useState<"base" | "pro" | "elite">("base");
+  const [tier, setTier] = useState<"base" | "pro" | "elite">("pro");
   const [durationMonths, setDurationMonths] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,7 +65,7 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
   const monthlyPrice = MONTHLY_RATES[tier];
   const discountRate = tier === "base" ? 0 : DISCOUNT_MAP[durationMonths] || 0;
   const rawTotal = monthlyPrice * (tier === "base" ? 1 : durationMonths);
-  const totalCost = Math.round(rawTotal * (1 - discountRate));
+  const totalCost = isUniversalAdmin ? 0 : Math.round(rawTotal * (1 - discountRate));
 
   const handleAddRole = () => {
     if (!newRoleInput.trim()) return;
@@ -312,6 +327,68 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
                 <div className="text-[9px] text-zinc-400 mt-2">12 ruoli pers.</div>
               </button>
             </div>
+
+            {/* Vantaggi Dettagliati Tier Pro & Elite */}
+            {tier === "pro" && (
+              <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-3.5 space-y-2 animate-fade-in text-zinc-300">
+                <div className="flex items-center gap-1.5 text-xs font-extrabold text-purple-300">
+                  <Crown className="w-4 h-4 text-purple-400" />
+                  <span>Vantaggi Esclusivi Clan PRO:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] leading-relaxed">
+                  <div className="flex items-start gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+                    <span><strong>Fino a 25 Membri</strong> (rispetto ai 10 del clan base)</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                    <span><strong>5 Ruoli Personalizzati</strong> con colori e titoli unici</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span><strong>Stanza Vocale HD Riservata</strong> per sessioni e tornei</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span><strong>+25% SCoin Bonus</strong> sulle missioni giornaliere di clan</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-purple-300/80 pt-1 border-t border-purple-800/40">
+                  ✓ Spilla & Badge Ufficiale Pro viola sui post e nelle leaderboard
+                </div>
+              </div>
+            )}
+
+            {tier === "elite" && (
+              <div className="bg-amber-950/40 border border-amber-500/50 rounded-2xl p-3.5 space-y-2 animate-fade-in text-zinc-300">
+                <div className="flex items-center gap-1.5 text-xs font-black text-amber-300">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Vantaggi Supremi Clan ELITE:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] leading-relaxed">
+                  <div className="flex items-start gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span><strong>Membri Illimitati (fino a 50)</strong> per dominare i tornei</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+                    <span><strong>12 Ruoli Avanzati</strong> con permessi di moderazione</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                    <span><strong>Audio Vocale Low-Latency a 60fps</strong> prioritario</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span><strong>+50% SCoin & Doppi Punti Fedeltà</strong> per tutta la squadra</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-amber-300/80 pt-1 border-t border-amber-800/40 flex items-center gap-1">
+                  <Trophy className="w-3 h-3 text-amber-400" />
+                  <span>Accesso prioritario ai Major e Spilla Corona Dorata con aura glow</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Duration Selector (Only if Pro or Elite) */}

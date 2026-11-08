@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Story } from "@/data/mockData";
-import { X, Heart, Send, CheckCircle2, Flame } from "lucide-react";
+import { X, Heart, Send, CheckCircle2, Flame, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { useSquad } from "@/context/SquadContext";
 
 interface StoryViewerModalProps {
   story: Story | null;
@@ -9,12 +10,19 @@ interface StoryViewerModalProps {
 }
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClose }) => {
+  const { currentUser, isUniversalAdmin, deleteStory } = useSquad();
   const [progress, setProgress] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const canDelete = Boolean(
+    story && currentUser && (story.userId === currentUser.id || isUniversalAdmin)
+  );
 
   useEffect(() => {
-    if (!story) return;
+    if (!story || showDeleteConfirm) return;
     setProgress(0);
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -28,7 +36,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClo
     }, 100);
 
     return () => clearInterval(interval);
-  }, [story, onClose]);
+  }, [story, onClose, showDeleteConfirm]);
 
   if (!story) return null;
 
@@ -86,12 +94,23 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClo
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/50 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-sm"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {canDelete && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Elimina Storia"
+                className="w-8 h-8 rounded-full bg-rose-500/30 hover:bg-rose-500 text-rose-200 hover:text-white flex items-center justify-center backdrop-blur-sm transition-all cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-black/50 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-sm cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Story Image / Background */}
@@ -140,6 +159,56 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClo
             <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-400" : ""}`} />
           </button>
         </div>
+
+        {/* Delete Confirmation Overlay */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 z-30 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-[#121628] border border-rose-500/50 rounded-2xl p-5 max-w-xs w-full text-center space-y-3 shadow-2xl">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Eliminare questa storia?</h4>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Verrà rimossa definitivamente dal database di SquadUP.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="py-2 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    try {
+                      await deleteStory(story.id);
+                      onClose();
+                    } catch (e) {
+                      // handled in context
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  }}
+                  className="py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-md"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>Elimina</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

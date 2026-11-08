@@ -127,6 +127,12 @@ interface SquadContextType {
   clanData: ClanData | null;
   clanMembers: ClanMember[];
   donateToClan: (amount: number) => Promise<boolean>;
+
+  // Universal Admin & Deletion
+  isUniversalAdmin: boolean;
+  deleteTournament: (tournamentId: string) => Promise<boolean>;
+  deleteStory: (storyId: string) => Promise<boolean>;
+  adminCreditSCoin: (targetUserId: string, amount: number, reason?: string) => Promise<boolean>;
 }
 
 const SquadContext = createContext<SquadContextType | undefined>(undefined);
@@ -239,11 +245,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           .maybeSingle();
 
         if (profile) {
-          const balance = profile.balance ?? profile.coins ?? profile.schoins ?? 0;
+          const isSuper = user.email?.toLowerCase() === "fedezdesimone@gmail.com";
+          const balance = isSuper ? 999999999 : (profile.balance ?? profile.coins ?? profile.schoins ?? 0);
           setSCoinBalance(balance);
           setUserProfile({
             id: profile.id,
-            name: profile.display_name || profile.username || "Giocatore",
+            name: profile.display_name || profile.username || (isSuper ? "Federico De Simone" : "Giocatore"),
             tag: profile.activision_id
               ? profile.activision_id
               : profile.activision_tag
@@ -252,13 +259,13 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             avatar: profile.avatar_url || "",
             bannerUrl: profile.banner_url || "",
             unlockedBanners: profile.unlocked_banners || [],
-            avatarFrame: profile.subscription_tier === "pro" ? "gold" : "base",
+            avatarFrame: isSuper ? "gold" : (profile.subscription_tier === "pro" ? "gold" : "base"),
             proTheme: (profile.pro_theme as any) || "gold",
-            subscriptionTier: (profile.subscription_tier as any) || "free",
+            subscriptionTier: isSuper ? "pro" : ((profile.subscription_tier as any) || "free"),
             proExpiresAt: profile.pro_expires_at || null,
-            bio: profile.bio || "",
-            rank: profile.subscription_tier === "pro" ? "Pro Player" : "Competitor",
-            level: Math.max(1, Math.floor(balance / 100)),
+            bio: profile.bio || (isSuper ? "Account Universale God Mode • SquadUP Founder" : ""),
+            rank: isSuper ? "Universal God Mode ⚡" : (profile.subscription_tier === "pro" ? "Pro Player" : "Competitor"),
+            level: isSuper ? 999 : Math.max(1, Math.floor(balance / 100)),
             activisionName: profile.activision_id || profile.activision_name || "",
             stats: {
               kd: null,
@@ -841,6 +848,222 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  // Delete story from Supabase `stories` table
+  const deleteStory = async (storyId: string): Promise<boolean> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (!user) {
+      openAuthModal("login");
+      return false;
+    }
+
+    try {
+      let query = supabase.from("stories").delete().eq("id", storyId);
+      if (!isUniversalAdmin) {
+        query = query.eq("user_id", user.id);
+      }
+      const { error } = await query;
+      if (error) throw error;
+
+      setStories((prev) => prev.filter((s) => s.id !== storyId));
+      if (activeStory?.id === storyId) {
+        setActiveStory(null);
+      }
+      toast({
+        title: "Storia rimossa! 🗑️",
+        description: "La storia è stata eliminata definitivamente.",
+      });
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore eliminazione storia:", err);
+      toast({
+        title: "Errore eliminazione storia",
+        description: err.message || "Impossibile rimuovere la storia.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Delete tournament with full refund of creation cost and entry fees
+  const deleteTournament = async (tournamentId: string): Promise<boolean> => {
+    try {
+      const { data: tourn, error: fetchErr } = await supabase
+        .from("tournaments")
+        .select("*")
+        .eq("id", tournamentId)
+        .maybeSingle();
+
+      if (fetchErr || !tourn) throw new Error("Torneo non trovato.");
+
+      const isOwner = currentUser?.id && tourn.owner_id === currentUser.id;
+      if (!isOwner && !isUniversalAdmin) {
+        throw new Error("Non hai i permessi per eliminare questo torneo.");
+      }
+
+      // 1. Refund the creator (100 SCoin or creation_cost_sc)
+      const creationRefund = tourn.creation_cost_sc ?? 100;
+      if (creationRefund > 0 && tourn.owner_id) {
+        const { data: creatorProf } = await supabase
+          .from("profiles")
+          .select("balance")
+          .eq("id", tourn.owner_id)
+          .maybeSingle();
+
+        const newCreatorBal = (creatorProf?.balance || 0) + creationRefund;
+        await supabase
+          .from("profiles")
+          .update({
+            balance: newCreatorBal,
+            coins: newCreatorBal,
+            schoins: newCreatorBal,
+          })
+          .eq("id", tourn.owner_id);
+
+        await supabase.from("sc_transactions").insert({
+          user_id: tourn.owner_id,
+          recipient_id: tourn.owner_id,
+          amount: creationRefund,
+          type: "admin_credit",
+          description: `Rimborso creazione torneo annullato: ${tourn.name}`,
+        });
+      }
+
+      // 2. Refund registered participants if entry_fee_sc > 0
+      const entryFee = tourn.entry_fee_sc || 0;
+      if (entryFee > 0) {
+        const { data: registrations } = await supabase
+          .from("tournament_registrations")
+          .select("user_id")
+          .eq("tournament_id", tournamentId);
+
+        if (registrations && registrations.length > 0) {
+          for (const reg of registrations) {
+            const { data: p } = await supabase
+              .from("profiles")
+              .select("balance")
+              .eq("id", reg.user_id)
+              .maybeSingle();
+
+            const newBal = (p?.balance || 0) + entryFee;
+            await supabase
+              .from("profiles")
+              .update({
+                balance: newBal,
+                coins: newBal,
+                schoins: newBal,
+              })
+              .eq("id", reg.user_id);
+
+            await supabase.from("sc_transactions").insert({
+              user_id: reg.user_id,
+              recipient_id: reg.user_id,
+              amount: entryFee,
+              type: "admin_credit",
+              description: `Rimborso quota iscrizione torneo annullato: ${tourn.name}`,
+            });
+          }
+        }
+      }
+
+      // 3. Delete dependent rows
+      await supabase.from("tournament_registrations").delete().eq("tournament_id", tournamentId);
+      await supabase.from("tournament_matches").delete().eq("tournament_id", tournamentId);
+      await supabase.from("tournament_leaderboards").delete().eq("tournament_id", tournamentId);
+      await supabase.from("tournament_match_chats").delete().eq("tournament_id", tournamentId);
+
+      // 4. Delete tournament row
+      const { error: delErr } = await supabase
+        .from("tournaments")
+        .delete()
+        .eq("id", tournamentId);
+
+      if (delErr) throw delErr;
+
+      // 5. Update state
+      setTournaments((prev) => prev.filter((t) => t.id !== tournamentId));
+      if (selectedTournament?.id === tournamentId) {
+        setSelectedTournament(null);
+      }
+
+      await refreshUserData();
+      await loadDatabaseContent();
+
+      toast({
+        title: "Torneo eliminato con successo! 🗑️",
+        description: `Tutti gli SCoin spesi per creazione (${creationRefund} SC) e quote iscrizione sono stati rimborsati.`,
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore cancellazione torneo:", err);
+      toast({
+        title: "Errore eliminazione torneo",
+        description: err.message || "Impossibile eliminare il torneo.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Universal Admin credit SCoin to any user
+  const adminCreditSCoin = async (targetUserId: string, amount: number, reason?: string): Promise<boolean> => {
+    if (!isUniversalAdmin) {
+      toast({
+        title: "Non autorizzato",
+        description: "Azione riservata all'account universale fedezdesimone@gmail.com.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const { data: targetProf } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", targetUserId)
+        .maybeSingle();
+
+      const newBal = (targetProf?.balance || 0) + amount;
+      await supabase
+        .from("profiles")
+        .update({
+          balance: newBal,
+          coins: newBal,
+          schoins: newBal,
+        })
+        .eq("id", targetUserId);
+
+      await supabase.from("sc_transactions").insert({
+        user_id: targetUserId,
+        recipient_id: targetUserId,
+        sender_id: currentUser?.id || null,
+        amount,
+        type: "admin_credit",
+        description: reason || "Accredito Amministratore Universale",
+      });
+
+      if (currentUser?.id === targetUserId) {
+        await refreshUserData();
+      }
+
+      toast({
+        title: "SCoin Accreditati! ⚡",
+        description: `Assegnati +${amount.toLocaleString()} SCoin all'account.`,
+      });
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore accredito SCoin:", err);
+      toast({
+        title: "Errore accredito",
+        description: err.message,
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   // Delete post from Supabase `posts` table
   const deletePost = async (postId: string): Promise<boolean> => {
     const { data: authData } = await supabase.auth.getUser();
@@ -852,11 +1075,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     try {
-      const { error } = await supabase
-        .from("posts")
-        .delete()
-        .eq("id", postId)
-        .eq("user_id", user.id);
+      let query = supabase.from("posts").delete().eq("id", postId);
+      if (!isUniversalAdmin) {
+        query = query.eq("user_id", user.id);
+      }
+      const { error } = await query;
 
       if (error) {
         throw error;
@@ -1379,6 +1602,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clanData,
         clanMembers,
         donateToClan,
+        isUniversalAdmin: currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com",
+        deleteTournament,
+        deleteStory,
+        adminCreditSCoin,
       }}
     >
       {children}

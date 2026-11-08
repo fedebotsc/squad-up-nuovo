@@ -26,6 +26,8 @@ import {
   AlertCircle,
   Eye,
   Plus,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +44,8 @@ export const MatchRoomTab: React.FC = () => {
     userProfile,
     currentUser,
     openAuthModal,
+    isUniversalAdmin,
+    deleteTournament,
   } = useSquad();
 
   const [matches, setMatches] = useState<TournamentMatchItem[]>([]);
@@ -49,6 +53,8 @@ export const MatchRoomTab: React.FC = () => {
   const [activeMatchForOcr, setActiveMatchForOcr] = useState<TournamentMatchItem | null>(null);
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingTourn, setIsDeletingTourn] = useState(false);
 
   // Live Chat state
   const [chatInput, setChatInput] = useState("");
@@ -352,6 +358,17 @@ export const MatchRoomTab: React.FC = () => {
               <Key className="w-3 h-3" />
               <span>{hasApiKey ? "IA OpenRouter" : "Configura Key"}</span>
             </button>
+
+            {(isUniversalAdmin || (currentUser?.id && rawTourn.owner_id === currentUser.id)) && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-[10px] font-bold px-2.5 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/25 hover:text-white flex items-center gap-1 transition-all cursor-pointer"
+                title="Elimina Torneo con Rimborso SCoin"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Elimina</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -661,6 +678,76 @@ export const MatchRoomTab: React.FC = () => {
         isOpen={isKeyModalOpen}
         onClose={() => setIsKeyModalOpen(false)}
       />
+
+      {/* Delete Tournament Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm bg-[#121629] border border-rose-500/50 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h4 className="text-base font-extrabold text-white">
+                Eliminare questo torneo?
+              </h4>
+              <p className="text-xs font-semibold text-rose-300">
+                "{selectedTournament.title}"
+              </p>
+              <div className="text-[11px] text-zinc-300 bg-zinc-950/80 p-3 rounded-xl border border-zinc-800 text-left mt-2 space-y-1.5">
+                <span className="font-bold text-white block">Rimborsi automatici garantiti:</span>
+                <p>• <strong>100 SCoin</strong> rimborsati all'organizzatore per il costo di creazione.</p>
+                {selectedTournament.entryFeeSCoin > 0 && (
+                  <p>• <strong>{selectedTournament.entryFeeSCoin} SCoin</strong> rimborsati a ciascun partecipante iscritto.</p>
+                )}
+                <p className="text-[10px] text-zinc-400 italic pt-1">
+                  Tutti i match e i log di questa stanza verranno cancellati definitivamente.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isDeletingTourn}
+                onClick={() => setShowDeleteConfirm(false)}
+                className="py-2.5 px-3 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTourn}
+                onClick={async () => {
+                  setIsDeletingTourn(true);
+                  try {
+                    await deleteTournament(selectedTournament.id);
+                    setShowDeleteConfirm(false);
+                    setTournamentSubTab("active");
+                  } catch (e) {
+                    // error handled in context
+                  } finally {
+                    setIsDeletingTourn(false);
+                  }
+                }}
+                className="py-2.5 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                {isDeletingTourn ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminazione...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Conferma & Rimborsa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

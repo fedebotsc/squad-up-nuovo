@@ -67,7 +67,18 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { currentUser, userProfile, openAuthModal, refreshTournaments } = useSquad();
+  const {
+    currentUser,
+    userProfile,
+    sCoinBalance,
+    isUniversalAdmin,
+    openAuthModal,
+    refreshTournaments,
+    refreshUserData,
+  } = useSquad();
+
+  const CREATION_COST_SC = 100;
+  const canAfford = isUniversalAdmin || sCoinBalance >= CREATION_COST_SC;
 
   // Mode: "ai" (OpenRouter Gemini Flash) or "manual"
   const [creationMode, setCreationMode] = useState<"ai" | "manual">("ai");
@@ -172,6 +183,15 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
       return;
     }
 
+    if (!canAfford) {
+      toast({
+        title: "Saldo SCoin Insufficiente",
+        description: `La creazione di un torneo richiede ${CREATION_COST_SC} SCoin. Il tuo saldo attuale è di ${sCoinBalance.toLocaleString()} SCoin.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const finalTitle = title.trim();
     if (!finalTitle) {
       toast({
@@ -197,6 +217,27 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     try {
       const fullDateStr = `${startDate}T${startHour}:00`;
       const parsedStartsAt = new Date(fullDateStr).toISOString();
+
+      // Deduct 100 SCoin if not universal admin
+      if (!isUniversalAdmin && CREATION_COST_SC > 0) {
+        const newBal = Math.max(0, sCoinBalance - CREATION_COST_SC);
+        await supabase
+          .from("profiles")
+          .update({
+            balance: newBal,
+            coins: newBal,
+            schoins: newBal,
+          })
+          .eq("id", currentUser.id);
+
+        await supabase.from("sc_transactions").insert({
+          user_id: currentUser.id,
+          recipient_id: currentUser.id,
+          amount: -CREATION_COST_SC,
+          type: "tournament_entry",
+          description: `Costo creazione torneo: ${finalTitle}`,
+        });
+      }
 
       const leaderboardSettings = {
         format: "teams",
@@ -226,7 +267,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           prize_description: prizeDescription.trim(),
           rules: rules.trim(),
           entry_fee_sc: 0,
-          creation_cost_sc: 0,
+          creation_cost_sc: CREATION_COST_SC,
           owner_id: currentUser.id,
           owner_name: userProfile.name,
           leaderboard_settings: leaderboardSettings,
@@ -286,10 +327,13 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
       }
 
       await refreshTournaments();
+      await refreshUserData();
 
       toast({
         title: "Torneo Pubblicato con Successo! 🏆",
-        description: `"${finalTitle}" è ora attivo nella lobby con tabellone e convalida IA.`,
+        description: `"${finalTitle}" è ora attivo nella lobby con tabellone e convalida IA. ${
+          !isUniversalAdmin ? "100 SCoin detratti (rimborsabili se annulli il torneo)." : ""
+        }`,
       });
 
       if (onSuccess) onSuccess();
@@ -680,6 +724,32 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                       className="w-full mt-1 p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg text-center text-xs text-amber-600 font-bold"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Tournament Creation Cost Card */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-purple-950/40 to-cyan-950/20 border border-amber-500/30 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-white block">
+                      Costo Creazione Torneo: {isUniversalAdmin ? "Gratuito (God Mode)" : "100 SCoin"}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 block">
+                      {isUniversalAdmin
+                        ? "Account Universale fedezdesimone@gmail.com con SCoin infiniti"
+                        : "Rimborsato integralmente (100 SCoin) se elimini il torneo"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] text-zinc-400 block">Tuo Saldo</span>
+                  <span className="text-xs font-black text-amber-300">
+                    {isUniversalAdmin ? "∞ SC" : `${sCoinBalance.toLocaleString()} SC`}
+                  </span>
                 </div>
               </div>
             </form>

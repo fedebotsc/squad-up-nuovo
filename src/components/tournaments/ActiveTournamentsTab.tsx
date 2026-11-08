@@ -9,14 +9,27 @@ import {
   Swords,
   Plus,
   Sparkles,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Tournament } from "@/data/mockData";
 import { CreateTournamentModal } from "./CreateTournamentModal";
 
 export const ActiveTournamentsTab: React.FC = () => {
-  const { tournaments, setTournamentSubTab, setSelectedTournament, refreshUserData } = useSquad();
+  const {
+    tournaments,
+    setTournamentSubTab,
+    setSelectedTournament,
+    refreshUserData,
+    currentUser,
+    isUniversalAdmin,
+    deleteTournament,
+  } = useSquad();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [tournamentPendingDelete, setTournamentPendingDelete] = useState<Tournament | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSelectTournament = (tournament: Tournament) => {
     setSelectedTournament(tournament);
@@ -25,6 +38,19 @@ export const ActiveTournamentsTab: React.FC = () => {
       title: "Torneo selezionato",
       description: `Stanza match per: ${tournament.title}`,
     });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!tournamentPendingDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteTournament(tournamentPendingDelete.id);
+      setTournamentPendingDelete(null);
+    } catch (err: any) {
+      console.warn("[ActiveTournamentsTab] Errore cancellazione:", err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -119,16 +145,26 @@ export const ActiveTournamentsTab: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Action Button */}
-                <div className="pt-1">
+                {/* Action Buttons */}
+                <div className="pt-1 flex items-center gap-2">
                   <button
                     onClick={() => handleSelectTournament(tournament)}
-                    className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    className="flex-1 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
                     <Swords className="w-3.5 h-3.5" />
                     <span>Entra nella Stanza Match</span>
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </button>
+
+                  {(isUniversalAdmin || (currentUser?.id && (tournament as any)?.raw?.owner_id === currentUser.id)) && (
+                    <button
+                      onClick={() => setTournamentPendingDelete(tournament)}
+                      title="Elimina Torneo con Rimborso SCoin"
+                      className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 hover:text-white transition-all cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -160,6 +196,65 @@ export const ActiveTournamentsTab: React.FC = () => {
           refreshUserData();
         }}
       />
+
+      {/* Delete Tournament Confirmation Dialog */}
+      {tournamentPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm bg-[#121629] border border-rose-500/50 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h4 className="text-base font-extrabold text-white">
+                Eliminare il torneo?
+              </h4>
+              <p className="text-xs font-semibold text-rose-300">
+                "{tournamentPendingDelete.title}"
+              </p>
+              <div className="text-[11px] text-zinc-300 bg-zinc-950/80 p-3 rounded-xl border border-zinc-800 text-left mt-2 space-y-1.5">
+                <span className="font-bold text-white block">Rimborsi automatici garantiti:</span>
+                <p>• <strong>100 SCoin</strong> rimborsati all'organizzatore per il costo di creazione.</p>
+                {tournamentPendingDelete.entryFeeSCoin > 0 && (
+                  <p>• <strong>{tournamentPendingDelete.entryFeeSCoin} SCoin</strong> rimborsati a ciascun partecipante iscritto.</p>
+                )}
+                <p className="text-[10px] text-zinc-400 italic pt-1">
+                  I match, le classifiche e la chat del torneo verranno cancellati.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setTournamentPendingDelete(null)}
+                className="py-2.5 px-3 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="py-2.5 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminazione...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Conferma & Rimborsa</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
