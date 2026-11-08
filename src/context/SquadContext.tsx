@@ -80,8 +80,8 @@ interface SquadContextType {
   // Auth & Session
   currentUser: User | null;
   isAuthModalOpen: boolean;
-  authModalTab: "login" | "signup";
-  openAuthModal: (tab?: "login" | "signup") => void;
+  authModalTab: "login" | "signup" | "forgot_password" | "reset_password";
+  openAuthModal: (tab?: "login" | "signup" | "forgot_password" | "reset_password") => void;
   closeAuthModal: () => void;
   signOut: () => Promise<void>;
 
@@ -179,7 +179,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Auth Modal State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalTab, setAuthModalTab] = useState<"login" | "signup">("signup");
+  const [authModalTab, setAuthModalTab] = useState<"login" | "signup" | "forgot_password" | "reset_password">("signup");
 
   // Profile & Wallet state - empty by default
   const [sCoinBalance, setSCoinBalance] = useState<number>(0);
@@ -259,7 +259,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
 
-  const openAuthModal = (tab: "login" | "signup" = "signup") => {
+  const openAuthModal = (tab: "login" | "signup" | "forgot_password" | "reset_password" = "signup") => {
     setAuthModalTab(tab);
     setIsAuthModalOpen(true);
   };
@@ -747,6 +747,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshNotificationsCount(session.user.id);
       } else {
         setUnreadNotificationsCount(0);
+      }
+
+      if (_event === "PASSWORD_RECOVERY") {
+        setAuthModalTab("reset_password");
+        setIsAuthModalOpen(true);
       }
     });
 
