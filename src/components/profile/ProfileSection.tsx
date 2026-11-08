@@ -39,7 +39,25 @@ export const ProfileSection: React.FC = () => {
     isUniversalAdmin,
     openAuthModal,
     signOut,
+    followedUserIds,
+    followedClanIds,
   } = useSquad();
+
+  const [followersCount, setFollowersCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("followed_profile_id", currentUser.id)
+      .then(({ count }) => {
+        if (typeof count === "number") {
+          setFollowersCount(count);
+        }
+      })
+      .catch(console.error);
+  }, [currentUser]);
 
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
 
@@ -280,6 +298,21 @@ export const ProfileSection: React.FC = () => {
               </span>
             </div>
           )}
+          {/* Social Follower & Following Row */}
+          <div className="grid grid-cols-3 gap-2 pt-2.5 mt-2.5 border-t border-zinc-800/80 text-center">
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Follower</span>
+              <span className="text-xs font-black text-cyan-300">{followersCount}</span>
+            </div>
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Seguiti</span>
+              <span className="text-xs font-black text-purple-300">{followedUserIds.length}</span>
+            </div>
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Clan Seguiti</span>
+              <span className="text-xs font-black text-amber-300">{followedClanIds.length}</span>
+            </div>
+          </div>
         </div>
       </div>
 
