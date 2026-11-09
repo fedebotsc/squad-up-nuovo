@@ -43,8 +43,10 @@ import { MatchScreenshotOcrModal, TournamentMatchItem } from "./MatchScreenshotO
 import { TournamentRegistrationModal } from "./TournamentRegistrationModal";
 import { TournamentTeamChatView, TeamChatData } from "./TournamentTeamChatView";
 import { LobbyManagementModal } from "./LobbyManagementModal";
+import { SingleEliminationBracketView } from "./SingleEliminationBracketView";
+import { TournamentRegistrationsReview } from "./TournamentRegistrationsReview";
 
-type RoomSubTab = "bracket" | "team_chats" | "lobby_leaderboards";
+type RoomSubTab = "bracket" | "team_chats" | "registrations" | "lobby_leaderboards";
 
 export const MatchRoomTab: React.FC = () => {
   const {
@@ -581,7 +583,7 @@ export const MatchRoomTab: React.FC = () => {
 
         {/* Room View Navigation Sub-Tabs (shown only when user has approved access or is organizer) */}
         {hasAccess && (
-          <div className="grid grid-cols-3 gap-1.5 pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1">
             <button
               onClick={() => {
                 setActiveRoomView("bracket");
@@ -599,6 +601,21 @@ export const MatchRoomTab: React.FC = () => {
 
             <button
               onClick={() => {
+                setActiveRoomView("registrations");
+                setSelectedTeamChat(null);
+              }}
+              className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeRoomView === "registrations"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Revisione Iscrizioni</span>
+            </button>
+
+            <button
+              onClick={() => {
                 setActiveRoomView("team_chats");
               }}
               className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
@@ -607,7 +624,7 @@ export const MatchRoomTab: React.FC = () => {
                   : "bg-zinc-900/80 text-zinc-400 hover:text-white"
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+              <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
               <span>Chat Squadre & KD</span>
               {teamChats.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-black text-[9px] font-black">
@@ -628,7 +645,7 @@ export const MatchRoomTab: React.FC = () => {
               }`}
             >
               <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Classifiche Lobby</span>
+              <span>Classifiche Live</span>
             </button>
           </div>
         )}
@@ -775,6 +792,27 @@ export const MatchRoomTab: React.FC = () => {
         <>
           {/* VIEW 1: BRACKET & MATCHES TAB */}
           {activeRoomView === "bracket" && (
+            <div className="space-y-4">
+              <SingleEliminationBracketView
+                tournament={selectedTournament}
+                isOrganizer={isOrganizer}
+              />
+            </div>
+          )}
+
+          {/* VIEW: TOURNAMENT REGISTRATIONS REVIEW */}
+          {activeRoomView === "registrations" && (
+            <TournamentRegistrationsReview
+              tournament={selectedTournament}
+              isOrganizer={isOrganizer}
+              onUpdate={() => {
+                checkUserRegistration();
+                loadTeamChats();
+              }}
+            />
+          )}
+
+          {false && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">
