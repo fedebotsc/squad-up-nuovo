@@ -77,9 +77,9 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   // Step tracking for Eliminazione Diretta configuration (Steps 1 to 7)
   const [currentStep, setCurrentStep] = useState<number>(1);
 
-  // STEP 1: Nome Torneo & Gioco
+  // STEP 1: Nome Torneo & Categoria
   const [tournamentName, setTournamentName] = useState("");
-  const [gameMode, setGameMode] = useState("Warzone Resurgence");
+  const [gameMode, setGameMode] = useState<"Warzone Battle Royale" | "Warzone Ritorno" | "Multiplayer">("Warzone Battle Royale");
 
   // STEP 2: Data e Ora di inizio
   const [startDate, setStartDate] = useState(() => {
@@ -445,7 +445,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 Crea Nuovo Torneo
               </h3>
               <p className="text-[11px] text-zinc-400">
-                Configurazione rapida e gestione automatizzata con IA Vision
+                Configurazione torneo competitivo ad Eliminazione Diretta
               </p>
             </div>
           </div>
@@ -612,20 +612,16 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-300">
-                  Gioco / Modalità Competitiva
+                  Categoria del Torneo *
                 </label>
                 <select
                   value={gameMode}
-                  onChange={(e) => setGameMode(e.target.value)}
+                  onChange={(e) => setGameMode(e.target.value as any)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-purple-500 text-white text-xs outline-none transition-colors"
                 >
-                  <option value="Warzone Resurgence">Call of Duty: Warzone Resurgence</option>
-                  <option value="Warzone Battle Royale">Call of Duty: Warzone Battle Royale</option>
-                  <option value="Call of Duty CDL 4v4">Call of Duty Modern Warfare III (CDL)</option>
-                  <option value="Apex Legends">Apex Legends Arenas / Trios</option>
-                  <option value="Fortnite Zero Build">Fortnite Zero Build</option>
-                  <option value="EA FC 24 Ultimate Team">EA Sports FC 24</option>
-                  <option value="Rocket League">Rocket League</option>
+                  <option value="Warzone Battle Royale">Warzone Battle Royale</option>
+                  <option value="Warzone Ritorno">Warzone Ritorno</option>
+                  <option value="Multiplayer">Multiplayer</option>
                 </select>
               </div>
 

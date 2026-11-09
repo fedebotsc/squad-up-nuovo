@@ -9,6 +9,7 @@ import {
   Loader2,
   Sparkles,
   ShieldCheck,
+  ShieldAlert,
   Send,
   MessageSquare,
   AlertTriangle,
@@ -74,6 +75,8 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [isVerifyingTeam1, setIsVerifyingTeam1] = useState(false);
   const [team1Analysis, setTeam1Analysis] = useState<PostGameVerificationResult | null>(null);
 
+  const [team1Error, setTeam1Error] = useState<string | null>(null);
+
   // Team 2 uploads
   const [team2PlacementFile, setTeam2PlacementFile] = useState<File | null>(null);
   const [team2KillsFile, setTeam2KillsFile] = useState<File | null>(null);
@@ -81,6 +84,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [team2KillsPreview, setTeam2KillsPreview] = useState<string | null>(null);
   const [isVerifyingTeam2, setIsVerifyingTeam2] = useState(false);
   const [team2Analysis, setTeam2Analysis] = useState<PostGameVerificationResult | null>(null);
+  const [team2Error, setTeam2Error] = useState<string | null>(null);
 
   // Organizer Override state
   const [overrideWinnerTeamId, setOverrideWinnerTeamId] = useState<string>(
@@ -91,7 +95,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [overrideReason, setOverrideReason] = useState("");
   const [isApplyingOverride, setIsApplyingOverride] = useState(false);
 
-  // Analyze team proofs with strict IA Vision
+  // Analyze team proofs with strict IA Vision & Anti-Fake filter
   const handleAnalyzeTeam = async (teamSlot: "team1" | "team2") => {
     const targetTeam = teamSlot === "team1" ? match.team1 : match.team2;
     if (!targetTeam) {
@@ -115,8 +119,13 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
       return;
     }
 
-    if (teamSlot === "team1") setIsVerifyingTeam1(true);
-    else setIsVerifyingTeam2(true);
+    if (teamSlot === "team1") {
+      setIsVerifyingTeam1(true);
+      setTeam1Error(null);
+    } else {
+      setIsVerifyingTeam2(true);
+      setTeam2Error(null);
+    }
 
     try {
       const registeredNames = targetTeam.members.map((m) => m.activisionId);
@@ -131,8 +140,10 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
 
       if (teamSlot === "team1") {
         setTeam1Analysis(result);
+        setTeam1Error(null);
       } else {
         setTeam2Analysis(result);
+        setTeam2Error(null);
       }
 
       toast({
@@ -141,9 +152,36 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
       });
     } catch (err: any) {
       console.warn("[MatchRoom] Errore verifica post-game:", err);
+      const errMsg = err.message || "Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.";
+
+      if (teamSlot === "team1") {
+        setTeam1Analysis(null);
+        setTeam1Error(errMsg);
+      } else {
+        setTeam2Analysis(null);
+        setTeam2Error(errMsg);
+      }
+
+      // Automatically post the rejection alert in match room chat
+      setMatchState((prev) => ({
+        ...prev,
+        chatMessages: [
+          ...prev.chatMessages,
+          {
+            id: `sys_err_${Date.now()}`,
+            senderId: "system",
+            senderName: "SquadUP Arbitro IA",
+            teamName: targetTeam.teamName,
+            text: `❌ ${errMsg}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            isSystem: true,
+          },
+        ],
+      }));
+
       toast({
-        title: "Errore verifica",
-        description: err.message || "Errore durante l'analisi delle prove.",
+        title: "Screenshot Non Valido (Anti-Fake)",
+        description: errMsg,
         variant: "destructive",
       });
     } finally {
@@ -587,6 +625,16 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                     )}
                   </button>
 
+                  {team1Error && (
+                    <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
+                      <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
+                        <p className="leading-snug">{team1Error}</p>
+                      </div>
+                    </div>
+                  )}
+
                   {team1Analysis && (
                     <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">
                       <div className="text-zinc-300 font-bold">
@@ -671,6 +719,16 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                       </>
                     )}
                   </button>
+
+                  {team2Error && (
+                    <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
+                      <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
+                        <p className="leading-snug">{team2Error}</p>
+                      </div>
+                    </div>
+                  )}
 
                   {team2Analysis && (
                     <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">

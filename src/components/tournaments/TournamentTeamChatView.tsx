@@ -234,15 +234,22 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
       }
 
       // Post official AI analysis message in chat
-      const chatMessage = result.approved
-        ? `🎯 Verifica KD APPROVATA dall'Arbitro IA!\n` +
+      let chatMessage = "";
+      if (result.is_authentic_game_screenshot === false) {
+        chatMessage = `❌ Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.\n\n• Esito: ❌ ISCRIZIONE BLOCCATA`;
+      } else if (result.approved) {
+        chatMessage =
+          `🎯 Verifica KD APPROVATA dall'Arbitro IA!\n` +
           `• Voce K/D rilevata: ${result.kd_ratio.toFixed(2)} (${result.confidence}% confidenza)\n` +
           `• Esito: ✅ CONFORME AI LIMITI\n` +
-          `🏆 L'iscrizione della squadra "${chat.team_name}" in ${lobbyName} è APPROVATA e l'accesso al torneo è SBLOCCATO!`
-        : `⚠️ Verifica KD RIFIUTATA dall'Arbitro IA:\n` +
+          `🏆 L'iscrizione della squadra "${chat.team_name}" in ${lobbyName} è APPROVATA e l'accesso al torneo è SBLOCCATO!`;
+      } else {
+        chatMessage =
+          `⚠️ Verifica KD RIFIUTATA dall'Arbitro IA:\n` +
           `• Motivo: ${result.reason}\n` +
           `• Esito: ❌ ISCRIZIONE RIFIUTATA\n\n` +
           `Carica un nuovo screenshot nitido che mostri chiaramente la voce 'K/D' o 'Rapporto Kill/Morte' conforme ai limiti stabiliti per richiedere una nuova revisione.`;
+      }
 
       await supabase.from("tournament_chat_messages").insert({
         chat_id: chat.id,
@@ -384,9 +391,26 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         description: result.summary_message,
       });
     } catch (err: any) {
+      setPostGameAnalysis(null);
+      const errMsg =
+        err?.message ||
+        "Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.";
+
+      // Post rejection notification into the team chat
+      try {
+        await supabase.from("tournament_chat_messages").insert({
+          chat_id: chat.id,
+          sender_id: currentUser?.id,
+          message_type: "system",
+          content: `❌ ${errMsg}`,
+        });
+      } catch (e) {
+        // ignore
+      }
+
       toast({
-        title: "Analisi post-game non riuscita",
-        description: err.message,
+        title: "Screenshot Rifiutato (Anti-Fake)",
+        description: errMsg,
         variant: "destructive",
       });
     } finally {

@@ -10,6 +10,7 @@ import {
   Loader2,
   Sparkles,
   ShieldCheck,
+  ShieldAlert,
   Target,
   ArrowRight,
   Eye,
@@ -210,7 +211,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
       return;
     }
 
-    // Check all members have Activision IDs
+    // Check all members have Activision IDs and screenshots
     for (let i = 0; i < members.length; i++) {
       if (!members[i].activisionId.trim()) {
         setErrorMsg(`Inserisci l'Activision ID per il Giocatore #${i + 1}.`);
@@ -220,14 +221,27 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
         setErrorMsg(`Carica lo screenshot del KD per il Giocatore #${i + 1} (dove sia visibile anche il nome Activision).`);
         return;
       }
+      // Anti-Fake security check
+      if (members[i].result && members[i].result?.is_authentic_game_screenshot === false) {
+        setErrorMsg(
+          `Immagine non valida per Giocatore #${i + 1}: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.`
+        );
+        return;
+      }
     }
 
     // Check if any member failed KD or Activision match
     const failedMember = members.find((m) => m.result && !m.result.approved);
     if (requireKd && failedMember) {
-      setErrorMsg(
-        `Attenzione: Il Giocatore #${failedMember.index + 1} (${failedMember.activisionId}) non ha superato la verifica IA: ${failedMember.result?.reason}`
-      );
+      if (failedMember.result?.is_authentic_game_screenshot === false) {
+        setErrorMsg(
+          `Immagine non valida per Giocatore #${failedMember.index + 1}: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.`
+        );
+      } else {
+        setErrorMsg(
+          `Attenzione: Il Giocatore #${failedMember.index + 1} (${failedMember.activisionId}) non ha superato la verifica IA: ${failedMember.result?.reason}`
+        );
+      }
       return;
     }
 
@@ -509,33 +523,47 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                   {/* IA Vision Verification Card */}
                   {hasResult && member.result && (
                     <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] space-y-1.5 animate-fade-in">
-                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1">
-                        <span className="text-zinc-400">Nome Activision Rilevato:</span>
-                        <div className="flex items-center gap-1.5 font-bold">
-                          <span className="text-white">{member.result.detected_activision_id || member.activisionId}</span>
-                          {member.result.is_activision_match ? (
-                            <span className="text-emerald-400 text-[10px]">✅ Corrisponde</span>
-                          ) : (
-                            <span className="text-rose-400 text-[10px]">❌ Discrepanza</span>
-                          )}
+                      {member.result.is_authentic_game_screenshot === false ? (
+                        <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-500/50 space-y-1">
+                          <div className="flex items-center gap-1.5 text-rose-300 font-bold">
+                            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                            <span>Immagine Rifiutata dall'IA (Anti-Fake)</span>
+                          </div>
+                          <p className="text-[11px] text-rose-200 leading-relaxed">
+                            {member.result.reason}
+                          </p>
                         </div>
-                      </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1">
+                            <span className="text-zinc-400">Nome Activision Rilevato:</span>
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <span className="text-white">{member.result.detected_activision_id || member.activisionId}</span>
+                              {member.result.is_activision_match ? (
+                                <span className="text-emerald-400 text-[10px]">✅ Corrisponde</span>
+                              ) : (
+                                <span className="text-rose-400 text-[10px]">❌ Discrepanza</span>
+                              )}
+                            </div>
+                          </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-400">Rapporto KD Rilevato:</span>
-                        <div className="flex items-center gap-1.5 font-bold">
-                          <span className="text-amber-300 text-xs">{member.result.kd_ratio}</span>
-                          {member.result.approved ? (
-                            <span className="text-emerald-400 text-[10px]">✅ Conforme</span>
-                          ) : (
-                            <span className="text-rose-400 text-[10px]">❌ Fuori Limite</span>
-                          )}
-                        </div>
-                      </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-400">Rapporto KD Rilevato:</span>
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <span className="text-amber-300 text-xs">{member.result.kd_ratio}</span>
+                              {member.result.approved ? (
+                                <span className="text-emerald-400 text-[10px]">✅ Conforme</span>
+                              ) : (
+                                <span className="text-rose-400 text-[10px]">❌ Fuori Limite</span>
+                              )}
+                            </div>
+                          </div>
 
-                      <p className="text-[10px] text-zinc-400 italic pt-1 border-t border-zinc-800/60">
-                        {member.result.reason}
-                      </p>
+                          <p className="text-[10px] text-zinc-400 italic pt-1 border-t border-zinc-800/60">
+                            {member.result.reason}
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

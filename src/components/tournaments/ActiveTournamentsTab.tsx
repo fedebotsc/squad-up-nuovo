@@ -33,6 +33,15 @@ export const ActiveTournamentsTab: React.FC = () => {
   const [tournamentPendingDelete, setTournamentPendingDelete] = useState<Tournament | null>(null);
   const [tournamentForRegistration, setTournamentForRegistration] = useState<Tournament | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("Tutte");
+
+  const filteredTournaments = tournaments.filter((t) => {
+    if (selectedCategory === "Tutte") return true;
+    const raw = (t as any)?.raw || {};
+    const game = ((t.game || raw.game_mode || "") as string).toLowerCase();
+    const cat = selectedCategory.toLowerCase();
+    return game.includes(cat) || cat.includes(game);
+  });
 
   const handleSelectTournament = (tournament: Tournament) => {
     setSelectedTournament(tournament);
@@ -64,24 +73,41 @@ export const ActiveTournamentsTab: React.FC = () => {
           <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
             Tornei Disponibili ({tournaments.length})
           </span>
-          <span className="text-[11px] text-cyan-400 font-medium flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-300" />
-            <span>SquadUP Competitivo • IA & OCR</span>
+          <span className="text-[11px] text-zinc-400 font-medium flex items-center gap-1">
+            <Trophy className="w-3 h-3 text-amber-300" />
+            <span>SquadUP Tornei Competitivi Call of Duty</span>
           </span>
         </div>
 
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-[0_0_15px_rgba(139,92,246,0.35)] transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-[0_0_15px_rgba(139,92,246,0.35)] transition-all cursor-pointer"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-          <span>Crea Torneo con IA</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span>Crea Torneo</span>
         </button>
       </div>
 
-      {tournaments.length > 0 ? (
+      {/* Category Pills: Warzone Battle Royale, Warzone Ritorno, Multiplayer */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {["Tutte", "Warzone Battle Royale", "Warzone Ritorno", "Multiplayer"].map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              selectedCategory === cat
+                ? "bg-purple-600 text-white shadow-md shadow-purple-900/40"
+                : "bg-zinc-900/80 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {filteredTournaments.length > 0 ? (
         <div className="space-y-3">
-          {tournaments.map((tournament) => {
+          {filteredTournaments.map((tournament) => {
             const isLive = tournament.status === "in_corso" || tournament.status === "live";
             const rawTourn = (tournament as any)?.raw || tournament;
             const teamSizeNum = rawTourn.team_size || 3;
