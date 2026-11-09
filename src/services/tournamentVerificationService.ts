@@ -716,3 +716,111 @@ export async function verifyPostGameProofsAndCalculateScore(
     },
   };
 }
+
+export interface CommitPostGameScoreParams {
+  chatId: string;
+  registrationId?: string | null;
+  tournamentId?: string;
+  teamName: string;
+  lobbyId?: string | null;
+  lobbyName?: string;
+  placement: number;
+  kills: number;
+  placementPoints: number;
+  killPoints: number;
+  totalPoints: number;
+  summaryMessage: string;
+  playerBreakdownText?: string;
+  players?: PlayerPostGameStats[];
+  placementUrl?: string;
+  killsUrl?: string;
+  senderId?: string;
+  currentChatTotalPoints?: number;
+}
+
+/**
+ * Commit verified post-game score to database and post official confirmation message
+ */
+export async function commitPostGameScoreToDatabase(params: CommitPostGameScoreParams): Promise<void> {
+  const {
+    chatId,
+    registrationId,
+    tournamentId,
+    teamName,
+    lobbyId,
+    lobbyName,
+    placement,
+    kills,
+    placementPoints,
+    killPoints,
+    totalPoints,
+    summaryMessage,
+    playerBreakdownText,
+    players,
+    placementUrl,
+    killsUrl,
+    senderId,
+    currentChatTotalPoints = 0,
+  } = params;
+
+  // 1. Update tournament_team_chats
+  try {
+    await supabase
+      .from("tournament_team_chats")
+      .update({
+        placement_screenshot_url: placementUrl || null,
+        kills_screenshot_url: killsUrl || null,
+        total_points: (currentChatTotalPoints || 0) + totalPoints,
+        placement: placement,
+        kills: kills,
+        score_submitted_at: new Date().toISOString(),
+      })
+      .eq("id", chatId);
+  } catch (err) {
+    console.warn("[commitPostGameScoreToDatabase] Error updating team chat:", err);
+  }
+
+  // 2. Update tournament_registrations
+  if (registrationId) {
+    try {
+      await supabase
+        .from("tournament_registrations")
+        .update({
+          placement: placement,
+          kills: kills,
+          total_score: totalPoints,
+        })
+        .eq("id", registrationId);
+    } catch (err) {
+      console.warn("[commitPostGameScoreToDatabase] Error updating registration:", err);
+    }
+  }
+
+  // 3. Post official score confirmation in chat
+  try {
+    const formattedContent =
+      `🏆 RISULTATO UFFICIALE REGISTRATO DALL'ARBITRO IA:\n` +
+      `• ${summaryMessage}\n\n` +
+      (playerBreakdownText ? `${playerBreakdownText}\n\n` : "") +
+      `✅ Punti aggiunti alla classifica del torneo.`;
+
+    await supabase.from("tournament_chat_messages").insert({
+      chat_id: chatId,
+      sender_id: senderId,
+      message_type: "score_committed",
+      content: formattedContent,
+      image_url: killsUrl || placementUrl || null,
+      image_type: "post_game_summary",
+      ai_verification_result: {
+        placement,
+        kills,
+        placementPoints,
+        killPoints,
+        totalPoints,
+        players,
+      },
+    });
+  } catch (err) {
+    console.warn("[commitPostGameScoreToDatabase] Error posting chat message:", err);
+  }
+}
