@@ -723,11 +723,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           teamsJoined: Array.isArray(t.teams) ? t.teams.length : (t.teams_joined || 0),
           maxTeams: t.team_limit || t.max_teams || 64,
           startsAt: t.starts_at
-            ? new Date(t.starts_at).toLocaleDateString([], {
+            ? new Date(t.starts_at).toLocaleString("it-IT", {
                 day: "2-digit",
                 month: "short",
                 hour: "2-digit",
                 minute: "2-digit",
+                hour12: false,
               })
             : "A breve",
           mode: t.game_mode || t.mode || "Squads",

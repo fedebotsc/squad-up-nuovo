@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X,
   Trophy,
@@ -47,11 +47,11 @@ export type KdRuleType = "open" | "min_only" | "max_only" | "range";
 export type EntryFeeType = "free" | "paid";
 export type ScoringMode = "fixed" | "multiplier";
 
-interface CoOrganizerSelection {
+export interface CoOrganizerSelection {
   id: string;
   name: string;
-  avatar?: string;
   username?: string;
+  avatar?: string;
 }
 
 export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
@@ -62,11 +62,8 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const {
     currentUser,
     userProfile,
-    sCoinBalance,
-    isUniversalAdmin,
-    openAuthModal,
-    refreshTournaments,
-    refreshUserData,
+    tournaments,
+    setTournaments,
     setSelectedTournament,
     setTournamentSubTab,
   } = useSquad();
@@ -81,13 +78,30 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const [tournamentName, setTournamentName] = useState("");
   const [gameMode, setGameMode] = useState<"Warzone Battle Royale" | "Warzone Ritorno" | "Multiplayer">("Warzone Battle Royale");
 
-  // STEP 2: Data e Ora di inizio
-  const [startDate, setStartDate] = useState(() => {
+  // STEP 2: Data e Ora di inizio (STRICT 24H FORMAT)
+  const [startDateDay, setStartDateDay] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(21, 0, 0, 0);
-    return tomorrow.toISOString().slice(0, 16);
+    return tomorrow.toISOString().slice(0, 10);
   });
+  const [startTimeHour, setStartTimeHour] = useState("21"); // 00 - 23 (24h)
+  const [startTimeMinute, setStartTimeMinute] = useState("00"); // 00 - 55
+
+  const formattedDate24h = useMemo(() => {
+    try {
+      const [y, m, d] = startDateDay.split("-").map(Number);
+      const dateObj = new Date(y, m - 1, d, Number(startTimeHour), Number(startTimeMinute));
+      const dayName = dateObj.toLocaleDateString("it-IT", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+      return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} • Ore ${startTimeHour.padStart(2, "0")}:${startTimeMinute.padStart(2, "0")}`;
+    } catch {
+      return `${startDateDay} ore ${startTimeHour}:${startTimeMinute}`;
+    }
+  }, [startDateDay, startTimeHour, startTimeMinute]);
 
   // STEP 3: Regole KD & Iscrizione & Premi
   const [kdRule, setKdRule] = useState<KdRuleType>("range");
@@ -108,7 +122,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   // STEP 5: Sistema Punteggi
   const [killPoints, setKillPoints] = useState<number>(1);
   const [scoringMode, setScoringMode] = useState<ScoringMode>("fixed");
-  // Placements 1 to 15 (Optional / Partial filling allowed)
   const [placementValues, setPlacementValues] = useState<Record<number, string>>({
     1: "15",
     2: "10",
@@ -119,14 +132,14 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
   // STEP 6: Regole e Locandina
   const [rulesText, setRulesText] = useState(
-    "1. Divieto assoluto di cheat, glitched weapons o comportamenti antisportivi.\n2. Al termine di ogni scontro entrambe le squadre DEVONO caricare gli screenshot di Posizionamento finale e Kill effettive (Colonna UCCISIONI).\n3. La colonna Eliminazioni non è valida perché include assist.\n4. Puntualità: 10 minuti di tolleranza massima prima del forfait."
+    "1. REGOLA UCCISIONI RIGOROSA: L'IA Vision conteggia esclusivamente la colonna 'UCCISIONI' per ciascun membro registrato. Le Eliminazioni (assist) non sono valide.\n2. SCREENSHOT OBBLIGATORI: Al termine del match entrambi i team devono inviare lo screenshot del piazzamento finale e della tabella uccisioni.\n3. TOLLERANZA: 10 minuti di ritardo comportano la vittoria a tavolino dell'avversario.\n4. CONDOTTA: Vietate armi bannate, exploit e comportamenti antisportivi."
   );
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(
     "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80"
   );
 
-  // STEP 7: Co-organizzatori (Max 2)
+  // STEP 7: Co-organizzatori (Max 2, NO FAKE NAMES)
   const [coOrganizers, setCoOrganizers] = useState<CoOrganizerSelection[]>([]);
   const [searchUserQuery, setSearchUserQuery] = useState("");
   const [searchedUsers, setSearchedUsers] = useState<CoOrganizerSelection[]>([]);
@@ -135,25 +148,24 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Search users in app
+  // Search real users in Supabase profiles (no fictitious mock names)
   useEffect(() => {
     if (!searchUserQuery.trim()) {
-      setSearchedUsers([
-        { id: "user_ghost", name: "Ghost_Tactical", username: "ghost_tactical", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" },
-        { id: "user_viper", name: "ViperLeader", username: "viper_lead", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" },
-        { id: "user_apex", name: "ApexOfficial", username: "apex_ref", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=120&q=80" },
-      ]);
+      setSearchedUsers([]);
+      setIsSearchingUsers(false);
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsSearchingUsers(true);
       try {
+        const query = searchUserQuery.trim();
         const { data, error } = await supabase
           .from("profiles")
           .select("id, username, display_name, avatar_url")
-          .or(`username.ilike.%${searchUserQuery.trim()}%,display_name.ilike.%${searchUserQuery.trim()}%`)
-          .limit(6);
+          .neq("id", currentUser?.id || "")
+          .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+          .limit(8);
 
         if (!error && data && data.length > 0) {
           setSearchedUsers(
@@ -165,22 +177,17 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             }))
           );
         } else {
-          // Fallback mock search
-          setSearchedUsers([
-            { id: "u_custom_1", name: searchUserQuery, username: searchUserQuery.toLowerCase().replace(/\s+/g, "_") },
-          ]);
+          setSearchedUsers([]);
         }
       } catch {
-        setSearchedUsers([
-          { id: "u_custom_1", name: searchUserQuery, username: searchUserQuery.toLowerCase().replace(/\s+/g, "_") },
-        ]);
+        setSearchedUsers([]);
       } finally {
         setIsSearchingUsers(false);
       }
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [searchUserQuery]);
+  }, [searchUserQuery, currentUser?.id]);
 
   if (!isOpen) return null;
 
@@ -221,21 +228,23 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
       }
     } else {
       if (preset === "top3") {
-        setPlacementValues({ 1: "2.0", 2: "1.5", 3: "1.25" });
+        setPlacementValues({ 1: "2.0", 2: "1.5", 3: "1.2" });
       } else {
-        setPlacementValues({ 1: "2.0", 2: "1.75", 3: "1.5", 4: "1.3", 5: "1.1" });
+        setPlacementValues({ 1: "2.5", 2: "2.0", 3: "1.7", 4: "1.4", 5: "1.2" });
       }
     }
   };
 
   const handleNextStep = () => {
-    if (currentStep === 1 && !tournamentName.trim()) {
-      toast({
-        title: "Nome richiesto",
-        description: "Inserisci un nome per il torneo prima di proseguire.",
-        variant: "destructive",
-      });
-      return;
+    if (currentStep === 1) {
+      if (!tournamentName.trim()) {
+        toast({
+          title: "Nome Mancante",
+          description: "Inserisci un nome per il torneo prima di proseguire.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     if (currentStep < 7) {
       setCurrentStep((prev) => prev + 1);
@@ -250,34 +259,35 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
   const handleCreateTournament = async () => {
     if (!currentUser) {
-      openAuthModal("signup");
+      toast({
+        title: "Accesso Richiesto",
+        description: "Devi effettuare il login per creare un torneo.",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!tournamentName.trim()) {
       toast({
-        title: "Nome Mancante",
-        description: "Inserisci il nome del torneo.",
+        title: "Nome Richiesto",
+        description: "Inserisci il nome ufficiale del torneo.",
         variant: "destructive",
       });
-      setCurrentStep(1);
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // 1. Upload custom banner if chosen
       let finalBannerUrl = bannerPreview || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80";
       if (bannerFile) {
         try {
           finalBannerUrl = await uploadTournamentProof(bannerFile, "kd");
         } catch (e) {
-          console.warn("[CreateTournament] Fallback banner url:", e);
+          console.warn("[CreateTournament] Upload banner fallback:", e);
         }
       }
 
-      // Convert placements to clean dictionary
       const parsedPlacements: Record<string, number> = {};
       Object.entries(placementValues).forEach(([rank, val]) => {
         const num = parseFloat(val);
@@ -293,9 +303,11 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         ? `Montepremi: ${totalPrizePool.toLocaleString()} SCoin • 1°: ${firstPlacePrize} • 2°: ${secondPlacePrize} • 3°: ${thirdPlacePrize}`
         : "Nessun montepremi in denaro";
 
-      const finalStartsAt = new Date(startDate).toISOString();
+      // 24-hour formatted ISO timestamp
+      const finalStartsAt = new Date(
+        `${startDateDay}T${startTimeHour.padStart(2, "0")}:${startTimeMinute.padStart(2, "0")}:00`
+      ).toISOString();
 
-      // Tournament payload
       const tournamentPayload = {
         name: tournamentName.trim(),
         title: tournamentName.trim(),
@@ -329,7 +341,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
       let createdTournamentId = `tourn_local_${Date.now()}`;
 
-      // Insert into Supabase with safe fallback
       try {
         const { data: inserted, error: insertError } = await supabase
           .from("tournaments")
@@ -342,75 +353,65 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             entry_fee_sc: tournamentPayload.entry_fee_sc,
             prize_description: tournamentPayload.prize_description,
             rules: tournamentPayload.rules,
-            owner_id: currentUser.id,
-            owner_name: tournamentPayload.owner_name,
-            banner_url: finalBannerUrl,
-            require_kd_verification: tournamentPayload.require_kd_verification,
-            min_kd_limit: tournamentPayload.min_kd_limit,
-            max_kd_limit: tournamentPayload.max_kd_limit,
+            banner_url: tournamentPayload.banner_url,
+            owner_id: tournamentPayload.owner_id,
+            status: tournamentPayload.status,
           })
-          .select()
-          .maybeSingle();
+          .select("id")
+          .single();
 
-        if (inserted?.id) {
+        if (!insertError && inserted?.id) {
           createdTournamentId = inserted.id;
         }
       } catch (dbErr) {
-        console.warn("[CreateTournament] Supabase insert fallback to local state:", dbErr);
+        console.warn("[CreateTournament] Database insert fallback:", dbErr);
       }
 
-      // Generate seed bracket & demo sample teams so it's fully playable immediately
-      const sampleTeams = generateSampleTeamsForBracket(createdTournamentId, teamSize);
-      saveRegisteredTeams(createdTournamentId, sampleTeams);
-      initializeBracket(createdTournamentId, bracketSize, sampleTeams);
+      // Initialize single elimination bracket
+      initializeBracket(createdTournamentId, bracketSize, []);
 
-      // Create main match chat if DB allows
-      try {
-        await supabase.from("tournament_match_chats").insert({
-          tournament_id: createdTournamentId,
-          title: `Stanza Torneo: ${tournamentName}`,
-        });
-      } catch {}
-
-      toast({
-        title: "Torneo ad Eliminazione Diretta Creato! 🏆⚔️",
-        description: `"${tournamentName}" è ora attivo. Tabellone a ${bracketSize} squadre configurato con successo.`,
+      // Format startsAt for UI display in strict 24h
+      const formattedStartsAt24h = new Date(finalStartsAt).toLocaleString("it-IT", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
       });
 
-      // Refresh squad context & navigate to match room
-      await refreshTournaments();
-      await refreshUserData();
-
-      setSelectedTournament({
+      const newTournamentUI = {
         id: createdTournamentId,
         title: tournamentPayload.name,
-        game: tournamentPayload.game_mode,
+        game: gameMode,
         category: "Eliminazione Diretta",
         banner: finalBannerUrl,
-        status: "upcoming",
-        prizePoolSCoin: tournamentPayload.prize_pool_scoin,
-        entryFeeSCoin: tournamentPayload.entry_fee_sc,
-        teamsJoined: sampleTeams.length,
+        status: "upcoming" as const,
+        prizePoolSCoin: hasPrizes ? totalPrizePool : 0,
+        entryFeeSCoin: entryType === "paid" ? entryFeeSCoin : 0,
+        teamsJoined: 0,
         maxTeams: bracketSize,
-        startsAt: new Date(finalStartsAt).toLocaleDateString([], {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        mode: teamSize === 1 ? "Solo" : teamSize === 2 ? "Duo" : teamSize === 3 ? "Trio" : "Squad",
+        startsAt: formattedStartsAt24h,
+        mode: `${teamSize === 1 ? "Solo" : teamSize === 2 ? "Duo" : teamSize === 3 ? "Trio" : "Squad"} (${teamSize}p)`,
         description: rulesText,
         raw: {
           ...tournamentPayload,
           id: createdTournamentId,
         },
+      };
+
+      setTournaments([newTournamentUI, ...tournaments]);
+      setSelectedTournament(newTournamentUI);
+      setTournamentSubTab("active");
+
+      toast({
+        title: "Torneo Creato con Successo! 🏆",
+        description: `"${tournamentPayload.name}" è pronto. Inizio: ${formattedStartsAt24h}.`,
       });
 
-      setTournamentSubTab("match_room");
-      onSuccess?.();
+      if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
-      console.error("[CreateTournament Error]:", err);
+      console.error("[CreateTournamentModal] Errore creazione:", err);
       toast({
         title: "Errore durante la creazione",
         description: err.message || "Si è verificato un errore imprevisto.",
@@ -422,29 +423,29 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   };
 
   const stepLabels = [
-    "Nome & Gioco",
-    "Data & Ora",
-    "KD & Iscrizione",
-    "Componenti Team",
-    "Punteggi",
+    "Nome & Categoria",
+    "Data & Orario 24h",
+    "KD, Quota & Premi",
+    "Squadre & Tabellone",
+    "Sistema Punteggio",
     "Regole & Locandina",
     "Co-organizzatori",
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-xl bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl overflow-hidden my-auto">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-fade-in">
+      <div className="relative w-full max-w-xl h-[92vh] max-h-[760px] bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Header Bar (shrink-0) */}
+        <div className="shrink-0 flex items-center justify-between p-3.5 sm:p-4 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-              <Trophy className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
+              <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white tracking-wide">
+              <h3 className="text-sm sm:text-base font-black text-white tracking-wide">
                 Crea Nuovo Torneo
               </h3>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[10px] sm:text-[11px] text-zinc-400">
                 Configurazione torneo competitivo ad Eliminazione Diretta
               </p>
             </div>
@@ -458,40 +459,32 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           </button>
         </div>
 
-        {/* 3 Main Tournament Format Selection */}
-        <div className="p-4 sm:p-5 border-b border-purple-950/60 bg-zinc-950/40">
-          <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider block mb-2.5">
-            Seleziona la Tipologia di Torneo
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            {/* 1: Eliminazione Diretta (Selected & Focused) */}
+        {/* 3 Main Tournament Format Selection (shrink-0 & compact) */}
+        <div className="shrink-0 px-3.5 sm:px-4 py-2 border-b border-purple-950/60 bg-zinc-950/40">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+              Tipologia di Torneo
+            </span>
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+              Eliminazione Diretta Attiva
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {/* 1: Eliminazione Diretta */}
             <button
               type="button"
               onClick={() => setSelectedFormat("single_elimination")}
-              className={`p-3 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
+              className={`p-2 rounded-xl border text-left transition-all ${
                 selectedFormat === "single_elimination"
-                  ? "bg-purple-950/60 border-purple-500 shadow-md shadow-purple-950/60 ring-2 ring-purple-500/30"
-                  : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-zinc-400"
+                  ? "bg-purple-950/70 border-purple-500 shadow-sm ring-1 ring-purple-500/40"
+                  : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700"
               }`}
             >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <Swords className={`w-4 h-4 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
-                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/40">
-                    FOCUS
-                  </span>
-                </div>
-                <h4 className="text-xs font-bold text-white leading-tight">
-                  Eliminazione Diretta
-                </h4>
-                <p className="text-[10px] text-zinc-400 mt-1 leading-snug">
-                  Tabellone a scontri diretti con Quarti, Semi e Finale
-                </p>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Swords className={`w-3.5 h-3.5 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
+                <span className="text-[11px] font-bold text-white truncate">Eliminazione Diretta</span>
               </div>
-              <div className="mt-2 pt-2 border-t border-purple-900/30 flex items-center justify-between text-[10px] font-bold text-purple-300">
-                <span>Tabellone IA</span>
-                <Check className="w-3.5 h-3.5" />
-              </div>
+              <p className="text-[9px] text-zinc-400 truncate">Quarti, Semi e Finale</p>
             </button>
 
             {/* 2: Girone all'Italiana */}
@@ -501,30 +494,20 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 setSelectedFormat("round_robin");
                 toast({
                   title: "Modalità Girone all'Italiana",
-                  description: "Formato disponibile. Clicca su Eliminazione Diretta per visualizzare il flusso completo richiesto.",
+                  description: "Formato disponibile. Clicca su Eliminazione Diretta per visualizzare il tabellone a scontri diretti.",
                 });
               }}
-              className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+              className={`p-2 rounded-xl border text-left transition-all ${
                 selectedFormat === "round_robin"
-                  ? "bg-purple-950/60 border-purple-500 ring-2 ring-purple-500/30"
-                  : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 text-zinc-400"
+                  ? "bg-purple-950/70 border-purple-500 ring-1 ring-purple-500/40"
+                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
               }`}
             >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <Layers className="w-4 h-4 text-cyan-400" />
-                  <span className="text-[9px] font-semibold text-zinc-400">Classifica</span>
-                </div>
-                <h4 className="text-xs font-bold text-white leading-tight">
-                  Girone all'Italiana
-                </h4>
-                <p className="text-[10px] text-zinc-400 mt-1 leading-snug">
-                  Tutti contro tutti con assegnazione punti a incontro
-                </p>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="text-[11px] font-bold text-white truncate">Girone Italiana</span>
               </div>
-              <div className="mt-2 text-[10px] font-semibold text-zinc-500">
-                Gironi A / B
-              </div>
+              <p className="text-[9px] text-zinc-400 truncate">Tutti contro tutti</p>
             </button>
 
             {/* 3: Battle Royale a Punti */}
@@ -534,46 +517,36 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 setSelectedFormat("battle_royale");
                 toast({
                   title: "Modalità Custom BR",
-                  description: "Formato a lobby cumulativa. Clicca su Eliminazione Diretta per la gestione scontro diretto a tabellone.",
+                  description: "Formato cumulativo lobby. Clicca su Eliminazione Diretta per la gestione scontro a tabellone.",
                 });
               }}
-              className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+              className={`p-2 rounded-xl border text-left transition-all ${
                 selectedFormat === "battle_royale"
-                  ? "bg-purple-950/60 border-purple-500 ring-2 ring-purple-500/30"
-                  : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 text-zinc-400"
+                  ? "bg-purple-950/70 border-purple-500 ring-1 ring-purple-500/40"
+                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
               }`}
             >
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <Target className="w-4 h-4 text-amber-400" />
-                  <span className="text-[9px] font-semibold text-zinc-400">Lobby</span>
-                </div>
-                <h4 className="text-xs font-bold text-white leading-tight">
-                  Battle Royale a Punti
-                </h4>
-                <p className="text-[10px] text-zinc-400 mt-1 leading-snug">
-                  Classifica live basata sulla somma piazzamento e kill
-                </p>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Target className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-bold text-white truncate">BR a Punti</span>
               </div>
-              <div className="mt-2 text-[10px] font-semibold text-zinc-500">
-                Punteggio Cumulativo
-              </div>
+              <p className="text-[9px] text-zinc-400 truncate">Classifica cumulata</p>
             </button>
           </div>
         </div>
 
-        {/* Step Progress Bar for Eliminazione Diretta */}
-        <div className="px-4 sm:px-5 pt-3 pb-2 border-b border-purple-950/40 bg-[#0d101d]">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="font-extrabold text-purple-400">
+        {/* Step Progress Bar (shrink-0) */}
+        <div className="shrink-0 px-3.5 sm:px-4 pt-2 pb-1.5 border-b border-purple-950/40 bg-[#0d101d]">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-extrabold text-purple-400 text-[11px]">
               Passaggio {currentStep} di 7
             </span>
-            <span className="font-semibold text-zinc-300">
+            <span className="font-semibold text-zinc-300 text-[11px]">
               {stepLabels[currentStep - 1]}
             </span>
           </div>
 
-          <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden flex">
+          <div className="w-full h-1 rounded-full bg-zinc-800 overflow-hidden flex">
             {[1, 2, 3, 4, 5, 6, 7].map((s) => (
               <div
                 key={s}
@@ -587,14 +560,14 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           </div>
         </div>
 
-        {/* STEP CONTENT BODY */}
-        <div className="p-4 sm:p-5 max-h-[62vh] overflow-y-auto space-y-4">
+        {/* STEP CONTENT BODY (Scrollable area) */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/50">
           {/* STEP 1: Nome Torneo & Modalità Gioco */}
           {currentStep === 1 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
                 <Trophy className="w-4 h-4 text-purple-400" />
-                <span>1. NOME DEL TORNEO & GIOCO</span>
+                <span>1. NOME DEL TORNEO & CATEGORIA COMPETITIVA</span>
               </div>
 
               <div className="space-y-1.5">
@@ -605,7 +578,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                   type="text"
                   value={tournamentName}
                   onChange={(e) => setTournamentName(e.target.value)}
-                  placeholder="Es. SquadUP Eliminator Cup #1 - Rebirth Island"
+                  placeholder="Es. SquadUP Eliminator Cup - Rebirth Island"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-purple-500 text-white text-xs outline-none transition-colors"
                 />
               </div>
@@ -617,7 +590,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <select
                   value={gameMode}
                   onChange={(e) => setGameMode(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-purple-500 text-white text-xs outline-none transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-purple-500 text-white text-xs outline-none transition-colors cursor-pointer"
                 >
                   <option value="Warzone Battle Royale">Warzone Battle Royale</option>
                   <option value="Warzone Ritorno">Warzone Ritorno</option>
@@ -637,66 +610,153 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             </div>
           )}
 
-          {/* STEP 2: Ora di Inizio */}
+          {/* STEP 2: Ora di Inizio (Formato 24h rigoroso) */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
                 <Clock className="w-4 h-4 text-cyan-400" />
-                <span>2. DATA E ORA DI INIZIO SCONTRI</span>
+                <span>2. DATA E ORARIO DI INIZIO SCONTRI (FORMATO 24H)</span>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">
-                  Seleziona Giorno & Orario di Partenza *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500 text-white text-xs outline-none transition-colors"
-                />
+              {/* Live 24h Confirmation Banner */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/70 via-indigo-950/50 to-zinc-900 border border-purple-500/40 flex items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300 shrink-0">
+                    <Clock className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Orario Ufficiale di Partenza (24h)
+                    </span>
+                    <span className="text-xs sm:text-sm font-black text-white truncate block">
+                      {formattedDate24h}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40 shrink-0">
+                  24 ORE
+                </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setHours(d.getHours() + 2);
-                    setStartDate(d.toISOString().slice(0, 16));
-                  }}
-                  className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors"
-                >
-                  Tra 2 ore
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 1);
-                    d.setHours(21, 0, 0, 0);
-                    setStartDate(d.toISOString().slice(0, 16));
-                  }}
-                  className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors"
-                >
-                  Domani alle 21:00
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + (6 - d.getDay() + 7) % 7);
-                    d.setHours(21, 30, 0, 0);
-                    setStartDate(d.toISOString().slice(0, 16));
-                  }}
-                  className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors"
-                >
-                  Weekend Serale
-                </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Date Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Giorno del Torneo *</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={startDateDay}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setStartDateDay(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500 text-white text-xs outline-none transition-colors cursor-pointer"
+                  />
+                </div>
+
+                {/* 24-Hour Time Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Orario di Partenza (24h) *</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <select
+                        value={startTimeHour}
+                        onChange={(e) => setStartTimeHour(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500 text-white text-xs font-mono font-bold outline-none transition-colors cursor-pointer"
+                      >
+                        {Array.from({ length: 24 }).map((_, i) => {
+                          const h = String(i).padStart(2, "0");
+                          return (
+                            <option key={h} value={h}>
+                              Ore {h}:00
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={startTimeMinute}
+                        onChange={(e) => setStartTimeMinute(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500 text-white text-xs font-mono font-bold outline-none transition-colors cursor-pointer"
+                      >
+                        {["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"].map((m) => (
+                          <option key={m} value={m}>
+                            :{m} min
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick preset buttons (All in 24h) */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Scelte Rapide Orario (24h):
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date().toISOString().slice(0, 10);
+                      setStartDateDay(today);
+                      setStartTimeHour("21");
+                      setStartTimeMinute("00");
+                    }}
+                    className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    Stasera 21:00
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + 1);
+                      setStartDateDay(d.toISOString().slice(0, 10));
+                      setStartTimeHour("21");
+                      setStartTimeMinute("00");
+                    }}
+                    className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    Domani 21:00
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setHours(d.getHours() + 2);
+                      setStartDateDay(d.toISOString().slice(0, 10));
+                      setStartTimeHour(String(d.getHours()).padStart(2, "0"));
+                      setStartTimeMinute("00");
+                    }}
+                    className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    Tra 2 ore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      const daysUntilSat = (6 - d.getDay() + 7) % 7 || 7;
+                      d.setDate(d.getDate() + daysUntilSat);
+                      setStartDateDay(d.toISOString().slice(0, 10));
+                      setStartTimeHour("21");
+                      setStartTimeMinute("30");
+                    }}
+                    className="py-2 px-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    Sabato 21:30
+                  </button>
+                </div>
               </div>
 
               <p className="text-[11px] text-zinc-400">
-                All'orario di inizio stabilito, il tabellone verrà bloccato e i match del Round 1 saranno immediatamente disputabili nelle rispettive stanze scontro.
+                All'orario di inizio stabilito (formato 24h), le iscrizioni si chiudono e i match del Round 1 saranno immediatamente disputabili nel tabellone.
               </p>
             </div>
           )}
@@ -714,36 +774,34 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <label className="text-xs font-semibold text-zinc-300 block">
                   Parametri KD (Kills / Deaths) Ammessi
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-4 gap-2">
                   {[
-                    { id: "open", label: "Aperto a tutti", desc: "Nessun limite" },
-                    { id: "min_only", label: "Solo Minimo", desc: "Es. KD >= 1.5" },
-                    { id: "max_only", label: "Solo Massimo", desc: "Es. KD <= 2.0" },
-                    { id: "range", label: "Range Min & Max", desc: "Es. 1.2 - 2.5" },
-                  ].map((opt) => (
+                    { id: "open", label: "Aperto a Tutti", sub: "Nessun limite" },
+                    { id: "range", label: "Fascia KD (Min/Max)", sub: "Es. 1.2 - 2.5" },
+                    { id: "max_only", label: "Solo Tetto Max", sub: "Es. Max 1.8 KD" },
+                    { id: "min_only", label: "Solo Minimo", sub: "Es. Min 2.0 KD" },
+                  ].map((item) => (
                     <button
-                      key={opt.id}
+                      key={item.id}
                       type="button"
-                      onClick={() => setKdRule(opt.id as KdRuleType)}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
-                        kdRule === opt.id
-                          ? "bg-amber-950/60 border-amber-500 text-white"
+                      onClick={() => setKdRule(item.id as KdRuleType)}
+                      className={`p-2.5 rounded-2xl border text-center transition-all ${
+                        kdRule === item.id
+                          ? "bg-purple-950/80 border-purple-500 shadow-sm text-white"
                           : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      <div className="text-xs font-bold truncate">{opt.label}</div>
-                      <div className="text-[10px] text-zinc-400 truncate">{opt.desc}</div>
+                      <div className="text-xs font-bold">{item.label}</div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">{item.sub}</div>
                     </button>
                   ))}
                 </div>
 
                 {kdRule !== "open" && (
-                  <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 grid grid-cols-2 gap-3 mt-2">
-                    {(kdRule === "min_only" || kdRule === "range") && (
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-zinc-400">
-                          KD Minimo Richiesto
-                        </label>
+                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800 animate-fade-in">
+                    {(kdRule === "range" || kdRule === "min_only") && (
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[11px] text-zinc-400 font-medium">KD Minimo:</label>
                         <input
                           type="number"
                           step="0.05"
@@ -751,23 +809,21 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                           max="10"
                           value={minKd}
                           onChange={(e) => setMinKd(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white text-xs outline-none"
+                          className="w-full px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white text-xs font-bold outline-none"
                         />
                       </div>
                     )}
-                    {(kdRule === "max_only" || kdRule === "range") && (
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-zinc-400">
-                          KD Massimo Consentito
-                        </label>
+                    {(kdRule === "range" || kdRule === "max_only") && (
+                      <div className="flex-1 space-y-1">
+                        <label className="text-[11px] text-zinc-400 font-medium">KD Massimo:</label>
                         <input
                           type="number"
                           step="0.05"
-                          min="0.5"
+                          min="0.1"
                           max="10"
                           value={maxKd}
                           onChange={(e) => setMaxKd(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-white text-xs outline-none"
+                          className="w-full px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white text-xs font-bold outline-none"
                         />
                       </div>
                     )}
@@ -775,7 +831,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 )}
               </div>
 
-              {/* Entry Fee (Free vs Paid) */}
+              {/* Entry Fee */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
                 <label className="text-xs font-semibold text-zinc-300 block">
                   Quota di Iscrizione
@@ -784,77 +840,79 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setEntryType("free")}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl border text-center transition-all ${
                       entryType === "free"
-                        ? "bg-emerald-950/60 border-emerald-500 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                        ? "bg-purple-950/80 border-purple-500 shadow-sm text-white"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400"
                     }`}
                   >
-                    <div className="text-xs font-bold text-emerald-400">Iscrizione Gratuita</div>
-                    <div className="text-[10px] text-zinc-400">Nessun costo in SCoin</div>
+                    <div className="text-xs font-bold">Gratuito (Free Entry)</div>
+                    <div className="text-[10px] text-zinc-500">Accesso aperto a tutti</div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setEntryType("paid")}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                    className={`py-2.5 px-3 rounded-2xl border text-center transition-all ${
                       entryType === "paid"
-                        ? "bg-purple-950/60 border-purple-500 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                        ? "bg-purple-950/80 border-purple-500 shadow-sm text-white"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400"
                     }`}
                   >
-                    <div className="text-xs font-bold text-purple-300">A Pagamento (SCoin)</div>
-                    <div className="text-[10px] text-zinc-400">Buy-in per squadra</div>
+                    <div className="text-xs font-bold flex items-center justify-center gap-1">
+                      <Coins className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Quota in SquadCoin</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500">Trattenuta all'iscrizione</div>
                   </button>
                 </div>
 
                 {entryType === "paid" && (
-                  <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-3 mt-2">
-                    <span className="text-xs text-zinc-300 font-medium">
-                      Quota iscrizione per team:
-                    </span>
+                  <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3 animate-fade-in">
+                    <span className="text-xs text-zinc-300 font-medium">Costo Iscrizione per Team:</span>
                     <div className="flex items-center gap-1.5">
-                      <Coins className="w-4 h-4 text-amber-400" />
                       <input
                         type="number"
                         min="10"
                         step="50"
                         value={entryFeeSCoin}
                         onChange={(e) => setEntryFeeSCoin(parseInt(e.target.value) || 0)}
-                        className="w-24 px-2 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-white text-xs text-right font-bold outline-none"
+                        className="w-24 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white text-xs font-bold text-right outline-none"
                       />
-                      <span className="text-xs font-bold text-amber-300">SC</span>
+                      <span className="text-xs font-bold text-amber-300">SCoin</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Final Prizes */}
+              {/* Prizes */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-                    <Gift className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Premi per le Posizioni Finali</span>
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Montepremi & Ricompense
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400">
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={hasPrizes}
                       onChange={(e) => setHasPrizes(e.target.checked)}
-                      className="rounded accent-purple-500 w-4 h-4"
+                      className="rounded accent-purple-600"
                     />
-                    <span>Abilita Premi</span>
+                    <span>Abilita Montepremi</span>
                   </label>
                 </div>
 
                 {hasPrizes && (
-                  <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-2.5">
+                  <div className="p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-2.5 animate-fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-400">Montepremi Totale:</span>
+                      <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                        <Gift className="w-3.5 h-3.5" />
+                        <span>Montepremi Totale SCoin:</span>
+                      </span>
                       <div className="flex items-center gap-1.5">
-                        <Coins className="w-3.5 h-3.5 text-amber-400" />
                         <input
                           type="number"
+                          step="100"
                           value={totalPrizePool}
                           onChange={(e) => setTotalPrizePool(parseInt(e.target.value) || 0)}
                           className="w-28 px-2 py-1 rounded-xl bg-zinc-950 border border-zinc-700 text-white text-xs font-bold text-right outline-none"
@@ -950,22 +1008,15 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                       onClick={() => setBracketSize(bracket.total as any)}
                       className={`p-3 rounded-2xl border text-left transition-all ${
                         bracketSize === bracket.total
-                          ? "bg-cyan-950/70 border-cyan-500 shadow-md ring-2 ring-cyan-500/30 text-white"
+                          ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/30 text-white"
                           : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
-                      <div className="text-xs font-black text-cyan-300">{bracket.label}</div>
-                      <div className="text-[10px] text-zinc-400 mt-0.5">{bracket.rounds}</div>
+                      <div className="text-xs font-bold text-white">{bracket.label}</div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">{bracket.rounds}</div>
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 space-y-1">
-                <span className="font-bold text-white">Riepilogo Squadre:</span>
-                <p className="text-[11px] text-zinc-400">
-                  Ogni capitano iscriverà <strong className="text-purple-300">{teamSize} {teamSize === 1 ? "giocatore" : "giocatori"}</strong> con i rispettivi Activision ID e screenshot del KD. Il tabellone accoglierà <strong className="text-cyan-300">{bracketSize} squadre</strong> per un totale di {teamSize * bracketSize} concorrenti.
-                </p>
               </div>
             </div>
           )}
@@ -974,129 +1025,98 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           {currentStep === 5 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
-                <Sliders className="w-4 h-4 text-emerald-400" />
-                <span>5. SISTEMA PUNTEGGI & METODO POSIZIONAMENTO</span>
+                <Sliders className="w-4 h-4 text-cyan-400" />
+                <span>5. SISTEMA ASSEGNAZIONE PUNTEGGI (POSIZIONI 1 A 15)</span>
               </div>
 
-              {/* Points per Kill */}
-              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-bold text-white">Punti per ogni Kill</div>
-                  <div className="text-[10px] text-zinc-400">
-                    Solo colonna UCCISIONI effettive (escluse eliminazioni con assist)
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScoringMode("fixed")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    scoringMode === "fixed"
+                      ? "bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/30 text-white"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  <div className="text-xs font-bold">Punti Fissi per Piazzamento</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Es. 1° = 15pt, 2° = 10pt</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setScoringMode("multiplier")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    scoringMode === "multiplier"
+                      ? "bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/30 text-white"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  <div className="text-xs font-bold">Moltiplicatore Uccisioni</div>
+                  <div className="text-[10px] text-zinc-500 mt-0.5">Es. 1° = x2.0 alle kill, 2° = x1.75</div>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-zinc-300">Punti Base per Singola Kill:</span>
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min="0.5"
                     step="0.5"
                     value={killPoints}
                     onChange={(e) => setKillPoints(parseFloat(e.target.value) || 1)}
-                    className="w-16 px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-700 text-white text-xs font-bold text-center outline-none"
+                    className="w-20 px-2 py-1 rounded-xl bg-zinc-900 border border-zinc-700 text-white text-xs font-bold text-right outline-none"
                   />
-                  <span className="text-xs font-bold text-emerald-400">pt / kill</span>
+                  <span className="text-xs font-bold text-cyan-400">pt / kill</span>
                 </div>
               </div>
 
-              {/* Mode: Fixed Points vs Multiplier */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-300 block">
-                  Modalità Assegnazione Punti Piazzamento
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScoringMode("fixed");
-                      setPlacementValues({ 1: "15", 2: "10", 3: "7", 4: "5", 5: "3" });
-                    }}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
-                      scoringMode === "fixed"
-                        ? "bg-purple-950/80 border-purple-500 ring-2 ring-purple-500/30 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-purple-300">Punti Fissi</div>
-                    <div className="text-[10px] text-zinc-400 mt-0.5">
-                      Sommati alle kill (es. 1°: +15 pt, 2°: +10 pt)
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScoringMode("multiplier");
-                      setPlacementValues({ 1: "2.0", 2: "1.75", 3: "1.5", 4: "1.25", 5: "1.1" });
-                    }}
-                    className={`p-3 rounded-2xl border text-left transition-all ${
-                      scoringMode === "multiplier"
-                        ? "bg-cyan-950/80 border-cyan-500 ring-2 ring-cyan-500/30 text-white"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-cyan-300">Moltiplicatore Posizione</div>
-                    <div className="text-[10px] text-zinc-400 mt-0.5">
-                      Moltiplica le kill (es. 1°: x2.0, 2°: x1.75)
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Placements 1 to 15 (Partial configuration allowed!) */}
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1 border-t border-zinc-800">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-300 block">
-                      Valori Posizioni dal 1° al 15° Posto (Facoltativi)
-                    </label>
-                    <span className="text-[10px] text-zinc-400">
-                      Compila anche solo un sottoinsieme (es. le prime 3 o 5 posizioni)
-                    </span>
-                  </div>
+                  <label className="text-xs font-semibold text-zinc-300">
+                    {scoringMode === "fixed" ? "Tabella Punti Piazzamento (1 a 15)" : "Tabella Moltiplicatori (1 a 15)"}
+                  </label>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => handleApplyPreset("top3")}
-                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold text-zinc-200"
+                      className="text-[10px] text-purple-400 hover:underline px-1.5 py-0.5 rounded bg-purple-950/40"
                     >
                       Top 3
                     </button>
                     <button
                       type="button"
                       onClick={() => handleApplyPreset("top5")}
-                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold text-zinc-200"
+                      className="text-[10px] text-purple-400 hover:underline px-1.5 py-0.5 rounded bg-purple-950/40"
                     >
                       Top 5
                     </button>
                     <button
                       type="button"
                       onClick={() => handleApplyPreset("clear")}
-                      className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold text-rose-300"
+                      className="text-[10px] text-zinc-400 hover:underline px-1.5 py-0.5 rounded bg-zinc-800"
                     >
                       Azzera
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800">
-                  {Array.from({ length: 15 }, (_, i) => i + 1).map((rank) => (
-                    <div key={rank} className="space-y-1">
-                      <span className="text-[10px] font-semibold text-zinc-400 block text-center">
-                        {rank}° Posto
-                      </span>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-44 overflow-y-auto p-1">
+                  {Array.from({ length: 15 }, (_, i) => i + 1).map((pos) => (
+                    <div
+                      key={pos}
+                      className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-center space-y-1"
+                    >
+                      <span className="text-[10px] font-bold text-zinc-400 block">{pos}° Posto</span>
                       <input
                         type="text"
-                        placeholder={scoringMode === "fixed" ? "0 pt" : "x1.0"}
-                        value={placementValues[rank] || ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setPlacementValues((prev) => ({
-                            ...prev,
-                            [rank]: v,
-                          }));
-                        }}
-                        className="w-full py-1.5 px-2 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-purple-500 text-white text-xs font-bold text-center outline-none"
+                        value={placementValues[pos] || ""}
+                        onChange={(e) =>
+                          setPlacementValues((prev) => ({ ...prev, [pos]: e.target.value }))
+                        }
+                        placeholder={scoringMode === "fixed" ? "pt" : "x"}
+                        className="w-full text-center px-1 py-1 rounded bg-zinc-950 border border-zinc-700 text-white text-xs font-mono font-bold outline-none"
                       />
                     </div>
                   ))}
@@ -1113,7 +1133,6 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <span>6. REGOLAMENTO SCRITTO A MANO & LOCANDINA</span>
               </div>
 
-              {/* Rules text */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-zinc-300">
@@ -1123,12 +1142,12 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                     type="button"
                     onClick={() => {
                       setRulesText(
-                        "1. REGOLA UCCISIONI RIGOROSA: L'IA Vision conteggia esclusivamente la colonna 'UCCISIONI' per ciascun membro registrato. Le Eliminazioni (assist) non sono valide.\n2. SCREENSHOT OBBLIGATORI: Al termine del match entrambi i team devono inviare lo screenshot del piazzamento finale e del tabellone di squadra.\n3. TOLLERANZA: 10 minuti di ritardo comportano la vittoria a tavolino dell'avversario.\n4. ANTI-CHEAT & CONDOTTA: Vietate armi bannate, exploit e comportamenti antisportivi."
+                        "1. REGOLA UCCISIONI RIGOROSA: L'IA Vision conteggia esclusivamente la colonna 'UCCISIONI' per ciascun membro registrato. Le Eliminazioni (assist) non sono valide.\n2. SCREENSHOT OBBLIGATORI: Al termine del match entrambi i team devono inviare lo screenshot del piazzamento finale e della tabella uccisioni.\n3. TOLLERANZA: 10 minuti di ritardo comportano la vittoria a tavolino dell'avversario.\n4. CONDOTTA: Vietate armi bannate, exploit e comportamenti antisportivi."
                       );
                     }}
                     className="text-[10px] font-bold text-purple-400 hover:underline"
                   >
-                    Template Esport Standard
+                    Template Standard
                   </button>
                 </div>
                 <textarea
@@ -1140,20 +1159,19 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 />
               </div>
 
-              {/* Banner poster upload */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
                 <label className="text-xs font-semibold text-zinc-300 block">
-                  Foto / Locandina Ufficiale (Anteprima Visiva Scheda Torneo)
+                  Foto / Locandina Ufficiale (Anteprima Visiva)
                 </label>
 
                 {bannerPreview && (
-                  <div className="relative w-full h-32 rounded-2xl overflow-hidden border border-purple-500/40 group">
+                  <div className="relative w-full h-28 rounded-2xl overflow-hidden border border-purple-500/40">
                     <img
                       src={bannerPreview}
                       alt="Anteprima Locandina"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-3">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2.5">
                       <span className="text-[11px] font-bold text-white drop-shadow">
                         {tournamentName || "Anteprima Locandina Torneo"}
                       </span>
@@ -1180,7 +1198,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                         "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80"
                       )
                     }
-                    className="py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs font-semibold"
+                    className="py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 text-xs font-semibold cursor-pointer"
                   >
                     Preset Esport
                   </button>
@@ -1189,22 +1207,22 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             </div>
           )}
 
-          {/* STEP 7: Co-organizzatori */}
+          {/* STEP 7: Co-organizzatori (NO FAKE NAMES) */}
           {currentStep === 7 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
                 <Shield className="w-4 h-4 text-cyan-400" />
-                <span>7. CO-ORGANIZZATORI (MAX 2 UTENTI CON PERMESSI DI GESTIONE)</span>
+                <span>7. CO-ORGANIZZATORI (MAX 2 UTENTI REALI CON PERMESSI)</span>
               </div>
 
               <p className="text-xs text-zinc-400 leading-relaxed">
-                I co-organizzatori selezionati avranno automaticamente i permessi per revisionare le iscrizioni, convalidare screenshot, gestire le stanze match e applicare override arbitrali.
+                I co-organizzatori assegnati avranno automaticamente i permessi per revisionare le iscrizioni, convalidare screenshot e gestire le stanze match.
               </p>
 
               {/* Selected Co-organizers Badges */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-300">
-                  Co-organizzatori Selezionati ({coOrganizers.length}/2):
+                  Co-organizzatori Assegnati ({coOrganizers.length}/2):
                 </label>
                 {coOrganizers.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
@@ -1218,7 +1236,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleSelectCoOrganizer(co)}
-                          className="hover:text-rose-400 p-0.5"
+                          className="hover:text-rose-400 p-0.5 cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1235,7 +1253,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               {/* Search User Input */}
               <div className="space-y-2 pt-2 border-t border-zinc-800">
                 <label className="text-xs font-semibold text-zinc-300 block">
-                  Cerca Utente nell'App per Nome o Username:
+                  Cerca Utente Reale per Username o Activision ID:
                 </label>
                 <div className="relative">
                   <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
@@ -1243,7 +1261,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                     type="text"
                     value={searchUserQuery}
                     onChange={(e) => setSearchUserQuery(e.target.value)}
-                    placeholder="Es. ghost_tactical, Viper..."
+                    placeholder="Digita username o tag Activision..."
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500 text-white text-xs outline-none"
                   />
                   {isSearchingUsers && (
@@ -1251,67 +1269,94 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                   )}
                 </div>
 
-                {/* Search Results */}
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                  {searchedUsers.map((user) => {
-                    const isSelected = coOrganizers.some((c) => c.id === user.id);
-                    return (
-                      <div
-                        key={user.id}
-                        onClick={() => handleSelectCoOrganizer(user)}
-                        className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-purple-950/70 border-purple-500 text-white"
-                            : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-zinc-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {user.avatar ? (
-                            <img
-                              src={user.avatar}
-                              alt={user.name}
-                              className="w-7 h-7 rounded-full object-cover shrink-0"
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-purple-400 shrink-0">
-                              {user.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <div className="min-w-0 truncate">
-                            <span className="text-xs font-bold truncate block">{user.name}</span>
-                            {user.username && (
-                              <span className="text-[10px] text-zinc-500 truncate block">
-                                @{user.username}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                {/* Search Results or direct add */}
+                {!searchUserQuery.trim() ? (
+                  <p className="text-[11px] text-zinc-500 text-center py-2">
+                    Inizia a digitare l'username per cercare tra gli utenti registrati.
+                  </p>
+                ) : searchedUsers.length > 0 ? (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {searchedUsers.map((user) => {
+                      const isSelected = coOrganizers.some((c) => c.id === user.id);
+                      return (
+                        <div
+                          key={user.id}
+                          onClick={() => handleSelectCoOrganizer(user)}
+                          className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
                             isSelected
-                              ? "bg-purple-500 text-white"
-                              : "bg-zinc-800 text-zinc-400"
+                              ? "bg-purple-950/70 border-purple-500 text-white"
+                              : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-zinc-300"
                           }`}
                         >
-                          {isSelected ? "Selezionato" : "Aggiungi"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {user.avatar ? (
+                              <img
+                                src={user.avatar}
+                                alt={user.name}
+                                className="w-7 h-7 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-purple-400 shrink-0">
+                                {user.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0 truncate">
+                              <span className="text-xs font-bold truncate block">{user.name}</span>
+                              {user.username && (
+                                <span className="text-[10px] text-zinc-500 truncate block">
+                                  @{user.username}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isSelected
+                                ? "bg-purple-500 text-white"
+                                : "bg-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {isSelected ? "Selezionato" : "Aggiungi"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : !isSearchingUsers ? (
+                  <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 text-center space-y-2 animate-fade-in">
+                    <p className="text-xs text-zinc-400">
+                      Nessun account trovato con "{searchUserQuery}"
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const clean = searchUserQuery.trim();
+                        handleSelectCoOrganizer({
+                          id: `user_tag_${clean.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+                          name: clean,
+                          username: clean.toLowerCase().replace(/\s+/g, "_"),
+                        });
+                        setSearchUserQuery("");
+                      }}
+                      className="py-1.5 px-3 rounded-xl bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      + Aggiungi "{searchUserQuery}" come Co-organizzatore
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer Navigation Buttons */}
-        <div className="p-4 sm:p-5 border-t border-purple-950/80 bg-[#0d101d] flex items-center justify-between gap-3">
+        {/* Footer Navigation Buttons (Always visible & pinned with shrink-0) */}
+        <div className="shrink-0 p-3 sm:p-4 border-t border-purple-950/80 bg-[#0d101d] flex items-center justify-between gap-3 shadow-2xl z-20">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={handlePrevStep}
-              className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Indietro</span>
@@ -1324,7 +1369,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-lg shadow-purple-900/30 transition-all cursor-pointer"
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-lg shadow-purple-900/30 transition-all cursor-pointer"
             >
               <span>Continua</span>
               <ChevronRight className="w-4 h-4" />
@@ -1334,17 +1379,17 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               type="button"
               disabled={isSubmitting}
               onClick={handleCreateTournament}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all cursor-pointer disabled:opacity-50"
+              className="px-6 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Configurazione Torneo...</span>
+                  <span>Creazione Torneo...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>Pubblica e Avvia Torneo</span>
+                  <Trophy className="w-4 h-4 text-amber-300" />
+                  <span>Crea Torneo</span>
                 </>
               )}
             </button>
