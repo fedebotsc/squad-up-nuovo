@@ -83,12 +83,37 @@ export const ActiveTournamentsTab: React.FC = () => {
         <div className="space-y-3">
           {tournaments.map((tournament) => {
             const isLive = tournament.status === "in_corso" || tournament.status === "live";
+            const rawTourn = (tournament as any)?.raw || tournament;
+            const teamSizeNum = rawTourn.team_size || 3;
+            const teamSizeLabel = teamSizeNum === 1 ? "Solo (1v1)" : teamSizeNum === 2 ? "Duo (2p)" : teamSizeNum === 3 ? "Trio (3p)" : "Squad (4p)";
+            const bannerUrl = tournament.banner || rawTourn.banner_url;
+            const coOrganizerNames = rawTourn.co_organizer_names;
 
             return (
               <div
                 key={tournament.id}
-                className="bg-[#121628]/90 border border-purple-900/30 hover:border-purple-600/50 rounded-2xl p-4 space-y-3 transition-all shadow-md"
+                className="bg-[#121628]/90 border border-purple-900/30 hover:border-purple-600/50 rounded-2xl overflow-hidden space-y-3 transition-all shadow-md"
               >
+                {bannerUrl && (
+                  <div className="relative w-full h-28 overflow-hidden border-b border-purple-900/40">
+                    <img
+                      src={bannerUrl}
+                      alt={tournament.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#121628] via-transparent to-black/40" />
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/60 text-purple-200 uppercase">
+                        Eliminazione Diretta
+                      </span>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-cyan-300 border border-cyan-500/40">
+                        {teamSizeLabel}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-4 pt-1 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -104,6 +129,12 @@ export const ActiveTournamentsTab: React.FC = () => {
                       >
                         {isLive ? "In Corso" : "Aperto"}
                       </span>
+
+                      {!bannerUrl && (
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/40 text-purple-200 uppercase">
+                          Eliminazione Diretta
+                        </span>
+                      )}
 
                       {Boolean((tournament as any)?.raw?.double_lobby_enabled) && (
                         <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 uppercase flex items-center gap-1">
@@ -139,6 +170,13 @@ export const ActiveTournamentsTab: React.FC = () => {
                   <p className="text-xs text-zinc-300 leading-relaxed break-words">
                     {tournament.description}
                   </p>
+                )}
+
+                {Array.isArray(coOrganizerNames) && coOrganizerNames.length > 0 && (
+                  <div className="text-[10px] text-zinc-400 flex items-center gap-1">
+                    <span className="font-semibold text-cyan-400">Co-organizzatori:</span>
+                    <span>{coOrganizerNames.join(", ")}</span>
+                  </div>
                 )}
 
                 {/* Tournament Meta Info */}
@@ -191,6 +229,7 @@ export const ActiveTournamentsTab: React.FC = () => {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
+                </div>
                 </div>
               </div>
             );

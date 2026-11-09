@@ -813,7 +813,7 @@ export const MatchRoomTab: React.FC = () => {
           )}
 
           {false && (
-        <div className="space-y-3">
+            <div style={{ display: "none" }}>
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">
               <Swords className="w-4 h-4 text-purple-400" />

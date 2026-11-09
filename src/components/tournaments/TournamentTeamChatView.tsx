@@ -363,9 +363,9 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     setIsAnalyzingPostGame(true);
 
     try {
-      const scoringSettings = rawTourn.leaderboard_settings || {
+      const scoringSettings = rawTourn.scoring_settings || rawTourn.leaderboard_settings || {
         kill_points: 1,
-        placement_points: { "1": 10, "2": 7, "3": 5, "4": 4, "5": 3, top10: 1 },
+        placement_points: { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3, top10: 1 },
       };
 
       const result = await verifyPostGameProofsAndCalculateScore(

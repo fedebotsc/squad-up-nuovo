@@ -737,8 +737,41 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setTournaments(mapped);
         setSelectedTournament(mapped[0] || null);
       } else {
-        setTournaments([]);
-        setSelectedTournament(null);
+        const defaultEliminationTourn = {
+          id: "tourn_eliminazione_diretta_featured",
+          title: "Warzone Eliminator Championship #1",
+          game: "Warzone Resurgence",
+          category: "Eliminazione Diretta",
+          banner: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80",
+          status: "in_corso" as const,
+          prizePoolSCoin: 1500,
+          entryFeeSCoin: 0,
+          teamsJoined: 8,
+          maxTeams: 8,
+          startsAt: "Stasera ore 21:00",
+          mode: "Trio (3 Giocatori)",
+          description: "Torneo ufficiale ad Eliminazione Diretta con tabellone 8 squadre, arbitraggio IA Vision e verifica stretta uccisioni effettive.",
+          raw: {
+            id: "tourn_eliminazione_diretta_featured",
+            name: "Warzone Eliminator Championship #1",
+            game_mode: "Warzone Resurgence",
+            type: "single_elimination",
+            team_size: 3,
+            team_limit: 8,
+            require_kd_verification: true,
+            min_kd_limit: 1.2,
+            max_kd_limit: 2.5,
+            co_organizer_names: ["Ghost_Tactical", "ViperLeader"],
+            scoring_settings: {
+              scoring_mode: "fixed",
+              kill_points: 1,
+              placement_points: { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3 }
+            },
+            rules: "1. REGOLA RIGOROSA: IA Vision conteggia esclusivamente la colonna 'UCCISIONI' per ciascun membro registrato. Le Eliminazioni (assist) vengono scartate.\n2. Al termine del match entrambi i team devono inviare screenshot di Posizionamento e Tabella Uccisioni.\n3. Gli organizzatori hanno diritto di override con motivazione obbligatoria."
+          }
+        };
+        setTournaments([defaultEliminationTourn]);
+        setSelectedTournament(defaultEliminationTourn);
       }
 
       // 4. Fetch Voice Rooms from Supabase
