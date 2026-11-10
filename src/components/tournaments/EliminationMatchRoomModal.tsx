@@ -179,8 +179,14 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
         ],
       }));
 
+      const isKdMismatch =
+        errMsg.toLowerCase().includes("profilo") ||
+        errMsg.toLowerCase().includes("statistiche kd");
+
       toast({
-        title: "Screenshot Non Valido (Anti-Fake)",
+        title: isKdMismatch
+          ? "Schermata Errata (Serve Risultato Match)"
+          : "Screenshot Non Valido (Anti-Fake)",
         description: errMsg,
         variant: "destructive",
       });

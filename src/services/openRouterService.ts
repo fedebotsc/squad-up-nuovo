@@ -509,10 +509,21 @@ export async function analyzeMatchScreenshotWithAI(params: {
       const systemPrompt = `Sei l'arbitro IA ufficiale e analista OCR di SquadUP.
 Analizza con estrema attenzione lo screenshot fornito (schermata finale di vittoria/sconfitta, tabellone dei punteggi, statistiche post-partita di Warzone, Call of Duty, FIFA/EA FC, Rocket League, ecc.).
 
-Obiettivo:
+CONTROLLO VINCOLANTE SUL TIPO DI SCHERMATA:
+L'IA attende la schermata dei Risultati di fine partita (tabellone post-partita, scoreboard o riepilogo match).
+L'IA non deve tentare di indovinare o calcolare dati che non sono visibili nell'immagine.
+Se l'utente invia la foto del proprio profilo KD / statistiche generali di carriera:
+Rispondi con:
+{
+  "screen_type": "profile_kd",
+  "error": "Errore: Hai caricato una schermata del profilo/statistiche KD. Per registrare il punteggio del match è richiesto lo screenshot del risultato di fine partita (con la colonna UCCISIONI e la posizione finale della squadra)."
+}
+
+Se invece è una schermata dei Risultati di fine partita:
+In questa fase cerca unicamente la colonna "UCCISIONI" e la posizione finale della squadra.
 Identifica con precisione assoluta:
-1. Punteggio Giocatore/Squadra 1 (score_player1: es. gol fatti, round vinti, o totale kill)
-2. Punteggio Giocatore/Squadra 2 (score_player2: es. gol fatti, round vinti, o totale kill)
+1. Punteggio Giocatore/Squadra 1 (score_player1: es. gol fatti, round vinti, o totale kill dalla colonna UCCISIONI)
+2. Punteggio Giocatore/Squadra 2 (score_player2: es. gol fatti, round vinti, o totale kill dalla colonna UCCISIONI)
 3. Vincitore tra i due ("player1", "player2", o "draw")
 4. Eventuali dettagli specifici estratti dallo schermo: kill, danno, posizionamento, gol.
 5. Livello di confidenza (da 0 a 100)
@@ -558,7 +569,11 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido:
       ];
 
       const rawJson = await callOpenRouter(messages, apiKey, PRIMARY_MODEL, true);
-      const parsed = cleanAndParseJson<MatchScreenshotAnalysis>(rawJson);
+      const parsed = cleanAndParseJson<MatchScreenshotAnalysis & { screen_type?: string; error?: string }>(rawJson);
+
+      if (parsed.screen_type === "profile_kd" || parsed.error?.includes("profilo")) {
+        throw new Error(parsed.error || "Errore: Hai caricato una schermata del profilo/statistiche KD. Per registrare il punteggio del match è richiesto lo screenshot del risultato di fine partita (con la colonna UCCISIONI e la posizione finale della squadra).");
+      }
 
       parsed.score_player1 = typeof parsed.score_player1 === "number" ? Math.round(parsed.score_player1) : 0;
       parsed.score_player2 = typeof parsed.score_player2 === "number" ? Math.round(parsed.score_player2) : 0;

@@ -27,6 +27,7 @@ import {
   uploadTournamentProof,
   verifyMemberKdScreenshotWithAI,
   KDVerificationResult,
+  ERROR_POST_GAME_UPLOADED_FOR_KD,
 } from "@/services/tournamentVerificationService";
 import {
   RegisteredTeam,
@@ -145,7 +146,10 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
 
       if (!analysis.approved) {
         toast({
-          title: `Verifica IA Membro #${idx + 1}`,
+          title:
+            analysis.reason === ERROR_POST_GAME_UPLOADED_FOR_KD
+              ? "Schermata Errata (Fine Partita)"
+              : `Verifica IA Membro #${idx + 1} Rifiutata`,
           description: analysis.reason,
           variant: "destructive",
         });
@@ -523,13 +527,19 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                   {/* IA Vision Verification Card */}
                   {hasResult && member.result && (
                     <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] space-y-1.5 animate-fade-in">
-                      {member.result.is_authentic_game_screenshot === false ? (
-                        <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-500/50 space-y-1">
+                      {!member.result.approved ? (
+                        <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/50 space-y-1">
                           <div className="flex items-center gap-1.5 text-rose-300 font-bold">
                             <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-                            <span>Immagine Rifiutata dall'IA (Anti-Fake)</span>
+                            <span>
+                              {member.result.reason === ERROR_POST_GAME_UPLOADED_FOR_KD
+                                ? "Schermata Fine Partita Rifiutata"
+                                : member.result.is_authentic_game_screenshot === false
+                                ? "Immagine Non Valida (Anti-Fake)"
+                                : "Verifica Statistiche Non Superata"}
+                            </span>
                           </div>
-                          <p className="text-[11px] text-rose-200 leading-relaxed">
+                          <p className="text-[11px] text-rose-200 leading-relaxed font-medium">
                             {member.result.reason}
                           </p>
                         </div>
@@ -551,11 +561,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                             <span className="text-zinc-400">Rapporto KD Rilevato:</span>
                             <div className="flex items-center gap-1.5 font-bold">
                               <span className="text-amber-300 text-xs">{member.result.kd_ratio}</span>
-                              {member.result.approved ? (
-                                <span className="text-emerald-400 text-[10px]">✅ Conforme</span>
-                              ) : (
-                                <span className="text-rose-400 text-[10px]">❌ Fuori Limite</span>
-                              )}
+                              <span className="text-emerald-400 text-[10px]">✅ Conforme</span>
                             </div>
                           </div>
 

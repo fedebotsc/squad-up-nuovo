@@ -38,6 +38,8 @@ import {
   commitPostGameScoreToDatabase,
   KDVerificationResult,
   PostGameVerificationResult,
+  ERROR_POST_GAME_UPLOADED_FOR_KD,
+  ERROR_KD_PROFILE_UPLOADED_FOR_POST_GAME,
 } from "@/services/tournamentVerificationService";
 
 export interface TeamChatData {
@@ -237,6 +239,12 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
       let chatMessage = "";
       if (result.is_authentic_game_screenshot === false) {
         chatMessage = `❌ Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.\n\n• Esito: ❌ ISCRIZIONE BLOCCATA`;
+      } else if (result.reason === ERROR_POST_GAME_UPLOADED_FOR_KD || result.error_message === ERROR_POST_GAME_UPLOADED_FOR_KD) {
+        chatMessage =
+          `⚠️ RIFIUTO RIGOROSO ARBITRO IA (SCHERMATA FINE PARTITA NON AMMESSA):\n` +
+          `• ${ERROR_POST_GAME_UPLOADED_FOR_KD}\n\n` +
+          `• Esito: ❌ ISCRIZIONE BLOCCATA\n` +
+          `Carica la schermata del tuo Profilo / Statistiche Generali dove siano visibili la voce esplicita K/D e il tuo Activision ID.`;
       } else if (result.approved) {
         chatMessage =
           `🎯 Verifica KD APPROVATA dall'Arbitro IA!\n` +
@@ -248,7 +256,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
           `⚠️ Verifica KD RIFIUTATA dall'Arbitro IA:\n` +
           `• Motivo: ${result.reason}\n` +
           `• Esito: ❌ ISCRIZIONE RIFIUTATA\n\n` +
-          `Carica un nuovo screenshot nitido che mostri chiaramente la voce 'K/D' o 'Rapporto Kill/Morte' conforme ai limiti stabiliti per richiedere una nuova revisione.`;
+          `Carica uno screenshot nitido del tuo Profilo / Statistiche di Gioco che mostri chiaramente la voce 'K/D' o 'Rapporto Uccisioni/Morti' conforme ai limiti per richiedere una nuova revisione.`;
       }
 
       await supabase.from("tournament_chat_messages").insert({
@@ -268,7 +276,10 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         });
       } else {
         toast({
-          title: "KD Non Conforme",
+          title:
+            result.reason === ERROR_POST_GAME_UPLOADED_FOR_KD
+              ? "Schermata Errata (Fine Partita)"
+              : "Verifica KD Rifiutata",
           description: result.reason,
           variant: "destructive",
         });
@@ -408,8 +419,15 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         // ignore
       }
 
+      const isKdMismatch =
+        errMsg === ERROR_KD_PROFILE_UPLOADED_FOR_POST_GAME ||
+        errMsg.toLowerCase().includes("profilo") ||
+        errMsg.toLowerCase().includes("statistiche kd");
+
       toast({
-        title: "Screenshot Rifiutato (Anti-Fake)",
+        title: isKdMismatch
+          ? "Schermata Errata (Profilo KD Rilevato)"
+          : "Screenshot Rifiutato dall'Arbitro IA",
         description: errMsg,
         variant: "destructive",
       });
