@@ -58,6 +58,11 @@ export const VoiceSection: React.FC = () => {
   const [roomPendingDelete, setRoomPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
 
+  // Agora Settings state (App ID & Token)
+  const [isAgoraConfigOpen, setIsAgoraConfigOpen] = useState(false);
+  const [customAppIdInput, setCustomAppIdInput] = useState(agoraVoiceService.getAppId());
+  const [customTokenInput, setCustomTokenInput] = useState(agoraVoiceService.getToken() || "");
+
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const testStreamRef = useRef<MediaStream | null>(null);
@@ -229,14 +234,20 @@ export const VoiceSection: React.FC = () => {
           <div className="flex items-center gap-1.5 truncate">
             <KeyRound className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <span className="text-zinc-400">App ID:</span>
-            <code className="text-purple-300 font-mono text-[10px] truncate max-w-[170px]">
+            <code className="text-purple-300 font-mono text-[10px] truncate max-w-[150px]">
               {maskedAppId}
             </code>
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold shrink-0">
-            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-            <span>Attiva (.env)</span>
-          </div>
+          <button
+            onClick={() => {
+              setCustomAppIdInput(agoraVoiceService.getAppId());
+              setCustomTokenInput(agoraVoiceService.getToken() || "");
+              setIsAgoraConfigOpen(true);
+            }}
+            className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
+          >
+            <span>Configura</span>
+          </button>
         </div>
 
         <div className="pt-1 border-t border-zinc-800/80">
@@ -717,6 +728,98 @@ export const VoiceSection: React.FC = () => {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* AGORA CONFIGURATION MODAL (APP ID & TOKEN) */}
+      {isAgoraConfigOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121628] border border-cyan-500/50 rounded-2xl max-w-sm w-full p-4 space-y-3.5 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-cyan-400">
+              <div className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-500/40">
+                <KeyRound className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-white">Configurazione Agora RTC</h4>
+                <span className="text-[10px] text-zinc-400">App ID & Token di Autenticazione</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                  Agora App ID
+                </label>
+                <input
+                  type="text"
+                  value={customAppIdInput}
+                  onChange={(e) => setCustomAppIdInput(e.target.value)}
+                  placeholder="Incolla il tuo App ID Agora..."
+                  className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                  Agora Token RTC (Opzionale / Se richiesto)
+                </label>
+                <textarea
+                  value={customTokenInput}
+                  onChange={(e) => setCustomTokenInput(e.target.value)}
+                  placeholder="Incolla il token generato dalla Console Agora (o lascia vuoto se il progetto è in modalità 'Testing / App ID Only')..."
+                  rows={3}
+                  className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-cyan-500 font-mono resize-none"
+                />
+                <span className="text-[10px] text-zinc-400 block mt-1 leading-snug">
+                  Se ricevi l'errore <code className="text-amber-400">DYNAMIC_KEY_TIMEOUT</code>, nella Console Agora imposta la sicurezza del progetto su <strong>"Testing (App ID only)"</strong> oppure genera un Token temporaneo.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  agoraVoiceService.setCustomAppId("");
+                  agoraVoiceService.setCustomToken("");
+                  setCustomAppIdInput(agoraVoiceService.getAppId());
+                  setCustomTokenInput("");
+                  toast({
+                    title: "Parametri Ripristinati",
+                    description: "Ripristinati App ID e Token di default.",
+                  });
+                }}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer"
+              >
+                Ripristina default
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAgoraConfigOpen(false)}
+                  className="px-3 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Chiudi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    agoraVoiceService.setCustomAppId(customAppIdInput.trim());
+                    agoraVoiceService.setCustomToken(customTokenInput.trim());
+                    setIsAgoraConfigOpen(false);
+                    toast({
+                      title: "Parametri Agora Salvati",
+                      description: "App ID e Token aggiornati. Ora puoi connetterti.",
+                    });
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-cyan-950/50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Salva</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

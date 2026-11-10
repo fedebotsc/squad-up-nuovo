@@ -1679,6 +1679,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveVoiceRoomId(roomId);
     const channelName = targetRoom.name.replace(/\s+/g, "_");
 
+    console.log(`[SquadContext] Connessione Agora al canale "${channelName}" per la stanza "${targetRoom.name}"...`);
+
     const res = await agoraVoiceService.joinVoiceChannel(
       channelName,
       currentUser?.id || userProfile.name
@@ -1691,33 +1693,26 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         description: `Connesso a "${targetRoom.name}" con tecnologia Agora Web RTC.`,
       });
     } else if (res.error) {
+      console.error("[SquadContext] Errore connessione Agora:", res.error, res.errorCode);
       setActiveVoiceRoomId(null);
-      // Clean up target room member if connection failed
+
+      // Keep user in list with inactive status rather than immediately destroying newly created rooms
       setVoiceRooms((prev) =>
-        prev
-          .map((r) => {
-            if (r.id === roomId) {
-              return {
-                ...r,
-                activeMembers: r.activeMembers.filter(
-                  (m) => m.id !== (currentUser?.id || userProfile.id)
-                ),
-              };
-            }
-            return r;
-          })
-          .filter((r) => {
-            if (r.id === roomId && r.activeMembers.length === 0) {
-              if (r.id.length > 20) {
-                void supabase.from("squad_rooms").delete().eq("id", r.id);
-              }
-              return false;
-            }
-            return true;
-          })
+        prev.map((r) => {
+          if (r.id === roomId) {
+            return {
+              ...r,
+              activeMembers: r.activeMembers.filter(
+                (m) => m.id !== (currentUser?.id || userProfile.id)
+              ),
+            };
+          }
+          return r;
+        })
       );
+
       toast({
-        title: "Errore Connessione Vocale",
+        title: "Errore Connessione Vocale Agora",
         description: res.error,
         variant: "destructive",
       });
