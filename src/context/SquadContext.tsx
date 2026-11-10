@@ -754,22 +754,28 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .from("squad_rooms")
         .select("*")
         .eq("status", "open")
-        .limit(20);
+        .order("created_at", { ascending: false })
+        .limit(30);
 
       if (roomsData && roomsData.length > 0) {
-        setVoiceRooms(
-          roomsData.map((r: any) => ({
-            id: r.id,
-            name: r.name || "Canale Vocale",
-            game: r.category || "Warzone",
-            channelType: "Aperto a tutti",
-            activeMembers: [],
-            maxCapacity: 4,
-            status: r.status,
-          }))
-        );
+        setVoiceRooms((prev) => {
+          return roomsData.map((r: any) => {
+            const existing = prev.find((p) => p.id === r.id);
+            return {
+              id: r.id,
+              name: r.name || "Canale Vocale",
+              game: r.category || "Warzone",
+              channelType: "Aperto a tutti",
+              activeMembers: existing?.activeMembers || [],
+              maxCapacity: 4,
+              status: r.status,
+              hostId: r.host_id,
+              createdAt: r.created_at,
+            };
+          });
+        });
       } else {
-        setVoiceRooms([]);
+        setVoiceRooms((prev) => prev.filter((r) => r.activeMembers.length > 0));
       }
     } catch (err) {
       console.warn("[SquadContext] Errore caricamento dati database:", err);
@@ -778,7 +784,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Listen to Supabase Auth State changes (run once on mount)
+  // Listen to Supabase Auth State changes and realtime voice rooms
   useEffect(() => {
     refreshUserData();
     loadDatabaseContent();
@@ -799,10 +805,52 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
+    // Realtime listener for squad_rooms so deletions and new rooms sync live
+    const squadRoomsChannel = supabase
+      .channel("public:squad_rooms:realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "squad_rooms" },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const deletedId = (payload.old as any)?.id;
+            if (deletedId) {
+              setVoiceRooms((prev) => prev.filter((r) => r.id !== deletedId));
+              if (activeVoiceRoomId === deletedId) {
+                leaveVoiceRoom();
+              }
+            }
+          } else if (payload.eventType === "INSERT") {
+            const newR = payload.new as any;
+            if (newR && newR.status === "open") {
+              setVoiceRooms((prev) => {
+                if (prev.some((r) => r.id === newR.id)) return prev;
+                return [
+                  {
+                    id: newR.id,
+                    name: newR.name || "Canale Vocale",
+                    game: newR.category || "Warzone",
+                    channelType: "Aperto a tutti",
+                    activeMembers: [],
+                    maxCapacity: 4,
+                    status: newR.status,
+                    hostId: newR.host_id,
+                    createdAt: newR.created_at,
+                  },
+                  ...prev,
+                ];
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       authListener.subscription.unsubscribe();
+      supabase.removeChannel(squadRoomsChannel);
     };
-  }, [refreshUserData, loadDatabaseContent, refreshNotificationsCount]);
+  }, [refreshUserData, loadDatabaseContent, refreshNotificationsCount, activeVoiceRoomId]);
 
   // Clean audio track termination on unmount
   useEffect(() => {
@@ -1559,6 +1607,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (roomId.length > 20) {
         await supabase.from("squad_rooms").delete().eq("id", roomId);
       }
+      toast({
+        title: "Stanza Chiusa ed Eliminata",
+        description: "La stanza vocale è stata chiusa ed eliminata.",
+      });
       return true;
     } catch (err) {
       console.warn("[SquadContext] Errore rimozione stanza:", err);
@@ -1567,6 +1619,24 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const joinVoiceRoom = async (roomId: string) => {
+    // 1. Single Instance Check: if already in this exact room, notify user and do not reconnect
+    if (activeVoiceRoomId === roomId) {
+      toast({
+        title: "Sei già in questa stanza",
+        description: "Sei attualmente connesso a questo canale vocale.",
+      });
+      return;
+    }
+
+    // 2. Single Instance Check: if in another room, leave and clean up first
+    if (activeVoiceRoomId && activeVoiceRoomId !== roomId) {
+      toast({
+        title: "Cambio Stanza",
+        description: "Disconnessione dalla stanza precedente...",
+      });
+      await leaveVoiceRoom();
+    }
+
     const myVoiceMember: VoiceMember = {
       id: currentUser?.id || userProfile.id || "me",
       name: userProfile.name,
@@ -1591,36 +1661,18 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setVoiceRooms((prev) => [targetRoom!, ...prev.filter((r) => r.id !== roomId)]);
     } else {
       setVoiceRooms((prev) =>
-        prev
-          .map((r) => {
-            if (r.id === roomId) {
-              const already = r.activeMembers.some(
-                (m) => m.id === (currentUser?.id || userProfile.id)
-              );
-              return {
-                ...r,
-                activeMembers: already ? r.activeMembers : [...r.activeMembers, myVoiceMember],
-              };
-            }
-            if (activeVoiceRoomId && r.id === activeVoiceRoomId && r.id !== roomId) {
-              return {
-                ...r,
-                activeMembers: r.activeMembers.filter(
-                  (m) => m.id !== (currentUser?.id || userProfile.id)
-                ),
-              };
-            }
-            return r;
-          })
-          .filter((r) => {
-            if (r.id !== roomId && r.activeMembers.length === 0) {
-              if (r.id.length > 20) {
-                void supabase.from("squad_rooms").delete().eq("id", r.id);
-              }
-              return false;
-            }
-            return true;
-          })
+        prev.map((r) => {
+          if (r.id === roomId) {
+            const already = r.activeMembers.some(
+              (m) => m.id === (currentUser?.id || userProfile.id)
+            );
+            return {
+              ...r,
+              activeMembers: already ? r.activeMembers : [...r.activeMembers, myVoiceMember],
+            };
+          }
+          return r;
+        })
       );
     }
 
@@ -1636,10 +1688,34 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (res.success) {
       toast({
         title: "Canale Vocale Connesso 🎙️",
-        description: `Connesso a "${targetRoom.name}" con Agora Web RTC (App ID: ${agoraAppId.slice(0, 6)}...).`,
+        description: `Connesso a "${targetRoom.name}" con tecnologia Agora Web RTC.`,
       });
     } else if (res.error) {
       setActiveVoiceRoomId(null);
+      // Clean up target room member if connection failed
+      setVoiceRooms((prev) =>
+        prev
+          .map((r) => {
+            if (r.id === roomId) {
+              return {
+                ...r,
+                activeMembers: r.activeMembers.filter(
+                  (m) => m.id !== (currentUser?.id || userProfile.id)
+                ),
+              };
+            }
+            return r;
+          })
+          .filter((r) => {
+            if (r.id === roomId && r.activeMembers.length === 0) {
+              if (r.id.length > 20) {
+                void supabase.from("squad_rooms").delete().eq("id", r.id);
+              }
+              return false;
+            }
+            return true;
+          })
+      );
       toast({
         title: "Errore Connessione Vocale",
         description: res.error,
@@ -1649,6 +1725,15 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const createVoiceRoom = async (name: string, category: string = "Warzone"): Promise<VoiceRoom> => {
+    // 1. Single Instance Check: Disconnect from previous room first
+    if (activeVoiceRoomId) {
+      toast({
+        title: "Disconnessione stanza precedente",
+        description: "Disconnessione dalla stanza attuale prima di crearne una nuova...",
+      });
+      await leaveVoiceRoom();
+    }
+
     const trimmedName = name.trim() || `Stanza ${userProfile.name}`;
     let newRoom: VoiceRoom;
 
@@ -1685,6 +1770,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             activeMembers: [myVoiceMember],
             maxCapacity: 4,
             status: inserted.status,
+            hostId: inserted.host_id || currentUser.id,
+            createdAt: inserted.created_at,
           };
         } else {
           newRoom = {
@@ -1695,6 +1782,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             activeMembers: [myVoiceMember],
             maxCapacity: 4,
             status: "open",
+            hostId: currentUser.id,
           };
         }
       } catch {
@@ -1706,6 +1794,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           activeMembers: [myVoiceMember],
           maxCapacity: 4,
           status: "open",
+          hostId: currentUser?.id,
         };
       }
     } else {
@@ -1717,6 +1806,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activeMembers: [myVoiceMember],
         maxCapacity: 4,
         status: "open",
+        hostId: userProfile.id,
       };
     }
 
@@ -1727,52 +1817,51 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const leaveVoiceRoom = async () => {
     const leavingRoomId = activeVoiceRoomId;
+    if (!leavingRoomId) return;
+
     await agoraVoiceService.leaveVoiceChannel();
     setActiveVoiceRoomId(null);
     setIsRealSdkActive(false);
     setUserSpeaking(false);
 
-    if (leavingRoomId) {
-      setVoiceRooms((prev) => {
-        const updated = prev.map((r) => {
-          if (r.id === leavingRoomId) {
-            return {
-              ...r,
-              activeMembers: r.activeMembers.filter(
-                (m) => m.id !== (currentUser?.id || userProfile.id)
-              ),
-            };
-          }
-          return r;
-        });
-
-        const target = updated.find((r) => r.id === leavingRoomId);
-        // Automatically delete room if empty
-        if (!target || target.activeMembers.length === 0) {
-          if (leavingRoomId.length > 20) {
-            void supabase
-              .from("squad_rooms")
-              .delete()
-              .eq("id", leavingRoomId)
-              .then(({ error }) => {
-                if (error) console.error(error);
-                else console.log("[SquadContext] Stanza vocale vuota eliminata:", leavingRoomId);
-              });
-          }
-          toast({
-            title: "Stanza Eliminata",
-            description: "La stanza vocale è rimasta vuota ed è stata rimossa automaticamente.",
-          });
-          return updated.filter((r) => r.id !== leavingRoomId);
+    setVoiceRooms((prev) => {
+      const updated = prev.map((r) => {
+        if (r.id === leavingRoomId) {
+          return {
+            ...r,
+            activeMembers: r.activeMembers.filter(
+              (m) => m.id !== (currentUser?.id || userProfile.id)
+            ),
+          };
         }
-
-        return updated;
+        return r;
       });
-    }
+
+      const target = updated.find((r) => r.id === leavingRoomId);
+      // AUTOMATIC CLEANUP: When room becomes completely empty, delete from DB and UI!
+      if (!target || target.activeMembers.length === 0) {
+        if (leavingRoomId.length > 20) {
+          void supabase
+            .from("squad_rooms")
+            .delete()
+            .eq("id", leavingRoomId)
+            .then(({ error }) => {
+              if (error) console.error("[SquadContext] Errore cancellazione stanza vuota:", error);
+            });
+        }
+        toast({
+          title: "Stanza Chiusa Automaticamente",
+          description: "La stanza vocale è rimasta vuota ed è stata rimossa.",
+        });
+        return updated.filter((r) => r.id !== leavingRoomId);
+      }
+
+      return updated;
+    });
 
     toast({
       title: "Disconnesso",
-      description: "Hai lasciato il canale vocale. Tracce audio rilasciate correttamente.",
+      description: "Hai lasciato il canale vocale.",
     });
   };
 

@@ -17,6 +17,11 @@ import {
   Activity,
   Play,
   Square,
+  Trash2,
+  AlertTriangle,
+  Loader2,
+  Users,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { agoraVoiceService } from "@/services/agoraService";
@@ -28,6 +33,7 @@ export const VoiceSection: React.FC = () => {
     joinVoiceRoom,
     leaveVoiceRoom,
     createVoiceRoom,
+    deleteVoiceRoom,
     isMuted,
     toggleMute,
     isDeafened,
@@ -35,13 +41,22 @@ export const VoiceSection: React.FC = () => {
     userProfile,
     userSpeaking,
     agoraAppId,
+    currentUser,
+    isUniversalAdmin,
   } = useSquad();
 
   const activeVoiceRoom = voiceRooms.find((r) => r.id === activeVoiceRoomId) || null;
 
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
+  const [selectedGameMode, setSelectedGameMode] = useState("Warzone");
+  const [isSubmittingRoom, setIsSubmittingRoom] = useState(false);
+  const [isJoiningRoomId, setIsJoiningRoomId] = useState<string | null>(null);
   const [noiseSuppression, setNoiseSuppression] = useState(true);
+
+  // Manual room closure confirmation state
+  const [roomPendingDelete, setRoomPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
 
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -61,10 +76,54 @@ export const VoiceSection: React.FC = () => {
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRoomName.trim()) return;
-    await createVoiceRoom(newRoomName.trim(), "Warzone");
-    setNewRoomName("");
-    setIsCreatingRoom(false);
+    if (!newRoomName.trim()) {
+      toast({
+        title: "Nome stanza richiesto",
+        description: "Inserisci un nome per la tua stanza vocale.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmittingRoom(true);
+    try {
+      await createVoiceRoom(newRoomName.trim(), selectedGameMode);
+      setNewRoomName("");
+      setIsCreatingRoom(false);
+    } catch (err: any) {
+      console.error("[VoiceSection] Errore creazione stanza:", err);
+      toast({
+        title: "Errore Creazione Stanza",
+        description: err?.message || "Impossibile creare la stanza vocale.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingRoom(false);
+    }
+  };
+
+  const handleJoinRoom = async (roomId: string) => {
+    setIsJoiningRoomId(roomId);
+    try {
+      await joinVoiceRoom(roomId);
+    } catch (err: any) {
+      console.error("[VoiceSection] Errore ingresso stanza:", err);
+    } finally {
+      setIsJoiningRoomId(null);
+    }
+  };
+
+  const handleConfirmDeleteRoom = async () => {
+    if (!roomPendingDelete) return;
+    setIsDeletingRoom(true);
+    try {
+      await deleteVoiceRoom(roomPendingDelete.id);
+      setRoomPendingDelete(null);
+    } catch (err: any) {
+      console.error("[VoiceSection] Errore eliminazione stanza:", err);
+    } finally {
+      setIsDeletingRoom(false);
+    }
   };
 
   const startMicTest = async () => {
@@ -129,10 +188,6 @@ export const VoiceSection: React.FC = () => {
     const handleConnectionStateChange = (state: string) => {
       if (state === "CONNECTED" && activeVoiceRoom) {
         setIsConnected(true);
-        toast({
-          title: "Stato Connessione Aggiornato",
-          description: `Agora RTC: ${state} - Canale: ${activeVoiceRoom.name}`,
-        });
       } else if (state === "DISCONNECTED" || state === "FAILED") {
         setIsConnected(false);
       }
@@ -141,7 +196,7 @@ export const VoiceSection: React.FC = () => {
     agoraVoiceService.onConnectionStateChange(handleConnectionStateChange);
 
     return () => {
-      agoraVoiceService.onConnectionStateChange((state) => {});
+      agoraVoiceService.onConnectionStateChange(() => {});
     };
   }, [activeVoiceRoom]);
 
@@ -158,6 +213,7 @@ export const VoiceSection: React.FC = () => {
 
   return (
     <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+      {/* Agora Technical Info Card */}
       <div className="bg-[#121628]/90 border border-purple-900/40 rounded-2xl p-3.5 shadow-md space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -231,6 +287,7 @@ export const VoiceSection: React.FC = () => {
         </div>
       </div>
 
+      {/* ACTIVE CONNECTED ROOM CARD */}
       {activeVoiceRoom ? (
         <div className="relative rounded-2xl overflow-hidden border border-emerald-500/60 bg-gradient-to-b from-emerald-950/40 via-[#13172e] to-[#0c0f1c] p-4 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
@@ -238,7 +295,7 @@ export const VoiceSection: React.FC = () => {
               <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 block">
-                  Stanza Vocale Connessa
+                  Stanza Vocale Attiva (1/1 Max)
                 </span>
                 <h3 className="text-sm font-bold text-white">{activeVoiceRoom.name}</h3>
               </div>
@@ -250,6 +307,7 @@ export const VoiceSection: React.FC = () => {
             </div>
           </div>
 
+          {/* Members in current room */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
               <span>Membri nel canale</span>
@@ -310,50 +368,62 @@ export const VoiceSection: React.FC = () => {
             </div>
           </div>
 
+          {/* Quick Voice Controls */}
           <div className="pt-2 border-t border-zinc-800/80">
             <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-2 px-1">
               Comandi Vocali Rapidi
             </span>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-1.5">
               <button
                 onClick={toggleMute}
-                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all shadow-md cursor-pointer ${
+                className={`py-2.5 px-1.5 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-[11px] transition-all shadow-md cursor-pointer ${
                   isMuted
                     ? "bg-rose-500/20 border-2 border-rose-500 text-rose-300"
                     : "bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
                 }`}
               >
                 {isMuted ? (
-                  <MicOff className="w-5 h-5 text-rose-400" />
+                  <MicOff className="w-4 h-4 text-rose-400" />
                 ) : (
-                  <Mic className="w-5 h-5 text-emerald-400" />
+                  <Mic className="w-4 h-4 text-emerald-400" />
                 )}
-                <span>{isMuted ? "Muto" : "Mic Attivo"}</span>
+                <span>{isMuted ? "Muto" : "Mic ON"}</span>
               </button>
 
               <button
                 onClick={toggleDeafen}
-                className={`py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs transition-all border cursor-pointer ${
+                className={`py-2.5 px-1.5 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-[11px] transition-all border cursor-pointer ${
                   isDeafened
                     ? "bg-amber-500/20 border-amber-500 text-amber-300"
                     : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:text-white"
                 }`}
               >
                 {isDeafened ? (
-                  <VolumeX className="w-5 h-5 text-amber-400" />
+                  <VolumeX className="w-4 h-4 text-amber-400" />
                 ) : (
-                  <Volume2 className="w-5 h-5 text-zinc-300" />
+                  <Volume2 className="w-4 h-4 text-zinc-300" />
                 )}
-                <span>{isDeafened ? "Cuffie Spente" : "Audio ON"}</span>
+                <span>{isDeafened ? "Cuffie OFF" : "Audio ON"}</span>
               </button>
 
               <button
                 onClick={leaveVoiceRoom}
-                className="py-3 px-2 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-xs bg-red-950/40 border border-red-800/60 text-red-300 hover:bg-red-900/50 transition-colors cursor-pointer"
+                className="py-2.5 px-1.5 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-[11px] bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Lascia la stanza"
               >
-                <PhoneOff className="w-5 h-5 text-red-400" />
-                <span>Disconnetti</span>
+                <PhoneOff className="w-4 h-4 text-amber-400" />
+                <span>Esci</span>
+              </button>
+
+              {/* Dedicated manual room close & delete button */}
+              <button
+                onClick={() => setRoomPendingDelete({ id: activeVoiceRoom.id, name: activeVoiceRoom.name })}
+                className="py-2.5 px-1.5 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-[11px] bg-rose-950/40 border border-rose-800/60 text-rose-300 hover:bg-rose-900/50 transition-colors cursor-pointer"
+                title="Chiudi ed elimina la stanza per tutti"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Chiudi Stanza</span>
               </button>
             </div>
 
@@ -383,116 +453,274 @@ export const VoiceSection: React.FC = () => {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
             <Headphones className="w-7 h-7" />
           </div>
-          <h3 className="text-sm font-bold text-white">Nessuna stanza Cerca Team attiva</h3>
+          <h3 className="text-sm font-bold text-white">Nessuna stanza vocale attiva</h3>
           <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-            Crea una stanza vocale per cercare compagni di squadra (Warzone, CDL, Zombie) con l'audio Agora RTC. Quando tutti i partecipanti escono, la stanza viene eliminata automaticamente!
+            Crea o seleziona una stanza vocale per comunicare con il tuo team con audio HD a bassissima latenza.
           </p>
+          <div className="p-2.5 rounded-xl bg-purple-950/30 border border-purple-900/40 text-[10px] text-cyan-300 flex items-center justify-center gap-1.5 max-w-xs mx-auto">
+            <ShieldAlert className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Regola: Max 1 stanza attiva. Le stanze vuote si auto-eliminano.</span>
+          </div>
         </div>
       )}
 
+      {/* Voice Rooms List & Creation Section */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <div>
             <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
-              Cerca Team & Stanze ({voiceRooms.length})
+              Stanze Vocali & Cerca Team ({voiceRooms.length})
             </span>
             <span className="text-[10px] text-zinc-500">
-              Le stanze vuote si eliminano da sole all'uscita
+              Pulizia automatica all'uscita di tutti i membri
             </span>
           </div>
           <button
             onClick={() => setIsCreatingRoom(!isCreatingRoom)}
-            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline cursor-pointer bg-cyan-950/40 border border-cyan-500/30 px-2 py-1 rounded-lg"
+            className="text-[11px] font-bold text-cyan-400 flex items-center gap-1 hover:underline cursor-pointer bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Nuovo Team</span>
+            <span>Crea Stanza</span>
           </button>
         </div>
 
+        {/* Room Creation Form */}
         {isCreatingRoom && (
           <form
             onSubmit={handleCreateRoom}
-            className="p-3 bg-[#121628] border border-purple-900/40 rounded-xl space-y-2"
+            className="p-3.5 bg-[#121628] border border-purple-900/50 rounded-2xl space-y-3 shadow-lg"
           >
-            <input
-              type="text"
-              value={newRoomName}
-              onChange={(e) => setNewRoomName(e.target.value)}
-              placeholder="Nome della stanza (es. Warzone Trio #1)..."
-              className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-lg px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-purple-500"
-            />
-            <div className="flex justify-end gap-2">
+            <div>
+              <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                Nome Stanza Vocale
+              </label>
+              <input
+                type="text"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                placeholder="Es. Warzone Trio Competitivo #1..."
+                className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-purple-500"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-zinc-300 block mb-1">
+                Modalità di Gioco
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {["Warzone", "Multiplayer", "Zombie"].map((mode) => (
+                  <button
+                    type="button"
+                    key={mode}
+                    onClick={() => setSelectedGameMode(mode)}
+                    className={`py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedGameMode === mode
+                        ? "bg-purple-600 text-white shadow-md shadow-purple-950/40"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {activeVoiceRoomId && (
+              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Creando questa stanza verrai disconnesso da quella attuale in automatico.
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1 border-t border-zinc-800">
               <button
                 type="button"
                 onClick={() => setIsCreatingRoom(false)}
-                className="px-3 py-1 text-xs text-zinc-400 hover:text-white cursor-pointer"
+                disabled={isSubmittingRoom}
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white cursor-pointer"
               >
                 Annulla
               </button>
               <button
                 type="submit"
-                className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+                disabled={isSubmittingRoom}
+                className="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 shadow-md shadow-purple-950/40"
               >
-                Crea Stanza
+                {isSubmittingRoom ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Creazione...</span>
+                  </>
+                ) : (
+                  <span>Crea & Entra</span>
+                )}
               </button>
             </div>
           </form>
         )}
 
+        {/* Room List */}
         <div className="space-y-2">
-          {voiceRooms.map((room) => {
-            const isCurrent = activeVoiceRoom?.id === room.id;
+          {voiceRooms.length === 0 ? (
+            <div className="p-6 text-center bg-[#121628]/60 border border-zinc-800/80 rounded-2xl text-xs text-zinc-400">
+              Nessuna stanza vocale aperta al momento. Creane una tu per iniziare!
+            </div>
+          ) : (
+            voiceRooms.map((room) => {
+              const isCurrent = activeVoiceRoom?.id === room.id;
+              const isJoining = isJoiningRoomId === room.id;
+              const isHostOrAdmin =
+                isUniversalAdmin ||
+                (currentUser?.id && room.hostId === currentUser.id) ||
+                (room.activeMembers?.some((m) => m.id === currentUser?.id));
 
-            return (
-              <div
-                key={room.id}
-                className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                  isCurrent
-                    ? "bg-emerald-950/20 border-emerald-500/50 shadow-md"
-                    : "bg-[#121628]/90 border-purple-900/30 hover:border-purple-700/50"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      isCurrent
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                        : "bg-purple-950/60 text-purple-300 border border-purple-500/30"
-                    }`}
-                  >
-                    <Headphones className="w-5 h-5" />
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="text-xs font-bold text-white truncate max-w-[150px]">
-                        {room.name}
-                      </h4>
-                      {room.channelType?.toLowerCase().includes("privat") && (
-                        <Lock className="w-3 h-3 text-zinc-500" />
-                      )}
-                    </div>
-                    <span className="text-[10px] text-zinc-400">
-                      {isCurrent ? 1 : (room.activeMembers?.length || 0)}/{room.maxCapacity || 4} operatori connessi • {room.game || "Warzone"}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => (isCurrent ? leaveVoiceRoom() : joinVoiceRoom(room.id))}
-                  className={`py-1.5 px-3 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+              return (
+                <div
+                  key={room.id}
+                  className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                     isCurrent
-                      ? "bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40"
-                      : "bg-purple-600 hover:bg-purple-500 text-white"
+                      ? "bg-emerald-950/20 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/30"
+                      : "bg-[#121628]/90 border-purple-900/30 hover:border-purple-700/50"
                   }`}
                 >
-                  {isCurrent ? "Esci" : "Entra"}
-                </button>
-              </div>
-            );
-          })}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        isCurrent
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          : "bg-purple-950/60 text-purple-300 border border-purple-500/30"
+                      }`}
+                    >
+                      <Headphones className="w-5 h-5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-white truncate max-w-[150px]">
+                          {room.name}
+                        </h4>
+                        {isCurrent && (
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                            Attiva
+                          </span>
+                        )}
+                        {room.channelType?.toLowerCase().includes("privat") && (
+                          <Lock className="w-3 h-3 text-zinc-500 shrink-0" />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 block">
+                        {isCurrent ? 1 : (room.activeMembers?.length || 0)}/{room.maxCapacity || 4} operatori • {room.game || "Warzone"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Room action buttons */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isCurrent ? (
+                      <>
+                        <button
+                          onClick={leaveVoiceRoom}
+                          className="py-1.5 px-3 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 cursor-pointer transition-colors"
+                          title="Lascia la stanza vocale"
+                        >
+                          Esci
+                        </button>
+                        <button
+                          onClick={() => setRoomPendingDelete({ id: room.id, name: room.name })}
+                          className="py-1.5 px-2 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center gap-1 cursor-pointer transition-all"
+                          title="Chiudi ed elimina la stanza per tutti"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <span className="text-[11px]">Chiudi</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleJoinRoom(room.id)}
+                          disabled={isJoining}
+                          className="py-1.5 px-3.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white cursor-pointer shadow-md shadow-purple-950/40 transition-all flex items-center gap-1"
+                        >
+                          {isJoining ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : null}
+                          <span>Entra</span>
+                        </button>
+
+                        {/* Dedicated closure control if user is creator/host, admin or if empty */}
+                        {isHostOrAdmin && (
+                          <button
+                            onClick={() => setRoomPendingDelete({ id: room.id, name: room.name })}
+                            className="p-1.5 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-all cursor-pointer"
+                            title="Chiudi ed elimina stanza"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
+
+      {/* MANUAL ROOM CLOSURE CONFIRMATION MODAL */}
+      {roomPendingDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121628] border border-rose-600/50 rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500/40">
+                <Trash2 className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-white">Chiudi Stanza Vocale</h4>
+                <span className="text-[10px] text-zinc-400">Azione irreversibile</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Sei sicuro di voler chiudere ed eliminare la stanza vocale{" "}
+              <strong className="text-white font-bold">"{roomPendingDelete.name}"</strong>?
+              Tutti i partecipanti connessi verranno disconnessi e la stanza sarà cancellata definitivamente.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setRoomPendingDelete(null)}
+                disabled={isDeletingRoom}
+                className="px-3 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteRoom}
+                disabled={isDeletingRoom}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-rose-950/50"
+              >
+                {isDeletingRoom ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Eliminazione...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Conferma Chiusura</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

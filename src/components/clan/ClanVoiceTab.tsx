@@ -36,6 +36,8 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
     userSpeaking,
     userProfile,
     agoraAppId,
+    activeVoiceRoomId,
+    leaveVoiceRoom,
   } = useSquad();
 
   const clanChannelName = `Clan_${clanData.tag}_${clanData.id.slice(0, 8)}`;
@@ -89,6 +91,15 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
         variant: "destructive",
       });
       return;
+    }
+
+    // Single instance: disconnect from standard squad room first if connected
+    if (activeVoiceRoomId) {
+      toast({
+        title: "Cambio Stanza Vocale",
+        description: "Disconnessione dalla stanza vocale della lobby per entrare nella vocale del clan...",
+      });
+      await leaveVoiceRoom();
     }
 
     setIsJoining(true);

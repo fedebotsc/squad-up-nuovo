@@ -115,6 +115,8 @@ export interface VoiceRoom {
   activeMembers: VoiceMember[];
   maxCapacity: number;
   status?: string;
+  hostId?: string;
+  createdAt?: string;
 }
 
 export interface ClanData {

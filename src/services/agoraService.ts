@@ -122,18 +122,43 @@ class AgoraVoiceService {
       };
     }
 
+    const sanitizedChannel = channelName
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .slice(0, 60);
+
+    // If already safely connected to the requested channel, return immediate success
+    if (
+      this.currentChannel === sanitizedChannel &&
+      this.client &&
+      this.client.connectionState === "CONNECTED"
+    ) {
+      return {
+        success: true,
+        realSdk: true,
+        isPublishing: Boolean(this.localAudioTrack),
+      };
+    }
+
+    // If a connection attempt is already in flight, wait briefly or cancel previous
     if (this.isConnecting) {
-      return { success: false, realSdk: false, isPublishing: false, error: "Connessione in corso..." };
+      // Force reset after 2.5 seconds to prevent permanent lock
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     this.isConnecting = true;
     this.isDisconnected = false;
 
     try {
-      const sanitizedChannel = channelName
-        .trim()
-        .replace(/[^a-zA-Z0-9_-]/g, "_")
-        .slice(0, 60);
+      // Disconnect cleanly from any prior channel before joining a new one
+      if (this.client && (this.client.connectionState === "CONNECTED" || this.client.connectionState === "CONNECTING")) {
+        try {
+          this.closeLocalAudioTrack();
+          await this.client.leave();
+        } catch (leaveErr) {
+          console.warn("[Agora Voice] Chiusura canale precedente:", leaveErr);
+        }
+      }
 
       let numericUid: number;
       if (typeof userNameOrId === "number") {
@@ -156,6 +181,9 @@ class AgoraVoiceService {
 
       let isPublishing = false;
       try {
+        // Ensure no previous track lingers
+        this.closeLocalAudioTrack();
+
         this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
           AEC: true,
           ANS: true,
@@ -185,7 +213,6 @@ class AgoraVoiceService {
       }
       this.notifyRemoteUsers();
 
-      this.isConnecting = false;
       return {
         success: true,
         realSdk: true,
@@ -197,13 +224,14 @@ class AgoraVoiceService {
 
       await this.cleanup();
 
-      this.isConnecting = false;
       return {
         success: false,
         realSdk: false,
         isPublishing: false,
         error: errorMessage,
       };
+    } finally {
+      this.isConnecting = false;
     }
   }
 
