@@ -58,10 +58,9 @@ export const VoiceSection: React.FC = () => {
   const [roomPendingDelete, setRoomPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
 
-  // Agora Settings state (App ID & Token)
+  // Agora Settings state (App ID & Dynamic Token)
   const [isAgoraConfigOpen, setIsAgoraConfigOpen] = useState(false);
   const [customAppIdInput, setCustomAppIdInput] = useState(agoraVoiceService.getAppId());
-  const [customTokenInput, setCustomTokenInput] = useState(agoraVoiceService.getToken() || "");
   const [isTestingEdgeToken, setIsTestingEdgeToken] = useState(false);
   const [edgeTokenTestResult, setEdgeTokenTestResult] = useState<{
     success: boolean;
@@ -277,14 +276,13 @@ export const VoiceSection: React.FC = () => {
             </code>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-              Modalità App ID Only
+            <span className="text-[9px] font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-500/40 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+              <CheckCircle2 className="w-2.5 h-2.5 text-cyan-400" />
+              Token Dinamico Obbligatorio
             </span>
             <button
               onClick={() => {
                 setCustomAppIdInput(agoraVoiceService.getAppId());
-                setCustomTokenInput("");
                 setIsAgoraConfigOpen(true);
               }}
               className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
@@ -872,46 +870,17 @@ export const VoiceSection: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800">
-              <button
-                type="button"
-                onClick={() => {
-                  agoraVoiceService.setCustomAppId("");
-                  agoraVoiceService.setCustomToken("");
-                  setCustomAppIdInput(agoraVoiceService.getAppId());
-                  setCustomTokenInput("");
-                  toast({
-                    title: "Parametri Ripristinati",
-                    description: "Ripristinati App ID e Token di default.",
-                  });
-                }}
-                className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer"
-              >
-                Ripristina default
-              </button>
+              <span className="text-[10px] text-zinc-500">
+                Token dinamici RTC v2 • No static keys
+              </span>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAgoraConfigOpen(false)}
-                  className="px-3 py-1.5 rounded-xl text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                  className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors cursor-pointer"
                 >
                   Chiudi
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    agoraVoiceService.setCustomAppId(customAppIdInput.trim());
-                    agoraVoiceService.setCustomToken(customTokenInput.trim());
-                    setIsAgoraConfigOpen(false);
-                    toast({
-                      title: "Parametri Agora Salvati",
-                      description: "App ID e Token aggiornati. Ora puoi connetterti.",
-                    });
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-cyan-950/50"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Salva</span>
                 </button>
               </div>
             </div>

@@ -58,40 +58,31 @@ class AgoraVoiceService {
     }
   }
 
+  /**
+   * Deprecato: L'app non utilizza più token statici. Tutti i token vengono generati
+   * dinamicamente su richiesta dalla Supabase Edge Function 'generate-agora-token'.
+   */
   public getToken(): string | null {
-    if (typeof window !== "undefined") {
-      const storedToken = localStorage.getItem("squadup_agora_token");
-      if (storedToken && storedToken.trim().length > 5) {
-        return storedToken.trim();
-      }
-    }
-    const envTemp = (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim();
-    if (envTemp && envTemp.length > 5) return envTemp;
-    const envToken = (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
-    if (envToken && envToken.length > 5) return envToken;
     return null;
   }
 
-  public setCustomToken(token: string): void {
+  public setCustomToken(_token: string): void {
+    // No-op: i token statici sono disabilitati.
     if (typeof window !== "undefined") {
-      if (token.trim()) {
-        localStorage.setItem("squadup_agora_token", token.trim());
-      } else {
-        localStorage.removeItem("squadup_agora_token");
-      }
+      localStorage.removeItem("squadup_agora_token");
     }
   }
 
   /**
-   * Recupera il token firmato invocando la Supabase Edge Function 'generate-agora-token'.
-   * Passa channelName e uid e ritorna il token JWT firmato da passare al metodo client.join().
+   * Recupera il token dinamico firmato invocando OBBLIGATORIAMENTE la Supabase Edge Function 'generate-agora-token'.
+   * Non usa mai token o chiavi statiche.
    */
   public async fetchSignedAgoraToken(
     channelName: string,
     uid: number | string
   ): Promise<string | null> {
     try {
-      console.log(`[Agora Voice] Richiesta token RTC alla Edge Function "generate-agora-token" (channel: "${channelName}", UID: ${uid})...`);
+      console.log(`[Agora Voice] Richiesta obbligatoria token RTC alla Edge Function "generate-agora-token" (channel: "${channelName}", UID: ${uid})...`);
 
       const { data, error } = await supabase.functions.invoke("generate-agora-token", {
         body: {
@@ -102,21 +93,21 @@ class AgoraVoiceService {
 
       if (!error && data) {
         const signedToken = data?.token || data?.rtcToken || data?.jwt || null;
-        if (signedToken) {
-          console.log("[Agora Voice] Token RTC firmato ottenuto con successo da Supabase Edge Function:", {
+        if (signedToken && typeof signedToken === "string" && signedToken.trim().length > 10) {
+          console.log("[Agora Voice] Token RTC dinamico ottenuto con successo da Supabase Edge Function:", {
             channel: channelName,
             uid,
             tokenPrefix: signedToken.slice(0, 15) + "...",
             expireTimestamp: data.expireTimestamp,
           });
-          return signedToken;
+          return signedToken.trim();
         }
       }
 
       if (error) {
         console.warn("[Agora Voice] Avviso supabase.functions.invoke('generate-agora-token'):", error.message || error);
 
-        // Fallback: chiamata HTTP diretta all'endpoint della Edge Function con chiavi apikey
+        // Fallback endpoint diretto della Edge Function con intestazioni apikey
         const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NYFmcAIbknMLAasXoMiUZg_0-xvIR5C";
         const fallbackRes = await fetch("https://ojostglcbfbpsisfdibk.supabase.co/functions/v1/generate-agora-token", {
           method: "POST",
@@ -134,22 +125,18 @@ class AgoraVoiceService {
         if (fallbackRes.ok) {
           const directData = await fallbackRes.json();
           const signedToken = directData?.token || directData?.rtcToken || directData?.jwt || null;
-          if (signedToken) {
-            console.log("[Agora Voice] Token firmato RTC ricevuto con successo via endpoint HTTP diretto della Edge Function.");
-            return signedToken;
+          if (signedToken && typeof signedToken === "string" && signedToken.trim().length > 10) {
+            console.log("[Agora Voice] Token RTC dinamico ricevuto con successo da endpoint HTTP Edge Function.");
+            return signedToken.trim();
           }
         }
       }
     } catch (err: any) {
-      console.warn("[Agora Voice] Eccezione durante la richiesta del token a generate-agora-token:", err?.message || err);
+      console.error("[Agora Voice] Errore critico durante la richiesta del token dinamico a generate-agora-token:", err?.message || err);
     }
 
-    // Fallback prioritario alle variabili d'ambiente se l'edge function non è raggiungibile offline
-    const envToken =
-      (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim() ||
-      (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
-
-    return envToken || null;
+    // NESSUN FALLBACK A CHIAVI O TOKEN STATICI: deve restituire null se la funzione non risponde
+    return null;
   }
 
   /**
@@ -369,13 +356,13 @@ class AgoraVoiceService {
    * Connessione al canale vocale Agora:
    * 0. Esegue controllo preventivo del microfono via getUserMedia.
    * 1. Esegue cleanup preventivo completo per azzerare sessioni precedenti.
-   * 2. Chiama la Supabase Edge Function 'generate-agora-token' con channelName e uid.
-   * 3. Passa il token JWT firmato ottenuto al metodo client.join(appId, channelName, token, uid).
+   * 2. Invocazione OBBLIGATORIA della Supabase Edge Function 'generate-agora-token' con channelName e uid.
+   *    (Eliminato qualsiasi fallback su chiavi statiche o modalità 'App ID only').
+   * 3. Passa il token dinamico ottenuto al metodo client.join(appId, channelName, dynamicToken, uid).
    */
   public async joinVoiceChannel(
     channelName: string,
-    userNameOrId?: string | number,
-    tokenOverride?: string | null
+    userNameOrId?: string | number
   ): Promise<{ success: boolean; realSdk: boolean; error?: string; errorCode?: string; isPublishing: boolean }> {
     // 1. App ID da env o default
     const appId = this.getAppId();
@@ -417,7 +404,7 @@ class AgoraVoiceService {
       sanitizedChannel = `channel_${Date.now()}`;
     }
 
-    // 3. Calcolo UID numerico per la sessione
+    // 4. Calcolo UID numerico per la sessione
     let numericUid: number;
     if (typeof userNameOrId === "number" && Number.isFinite(userNameOrId) && userNameOrId > 0) {
       numericUid = (Math.abs(Math.floor(userNameOrId)) % 899999) + 100000;
@@ -433,35 +420,44 @@ class AgoraVoiceService {
       numericUid = Math.floor(Math.random() * 899999) + 100000;
     }
 
-    // 4. Reset preventivo completo dell'istanza client per evitare conflitti di sessioni aperte
+    // 5. Reset preventivo completo dell'istanza client per evitare conflitti di sessioni aperte
     console.log(`[Agora Voice] Reset preventivo e cleanup prima del join a "${sanitizedChannel}"...`);
     await this.cleanup();
 
     this.isConnecting = true;
     this.isDisconnected = false;
 
-    // 5. CHIAMATA ALLA SUPABASE EDGE FUNCTION PER OTTENERE IL TOKEN JWT FIRMATO
-    let signedToken: string | null = tokenOverride || null;
-    if (!signedToken) {
-      signedToken = await this.fetchSignedAgoraToken(sanitizedChannel, numericUid);
+    // 6. INVOCAZIONE OBBLIGATORIA DELLA SUPABASE EDGE FUNCTION PER GENERARE IL TOKEN RTC DINAMICO
+    const signedToken = await this.fetchSignedAgoraToken(sanitizedChannel, numericUid);
+
+    if (!signedToken || signedToken.trim().length < 10) {
+      const errorMsg = "Connessione vocale interrotta: Impossibile ottenere il token dinamico dalla Supabase Edge Function 'generate-agora-token'. La modalità 'App ID only' e le chiavi statiche sono state disabilitate per sicurezza.";
+      console.error("[Agora Voice]", errorMsg);
+      return {
+        success: false,
+        realSdk: false,
+        isPublishing: false,
+        error: errorMsg,
+        errorCode: "DYNAMIC_TOKEN_REQUIRED",
+      };
     }
 
-    // 6. Try/Catch con client.join(appId, channelName, signedToken, uid)
+    // 7. Try/Catch con client.join(appId, channelName, signedToken, uid)
     try {
       const client = this.getClient();
 
-      console.log(`[Agora Voice] Chiamata a client.join() con token firmato da Edge Function:`, {
+      console.log(`[Agora Voice] Esecuzione client.join() con token dinamico Edge Function:`, {
         appId: `${appId.slice(0, 6)}••••••••••••${appId.slice(-4)}`,
         channel: sanitizedChannel,
-        tokenAvailable: Boolean(signedToken),
+        tokenPrefix: `${signedToken.slice(0, 12)}...`,
         uid: numericUid,
       });
 
-      // Esegue il join passando App ID, Channel Name, Token firmato e UID
+      // Esegue il join passando App ID, Channel Name, Token dinamico obbligatorio e UID
       const joinedUid = await client.join(appId, sanitizedChannel, signedToken, numericUid);
       this.currentChannel = sanitizedChannel;
 
-      console.log(`[Agora Voice] Connessione riuscita a "${sanitizedChannel}" (UID: ${joinedUid}) con token Edge Function!`);
+      console.log(`[Agora Voice] Connessione riuscita a "${sanitizedChannel}" (UID: ${joinedUid}) con token dinamico v2!`);
 
       // Apertura e pubblicazione microfono locale
       let isPublishing = false;
