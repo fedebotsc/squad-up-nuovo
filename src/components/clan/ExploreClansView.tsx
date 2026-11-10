@@ -45,6 +45,7 @@ export const ExploreClansView: React.FC<ExploreClansViewProps> = () => {
     followClan,
     unfollowClan,
     openAuthModal,
+    openClanDetail,
   } = useSquad();
 
   const [clans, setClans] = useState<ClanItem[]>([]);
@@ -213,7 +214,11 @@ export const ExploreClansView: React.FC<ExploreClansViewProps> = () => {
                 className="bg-[#121628]/90 border border-purple-900/30 hover:border-purple-600/50 rounded-2xl p-3.5 space-y-2.5 transition-all shadow-md group"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    onClick={() => openClanDetail(clan.id)}
+                    className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                    title="Visualizza dettagli completi del clan"
+                  >
                     {/* Clan Emblem / Avatar */}
                     <div className="relative shrink-0">
                       <div

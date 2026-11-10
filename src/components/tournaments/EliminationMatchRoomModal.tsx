@@ -163,21 +163,30 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
       }
 
       // Automatically post the rejection alert in match room chat
-      setMatchState((prev) => ({
-        ...prev,
-        chatMessages: [
-          ...prev.chatMessages,
-          {
-            id: `sys_err_${Date.now()}`,
-            senderId: "system",
-            senderName: "SquadUP Arbitro IA",
-            teamName: targetTeam.teamName,
-            text: `❌ ${errMsg}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            isSystem: true,
-          },
-        ],
-      }));
+      match.chatMessages.push({
+        id: `sys_err_${Date.now()}`,
+        senderId: "system",
+        senderName: "SquadUP Arbitro IA",
+        teamName: targetTeam.teamName,
+        text: `❌ ${errMsg}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        isSystem: true,
+      });
+
+      try {
+        const bracketState = getBracketState(match.tournamentId);
+        for (const round of bracketState.rounds) {
+          for (const m of round.matches) {
+            if (m.id === match.id) {
+              m.chatMessages = [...match.chatMessages];
+            }
+          }
+        }
+        saveBracketState(match.tournamentId, bracketState);
+        onMatchUpdated();
+      } catch (err) {
+        console.warn("[EliminationMatchRoomModal] Errore salvataggio chat:", err);
+      }
 
       const isKdMismatch =
         errMsg.toLowerCase().includes("profilo") ||

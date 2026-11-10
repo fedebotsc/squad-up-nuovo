@@ -121,6 +121,7 @@ interface SquadContextType {
 
   // Tournaments
   tournaments: Tournament[];
+  setTournaments: React.Dispatch<React.SetStateAction<Tournament[]>>;
   selectedTournament: Tournament | null;
   setSelectedTournament: (tournament: Tournament | null) => void;
   refreshTournaments: () => Promise<void>;
@@ -1135,20 +1136,6 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       toast({
         title: "Errore pubblicazione",
         description: err.message || "Impossibile salvare la storia.",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
-        description: "La tua clip/screenshot è ora visibile in cima al feed.",
-      });
-
-      return true;
-    } catch (err: any) {
-      console.error("[SquadContext] Errore pubblicazione storia:", err);
-      toast({
-        title: "Errore pubblicazione storia",
-        description: err.message || "Impossibile caricare il media.",
         variant: "destructive",
       });
       return false;
@@ -2333,6 +2320,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addComment,
         deleteComment,
         tournaments,
+        setTournaments,
         selectedTournament,
         setSelectedTournament,
         refreshTournaments: loadDatabaseContent,

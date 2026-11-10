@@ -642,7 +642,11 @@ export const HomeSection: React.FC = () => {
                 {/* Author Header (Clan vs Personal) */}
                 <div className="flex items-center justify-between">
                   {post.postedAsClan && post.clan ? (
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      onClick={() => post.clan?.id && openClanDetail(post.clan.id)}
+                      className="flex items-center gap-2.5 min-w-0 cursor-pointer group/clan"
+                      title="Visualizza dettagli clan"
+                    >
                       <div className="relative shrink-0">
                         {post.clan.clanFrameUrl && (
                           <div
@@ -665,7 +669,7 @@ export const HomeSection: React.FC = () => {
                           <img
                             src={post.clan.avatarUrl}
                             alt={post.clan.name}
-                            className="w-10 h-10 rounded-xl object-cover border-2 border-cyan-400/70 shadow-sm"
+                            className="w-10 h-10 rounded-xl object-cover border-2 border-cyan-400/70 shadow-sm group-hover/clan:border-cyan-300 transition-colors"
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-800 via-indigo-700 to-cyan-600 flex items-center justify-center border-2 border-cyan-400/60 text-white shadow-sm">
@@ -676,7 +680,7 @@ export const HomeSection: React.FC = () => {
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-black text-white tracking-wide truncate max-w-[130px]">
+                          <span className="text-xs font-black text-white tracking-wide truncate max-w-[130px] group-hover/clan:text-cyan-300 transition-colors">
                             {post.clan.name}
                           </span>
                           <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/50">
@@ -688,7 +692,15 @@ export const HomeSection: React.FC = () => {
                           </span>
                         </div>
                         <div className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
-                          <span className="text-purple-300 truncate max-w-[110px]">
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const targetId = post.userId || post.author.id;
+                              if (targetId) openPublicProfile(targetId);
+                            }}
+                            className="text-purple-300 truncate max-w-[110px] hover:text-cyan-300 transition-colors cursor-pointer"
+                            title="Visualizza profilo admin"
+                          >
                             di {post.author.name} (Admin)
                           </span>
                           <span>•</span>
@@ -697,22 +709,29 @@ export const HomeSection: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      onClick={() => {
+                        const targetId = post.userId || post.author.id;
+                        if (targetId) openPublicProfile(targetId);
+                      }}
+                      className="flex items-center gap-2.5 min-w-0 cursor-pointer group/author"
+                      title="Visualizza profilo giocatore"
+                    >
                       {post.author.avatar ? (
                         <img
                           src={post.author.avatar}
                           alt={post.author.name}
-                          className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0"
+                          className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0 group-hover/author:border-cyan-400 transition-colors"
                         />
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0 group-hover/author:border-cyan-400 transition-colors">
                           {post.author.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-zinc-100 truncate max-w-[130px]">
+                          <span className="text-xs font-bold text-zinc-100 truncate max-w-[130px] group-hover/author:text-cyan-300 transition-colors">
                             {post.author.name}
                           </span>
                           {post.author.activisionId && (
@@ -721,7 +740,18 @@ export const HomeSection: React.FC = () => {
                             </span>
                           )}
                           {post.author.clanTag && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (post.clanId) {
+                                  openClanDetail(post.clanId);
+                                } else if (clanData && clanData.tag === post.author.clanTag) {
+                                  openClanDetail(clanData.id);
+                                }
+                              }}
+                              className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40 hover:bg-purple-800 hover:text-white transition-colors cursor-pointer"
+                              title="Visualizza clan"
+                            >
                               [{post.author.clanTag}]
                             </span>
                           )}
@@ -963,19 +993,25 @@ export const HomeSection: React.FC = () => {
                               className="bg-[#0e1222] border border-zinc-800/80 rounded-xl p-2.5 space-y-1.5"
                             >
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  onClick={() => {
+                                    if (comment.userId) openPublicProfile(comment.userId);
+                                  }}
+                                  className="flex items-center gap-2 min-w-0 cursor-pointer group/commentAuthor"
+                                  title="Visualizza profilo giocatore"
+                                >
                                   {comment.author.avatar ? (
                                     <img
                                       src={comment.author.avatar}
                                       alt={comment.author.name}
-                                      className="w-6 h-6 rounded-lg object-cover border border-purple-500/30 shrink-0"
+                                      className="w-6 h-6 rounded-lg object-cover border border-purple-500/30 shrink-0 group-hover/commentAuthor:border-cyan-400 transition-colors"
                                     />
                                   ) : (
-                                    <div className="w-6 h-6 rounded-lg bg-purple-950 flex items-center justify-center text-[10px] font-bold text-purple-300 shrink-0">
+                                    <div className="w-6 h-6 rounded-lg bg-purple-950 flex items-center justify-center text-[10px] font-bold text-purple-300 shrink-0 group-hover/commentAuthor:border-cyan-400 transition-colors">
                                       {comment.author.name.slice(0, 2).toUpperCase()}
                                     </div>
                                   )}
-                                  <span className="text-xs font-bold text-zinc-200 truncate">
+                                  <span className="text-xs font-bold text-zinc-200 truncate group-hover/commentAuthor:text-cyan-300 transition-colors">
                                     {comment.author.name}
                                   </span>
                                   <span className="text-[10px] text-zinc-500 shrink-0">
@@ -1056,15 +1092,41 @@ export const HomeSection: React.FC = () => {
         ) : (
           <div className="bg-[#121628]/90 border border-purple-900/30 rounded-2xl p-8 text-center space-y-3">
             <div className="w-12 h-12 mx-auto rounded-2xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-400">
-              <Gamepad2 className="w-6 h-6" />
+              {feedTab === "following" ? (
+                <UserCheck className="w-6 h-6 text-cyan-400" />
+              ) : (
+                <Gamepad2 className="w-6 h-6 text-purple-400" />
+              )}
             </div>
-            <h4 className="text-sm font-bold text-white">Nessun post nel feed</h4>
-            <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto">
-              Sii il primo a condividere un momento di gioco o a cercare compagni di squadra!
+            <h4 className="text-sm font-bold text-white">
+              {feedTab === "following"
+                ? "Nessun post dai profili seguiti"
+                : "Nessun post nel feed"}
+            </h4>
+            <p className="text-xs text-zinc-400 break-words max-w-xs mx-auto leading-relaxed">
+              {feedTab === "following"
+                ? "Non segui ancora nessun giocatore o clan che ha pubblicato contenuti. Segui i tuoi creator e team preferiti dal tab 'Per te'!"
+                : "Sii il primo a condividere un momento di gioco o a cercare compagni di squadra!"}
             </p>
+            {feedTab === "following" && (
+              <button
+                type="button"
+                onClick={() => setFeedTab("for_you")}
+                className="px-4 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-purple-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Torna a Per te</span>
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Create Story Modal */}
+      <CreateStoryModal
+        isOpen={showCreateStoryModal}
+        onClose={() => setShowCreateStoryModal(false)}
+      />
 
       {/* Story Viewer Modal */}
       {activeStory && (

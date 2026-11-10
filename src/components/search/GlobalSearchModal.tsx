@@ -75,6 +75,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     setTournamentSubTab,
     setSelectedTournament,
     tournaments,
+    openPublicProfile,
+    openClanDetail,
   } = useSquad();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -271,8 +273,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     onClose();
   };
 
-  const handleSelectClan = () => {
-    setActiveTab("clan");
+  const handleSelectClan = (clanId?: string) => {
+    if (clanId) {
+      openClanDetail(clanId);
+    } else {
+      setActiveTab("clan");
+    }
     onClose();
   };
 
@@ -411,7 +417,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           key={p.id}
                           className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-purple-600/50 transition-all flex items-center justify-between gap-3 shadow-sm"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            onClick={() => {
+                              openPublicProfile(p.id);
+                              onClose();
+                            }}
+                            className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                            title="Visualizza profilo pubblico"
+                          >
                             <div className="relative shrink-0">
                               {p.avatar_url ? (
                                 <img
@@ -505,8 +518,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-purple-600/50 transition-all flex items-center justify-between gap-3 shadow-sm"
                         >
                           <div
-                            onClick={handleSelectClan}
+                            onClick={() => handleSelectClan(clan.id)}
                             className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                            title="Visualizza dettagli clan"
                           >
                             <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs shrink-0">
                               [{clan.tag}]
