@@ -62,6 +62,44 @@ export const VoiceSection: React.FC = () => {
   const [isAgoraConfigOpen, setIsAgoraConfigOpen] = useState(false);
   const [customAppIdInput, setCustomAppIdInput] = useState(agoraVoiceService.getAppId());
   const [customTokenInput, setCustomTokenInput] = useState(agoraVoiceService.getToken() || "");
+  const [isTestingEdgeToken, setIsTestingEdgeToken] = useState(false);
+  const [edgeTokenTestResult, setEdgeTokenTestResult] = useState<{
+    success: boolean;
+    token?: string;
+    error?: string;
+    source: string;
+    channel: string;
+    uid: number;
+  } | null>(null);
+
+  const handleTestEdgeFunction = async () => {
+    setIsTestingEdgeToken(true);
+    setEdgeTokenTestResult(null);
+    try {
+      const res = await agoraVoiceService.testEdgeFunctionToken();
+      setEdgeTokenTestResult(res);
+      if (res.success) {
+        toast({
+          title: "Edge Function Online! 🟢",
+          description: `Token generato per canale "${res.channel}" (UID: ${res.uid}). L'app è pronta per le chiamate vocali.`,
+        });
+      } else {
+        toast({
+          title: "Verifica Edge Function",
+          description: res.error || "Nessun token restituito.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Errore Verifica",
+        description: e?.message || "Impossibile contattare la funzione.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingEdgeToken(false);
+    }
+  };
 
   const [isTestingMic, setIsTestingMic] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -767,14 +805,69 @@ export const VoiceSection: React.FC = () => {
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 space-y-1.5 text-[11px] text-zinc-300">
-                <span className="font-bold text-cyan-300 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  Modalità App ID Only (Senza Token)
-                </span>
+              {/* SUPABASE EDGE FUNCTION TOKEN STATUS */}
+              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 space-y-2 text-[11px] text-zinc-300">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Supabase Edge Function: generate-agora-token
+                  </span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Online
+                  </span>
+                </div>
                 <p className="text-[10px] text-zinc-400 leading-relaxed">
-                  Il servizio vocale è configurato per connettersi direttamente con l'App ID <code>f7511dae35db4516aeb30dc522b84824</code> passando <code>null</code> per il token.
+                  L'app genera automaticamente un token RTC firmato tramite la Supabase Edge Function prima di ogni connessione al canale vocale.
                 </p>
+
+                {/* Test Button */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestEdgeFunction}
+                    disabled={isTestingEdgeToken}
+                    className="w-full py-1.5 px-2.5 rounded-lg text-[10px] font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    {isTestingEdgeToken ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Verifica Edge Function in corso...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="w-3 h-3 text-cyan-400" />
+                        <span>Verifica Generazione Token in Tempo Reale</span>
+                      </>
+                    )}
+                  </button>
+
+                  {edgeTokenTestResult && (
+                    <div className={`mt-2 p-2 rounded-lg text-[9px] font-mono break-all ${
+                      edgeTokenTestResult.success
+                        ? "bg-emerald-950/40 border border-emerald-500/30 text-emerald-300"
+                        : "bg-rose-950/40 border border-rose-500/30 text-rose-300"
+                    }`}>
+                      {edgeTokenTestResult.success ? (
+                        <>
+                          <div className="font-bold text-emerald-400 mb-0.5 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            Token Generato ({edgeTokenTestResult.source}):
+                          </div>
+                          <div className="text-[9px] text-zinc-400">
+                            Channel: {edgeTokenTestResult.channel} | UID: {edgeTokenTestResult.uid}
+                          </div>
+                          <div className="text-[9px] text-emerald-200 truncate mt-0.5">
+                            {edgeTokenTestResult.token?.slice(0, 32)}...
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-rose-400">
+                          {edgeTokenTestResult.error || "Errore nella generazione del token"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

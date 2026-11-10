@@ -91,7 +91,7 @@ class AgoraVoiceService {
     uid: number | string
   ): Promise<string | null> {
     try {
-      console.log(`[Agora Voice] Invocazione Supabase Edge Function "generate-agora-token" per channel: "${channelName}", UID: ${uid}...`);
+      console.log(`[Agora Voice] Richiesta token RTC alla Edge Function "generate-agora-token" (channel: "${channelName}", UID: ${uid})...`);
 
       const { data, error } = await supabase.functions.invoke("generate-agora-token", {
         body: {
@@ -100,14 +100,30 @@ class AgoraVoiceService {
         },
       });
 
+      if (!error && data) {
+        const signedToken = data?.token || data?.rtcToken || data?.jwt || null;
+        if (signedToken) {
+          console.log("[Agora Voice] Token RTC firmato ottenuto con successo da Supabase Edge Function:", {
+            channel: channelName,
+            uid,
+            tokenPrefix: signedToken.slice(0, 15) + "...",
+            expireTimestamp: data.expireTimestamp,
+          });
+          return signedToken;
+        }
+      }
+
       if (error) {
         console.warn("[Agora Voice] Avviso supabase.functions.invoke('generate-agora-token'):", error.message || error);
 
-        // Fallback: chiamata HTTP diretta all'endpoint della Edge Function
+        // Fallback: chiamata HTTP diretta all'endpoint della Edge Function con chiavi apikey
+        const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NYFmcAIbknMLAasXoMiUZg_0-xvIR5C";
         const fallbackRes = await fetch("https://ojostglcbfbpsisfdibk.supabase.co/functions/v1/generate-agora-token", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
             channelName,
@@ -119,27 +135,101 @@ class AgoraVoiceService {
           const directData = await fallbackRes.json();
           const signedToken = directData?.token || directData?.rtcToken || directData?.jwt || null;
           if (signedToken) {
-            console.log("[Agora Voice] Token firmato JWT ricevuto con successo da endpoint Edge Function.");
+            console.log("[Agora Voice] Token firmato RTC ricevuto con successo via endpoint HTTP diretto della Edge Function.");
             return signedToken;
           }
-        }
-      } else if (data) {
-        const signedToken = data?.token || data?.rtcToken || data?.jwt || null;
-        if (signedToken) {
-          console.log("[Agora Voice] Token firmato JWT generato e ricevuto con successo da generate-agora-token!");
-          return signedToken;
         }
       }
     } catch (err: any) {
       console.warn("[Agora Voice] Eccezione durante la richiesta del token a generate-agora-token:", err?.message || err);
     }
 
-    // Fallback prioritario alle variabili d'ambiente se l'edge function non è disponibile offline
+    // Fallback prioritario alle variabili d'ambiente se l'edge function non è raggiungibile offline
     const envToken =
       (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim() ||
       (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
 
     return envToken || null;
+  }
+
+  /**
+   * Metodo diagnostico per verificare in tempo reale lo stato dell'Edge Function generate-agora-token
+   */
+  public async testEdgeFunctionToken(): Promise<{
+    success: boolean;
+    token?: string;
+    error?: string;
+    source: string;
+    channel: string;
+    uid: number;
+  }> {
+    const testChannel = "squad_test_channel";
+    const testUid = Math.floor(Math.random() * 899999) + 100000;
+
+    try {
+      console.log(`[Agora Voice Test] Inizio test diagnostico Edge Function su "${testChannel}", UID: ${testUid}...`);
+      const { data, error } = await supabase.functions.invoke("generate-agora-token", {
+        body: {
+          channelName: testChannel,
+          uid: testUid,
+        },
+      });
+
+      if (!error && data && (data.token || data.rtcToken)) {
+        const receivedToken = data.token || data.rtcToken;
+        return {
+          success: true,
+          token: receivedToken,
+          source: "Supabase Edge Function (invoke)",
+          channel: testChannel,
+          uid: testUid,
+        };
+      }
+
+      // Tentativo diretto fallback
+      const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NYFmcAIbknMLAasXoMiUZg_0-xvIR5C";
+      const directRes = await fetch("https://ojostglcbfbpsisfdibk.supabase.co/functions/v1/generate-agora-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          channelName: testChannel,
+          uid: testUid,
+        }),
+      });
+
+      if (directRes.ok) {
+        const directData = await directRes.json();
+        if (directData?.token || directData?.rtcToken) {
+          return {
+            success: true,
+            token: directData.token || directData.rtcToken,
+            source: "Supabase Edge Function (HTTP direct)",
+            channel: testChannel,
+            uid: testUid,
+          };
+        }
+      }
+
+      return {
+        success: false,
+        error: error?.message || "Nessun token restituito dall'Edge Function",
+        source: "Failed",
+        channel: testChannel,
+        uid: testUid,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: e?.message || "Errore di connessione con l'Edge Function",
+        source: "Exception",
+        channel: testChannel,
+        uid: testUid,
+      };
+    }
   }
 
   private isPlaceholder(val: string): boolean {
