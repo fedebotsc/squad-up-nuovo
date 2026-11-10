@@ -114,20 +114,55 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({ story, onClo
         </div>
 
         {/* Story Image / Background */}
-        <div className="flex-1 relative bg-zinc-900">
-          <img
-            src={story.preview}
-            alt="Story visual"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
+        <div className="flex-1 relative bg-zinc-950 flex flex-col justify-center overflow-hidden">
+          {story.preview ? (
+            <>
+              <img
+                src={story.preview}
+                alt="Story visual"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
 
-          <div className="absolute bottom-20 left-4 right-4 z-10">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs backdrop-blur-sm">
-              <Flame className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-              <span>Storia Esport 24h</span>
+              {/* Caption Overlay for Mixed Story (Photo + Text) */}
+              {story.text && (
+                <div className="absolute bottom-16 left-3 right-3 z-10 p-3 rounded-2xl bg-black/70 backdrop-blur-md border border-white/15 shadow-xl animate-fade-in">
+                  <p className="text-xs font-semibold text-white leading-relaxed break-words whitespace-pre-wrap">
+                    {story.text}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Solo Testo Story */
+            <div
+              className={`w-full h-full flex flex-col justify-center items-center px-6 py-12 relative bg-gradient-to-b ${
+                story.bgGradient || "from-purple-900 via-indigo-950 to-zinc-950"
+              }`}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08)_0%,transparent_70%)] pointer-events-none" />
+              
+              <div className="relative z-10 text-center max-w-xs space-y-4">
+                <span className="text-3xl text-cyan-400 opacity-60 font-serif leading-none block">“</span>
+                <p className="text-base sm:text-lg font-black text-white leading-relaxed tracking-wide break-words drop-shadow-md">
+                  {story.text || "Storia 24h"}
+                </p>
+                <div className="pt-2 flex items-center justify-center gap-1.5 text-xs text-purple-300 font-semibold">
+                  <Flame className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>@{story.username}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {!story.text && story.preview && (
+            <div className="absolute bottom-16 left-4 right-4 z-10">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs backdrop-blur-sm">
+                <Flame className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span>Storia Esport 24h</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reply & Reaction Footer */}

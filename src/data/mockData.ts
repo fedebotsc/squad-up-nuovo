@@ -3,7 +3,10 @@ export interface Story {
   username: string;
   avatar: string;
   game?: string;
-  preview: string;
+  preview?: string;
+  text?: string;
+  bgGradient?: string;
+  type?: "text" | "photo" | "mixed";
   hoursLeft: number;
   hasUnread?: boolean;
   verified?: boolean;

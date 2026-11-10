@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useSquad } from "@/context/SquadContext";
 import { Post, PostComment } from "@/data/mockData";
 import { StoryViewerModal } from "./StoryViewerModal";
+import { CreateStoryModal } from "./CreateStoryModal";
 import {
   Heart,
   MessageSquare,
@@ -53,9 +54,14 @@ export const HomeSection: React.FC = () => {
     isFollowingClan,
     followClan,
     unfollowClan,
+    openPublicProfile,
+    openClanDetail,
+    followedUserIds,
+    followedClanIds,
   } = useSquad();
 
-  const [selectedGameFilter, setSelectedGameFilter] = useState<string>("Tutti");
+  const [feedTab, setFeedTab] = useState<"for_you" | "following">("for_you");
+  const [showCreateStoryModal, setShowCreateStoryModal] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
   const [selectedPostGame, setSelectedPostGame] = useState("Warzone");
   const [isComposing, setIsComposing] = useState(false);
@@ -185,13 +191,13 @@ export const HomeSection: React.FC = () => {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const storyInputRef = useRef<HTMLInputElement>(null);
-
-  const gameFilters = ["Tutti", "Warzone", "Multiplayer", "Ritorno", "Competitivo"];
 
   const filteredPosts = posts.filter((post) => {
-    if (selectedGameFilter === "Tutti") return true;
-    return post.game.toLowerCase().includes(selectedGameFilter.toLowerCase());
+    if (feedTab === "for_you") return true;
+    const authorUserId = post.userId || post.author.id;
+    const isUserFollowed = isFollowingUser(authorUserId) || followedUserIds.includes(authorUserId);
+    const isClanFollowed = Boolean(post.postedAsClan && post.clan && isFollowingClan(post.clan.id));
+    return isUserFollowed || isClanFollowed;
   });
 
   const handleStartCompose = () => {
@@ -311,17 +317,7 @@ export const HomeSection: React.FC = () => {
       });
       return;
     }
-    storyInputRef.current?.click();
-  };
-
-  const handleStoryFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingStory(true);
-    await createStory(file);
-    setIsUploadingStory(false);
-    if (storyInputRef.current) storyInputRef.current.value = "";
+    setShowCreateStoryModal(true);
   };
 
   return (
@@ -333,36 +329,25 @@ export const HomeSection: React.FC = () => {
             <Flame className="w-3.5 h-3.5 text-cyan-400" />
             <span>STORIE 24H COMMUNITY</span>
           </div>
+          <span className="text-[10px] text-zinc-400">Testo, Foto & Clip</span>
         </div>
 
         <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none scroll-smooth">
           {/* Add story button */}
-          <input
-            type="file"
-            ref={storyInputRef}
-            accept="image/*"
-            className="hidden"
-            onChange={handleStoryFileSelected}
-          />
           <button
             onClick={handleAddStory}
-            disabled={isUploadingStory}
             className="flex flex-col items-center shrink-0 group select-none cursor-pointer"
           >
             <div className="relative w-16 h-16 rounded-2xl bg-[#161b2e] border-2 border-dashed border-purple-500/60 p-0.5 flex items-center justify-center group-hover:border-purple-400 transition-colors">
               <div className="w-full h-full rounded-xl bg-purple-950/40 flex items-center justify-center">
-                {isUploadingStory ? (
-                  <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
-                ) : (
-                  <Plus className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform" />
-                )}
+                <Plus className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform" />
               </div>
               <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center text-black font-bold text-xs shadow-md">
                 +
               </div>
             </div>
             <span className="text-[11px] font-medium text-zinc-300 mt-1.5 truncate max-w-[64px]">
-              {isUploadingStory ? "Upload..." : "La tua clip"}
+              Crea Storia
             </span>
           </button>
 
@@ -382,15 +367,28 @@ export const HomeSection: React.FC = () => {
                   }`}
                 >
                   <div className="w-full h-full rounded-[14px] overflow-hidden bg-zinc-900 border border-black/40 relative">
-                    {story.avatar ? (
+                    {story.preview ? (
                       <img
-                        src={story.avatar}
+                        src={story.preview}
                         alt={story.username}
                         className="w-full h-full object-cover"
                       />
+                    ) : story.avatar ? (
+                      <div className="w-full h-full relative">
+                        <img
+                          src={story.avatar}
+                          alt={story.username}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-purple-950/50 flex items-center justify-center">
+                          <span className="text-[9px] font-black px-1 rounded bg-black/70 text-cyan-300 font-mono">
+                            Aa
+                          </span>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-purple-950 text-xs font-bold text-purple-300">
-                        {story.username.slice(0, 2).toUpperCase()}
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-purple-900 via-indigo-900 to-cyan-900 text-[10px] font-black text-purple-200">
+                        <span>{story.username.slice(0, 2).toUpperCase()}</span>
                       </div>
                     )}
                   </div>
@@ -580,21 +578,46 @@ export const HomeSection: React.FC = () => {
         )}
       </section>
 
-      {/* Game Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {gameFilters.map((filter) => (
-          <button
-            key={filter}
-            onClick={() => setSelectedGameFilter(filter)}
-            className={`px-3 py-1 rounded-full text-xs font-medium shrink-0 transition-all ${
-              selectedGameFilter === filter
-                ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(139,92,246,0.4)]"
-                : "bg-[#14182a] text-zinc-400 hover:text-zinc-200 border border-zinc-800/80"
-            }`}
-          >
-            {filter}
-          </button>
-        ))}
+      {/* Feed Main Tabs (Per te & Seguiti) */}
+      <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-1.5 shadow-md flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setFeedTab("for_you")}
+          className={`flex-1 py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            feedTab === "for_you"
+              ? "bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+          <span>Per te</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/40 text-purple-200 ml-1">
+            {posts.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFeedTab("following")}
+          className={`flex-1 py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            feedTab === "following"
+              ? "bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5 text-cyan-300" />
+          <span>Seguiti</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/40 text-cyan-200 ml-1">
+            {posts.filter((p) => {
+              const aId = p.userId || p.author.id;
+              return (
+                isFollowingUser(aId) ||
+                followedUserIds.includes(aId) ||
+                Boolean(p.postedAsClan && p.clan && isFollowingClan(p.clan.id))
+              );
+            }).length}
+          </span>
+        </button>
       </div>
 
       {/* Feed Posts */}

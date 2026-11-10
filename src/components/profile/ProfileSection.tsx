@@ -23,10 +23,12 @@ import {
   ShieldAlert,
   Award,
   ShoppingBag,
+  UserCog,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileCustomizerModal } from "./ProfileCustomizerModal";
+import { EditProfileModal } from "./EditProfileModal";
 import { AVATAR_FRAMES } from "./cosmeticsData";
 import { RewardsHub } from "@/components/rewards/RewardsHub";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
@@ -46,6 +48,7 @@ export const ProfileSection: React.FC = () => {
     followedUserIds,
     followedClanIds,
     setActiveTab: setSquadNavTab,
+    openClanDetail,
   } = useSquad();
 
   const [followersCount, setFollowersCount] = useState<number>(0);
@@ -73,6 +76,7 @@ export const ProfileSection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"wallet" | "stats" | "rewards">("wallet");
 
   // Modals state
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
   const [showReviews, setShowReviews] = useState(false);
@@ -251,9 +255,15 @@ export const ProfileSection: React.FC = () => {
                     </span>
                   ) : null}
                   {clanData?.tag && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-500/40">
-                      [{clanData.tag}]
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openClanDetail(clanData.id)}
+                      title={`Visualizza dettagli Clan [${clanData.tag}]`}
+                      className="text-[10px] font-black px-1.5 py-0.2 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-900/80 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                    >
+                      <Shield className="w-2.5 h-2.5 text-cyan-400" />
+                      <span>[{clanData.tag}]</span>
+                    </button>
                   )}
                   {userProfile.activeTitle && (
                     <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]">
@@ -293,6 +303,20 @@ export const ProfileSection: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Pulsante dedicato Modifica Dati Personali */}
+          {currentUser && (
+            <div className="pt-2.5 mt-2.5 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setShowEditProfile(true)}
+                className="w-full py-2 px-3.5 rounded-xl bg-gradient-to-r from-purple-900/60 via-indigo-900/40 to-cyan-950/60 hover:from-purple-800/70 hover:to-cyan-900/70 border border-purple-500/50 hover:border-cyan-400 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md group"
+              >
+                <UserCog className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                <span>Modifica Dati Personali (ID App & Activision)</span>
+              </button>
+            </div>
+          )}
 
           {/* Dynamic stat highlights */}
           {hasStats ? (
@@ -604,6 +628,11 @@ export const ProfileSection: React.FC = () => {
       )}
 
       {/* ALL MODALS */}
+      <EditProfileModal
+        isOpen={showEditProfile}
+        onClose={() => setShowEditProfile(false)}
+      />
+
       <ProfileCustomizerModal
         isOpen={showCustomizer}
         onClose={() => setShowCustomizer(false)}

@@ -101,7 +101,18 @@ interface SquadContextType {
   toggleLikePost: (postId: string) => void;
   createPost: (content: string, game: string, imageFile?: File, asClan?: boolean) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
-  createStory: (file: File, caption?: string) => Promise<boolean>;
+  createStory: (
+    fileOrParams: File | { file?: File; text?: string; bgGradient?: string },
+    caption?: string
+  ) => Promise<boolean>;
+
+  // Public Profile & Clan Detail Navigation
+  selectedPublicUserId: string | null;
+  openPublicProfile: (userId: string) => void;
+  closePublicProfile: () => void;
+  selectedClanDetailId: string | null;
+  openClanDetail: (clanId: string) => void;
+  closeClanDetail: () => void;
 
   // Comments
   fetchPostComments: (postId: string) => Promise<PostComment[]>;
@@ -232,6 +243,23 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Follow system state
   const [followedUserIds, setFollowedUserIds] = useState<string[]>([]);
   const [followedClanIds, setFollowedClanIds] = useState<string[]>([]);
+
+  // Public Profile & Clan Detail modal states
+  const [selectedPublicUserId, setSelectedPublicUserId] = useState<string | null>(null);
+  const openPublicProfile = useCallback((userId: string) => {
+    setSelectedPublicUserId(userId);
+  }, []);
+  const closePublicProfile = useCallback(() => {
+    setSelectedPublicUserId(null);
+  }, []);
+
+  const [selectedClanDetailId, setSelectedClanDetailId] = useState<string | null>(null);
+  const openClanDetail = useCallback((clanId: string) => {
+    setSelectedClanDetailId(clanId);
+  }, []);
+  const closeClanDetail = useCallback(() => {
+    setSelectedClanDetailId(null);
+  }, []);
 
   // Notifications state
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
@@ -689,12 +717,16 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               1,
               Math.round((new Date(s.expires_at).getTime() - Date.now()) / (1000 * 60 * 60))
             );
+            const hasMedia = Boolean(s.media_url && s.media_url.trim() !== "");
+            const hasText = Boolean(s.caption && s.caption.trim() !== "");
             return {
               id: s.id,
               userId: s.user_id,
               username: s.profiles?.display_name || s.profiles?.username || "Player",
               avatar: s.profiles?.avatar_url || "",
-              preview: s.media_url,
+              preview: s.media_url || "",
+              text: s.caption || "",
+              type: (hasMedia && hasText ? "mixed" : hasMedia ? "photo" : "text") as "mixed" | "photo" | "text",
               hoursLeft: diffHours,
               hasUnread: true,
             };
@@ -1009,7 +1041,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Create Story in Supabase `stories` table and bucket `stories-media` / `social-media`
-  const createStory = async (file: File, caption?: string): Promise<boolean> => {
+  const createStory = async (
+    fileOrParams: File | { file?: File; text?: string; bgGradient?: string },
+    captionParam?: string
+  ): Promise<boolean> => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
 
@@ -1022,13 +1057,37 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return false;
     }
 
+    let file: File | undefined = undefined;
+    let textContent = "";
+    let bgGradient: string | undefined = undefined;
+
+    if (fileOrParams instanceof File) {
+      file = fileOrParams;
+      textContent = captionParam || "";
+    } else if (fileOrParams) {
+      file = fileOrParams.file;
+      textContent = fileOrParams.text || "";
+      bgGradient = fileOrParams.bgGradient;
+    }
+
+    if (!file && !textContent.trim()) {
+      toast({
+        title: "Contenuto mancante",
+        description: "Scrivi un testo oppure carica una foto per la tua storia.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     try {
       let mediaUrl: string | undefined = undefined;
-      try {
-        const uploadRes = await uploadMediaFile(file, "post-media", user.id);
-        mediaUrl = uploadRes.url;
-      } catch {
-        mediaUrl = URL.createObjectURL(file);
+      if (file) {
+        try {
+          const uploadRes = await uploadMediaFile(file, "post-media", user.id);
+          mediaUrl = uploadRes.url;
+        } catch {
+          mediaUrl = URL.createObjectURL(file);
+        }
       }
 
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -1037,11 +1096,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .from("stories")
         .insert({
           user_id: user.id,
-          media_url: mediaUrl,
-          caption: caption || "",
+          media_url: mediaUrl || "",
+          caption: textContent || "",
           expires_at: expiresAt,
         })
-        .select("*, profiles:user_id(id, username, display_name, avatar_url)")
+        .select("*, profiles:stories_user_id_fkey(id, username, display_name, avatar_url)")
         .single();
 
       if (insertErr) {
@@ -1053,7 +1112,10 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         userId: user.id,
         username: userProfile.name,
         avatar: userProfile.avatar,
-        preview: mediaUrl,
+        preview: mediaUrl || "",
+        text: textContent,
+        bgGradient,
+        type: (file && textContent.trim() ? "mixed" : file ? "photo" : "text"),
         hoursLeft: 24,
         hasUnread: true,
       };
@@ -1061,6 +1123,23 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setStories((prev) => [newStory, ...prev]);
       toast({
         title: "Storia 24h pubblicata! 🔥",
+        description: file && textContent.trim()
+          ? "Foto e testo condivisi con successo!"
+          : file
+          ? "Foto pubblicata con successo!"
+          : "Storia di testo pubblicata con successo!",
+      });
+      return true;
+    } catch (err: any) {
+      console.error("[SquadContext] Errore pubblicazione storia:", err);
+      toast({
+        title: "Errore pubblicazione",
+        description: err.message || "Impossibile salvare la storia.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
         description: "La tua clip/screenshot è ora visibile in cima al feed.",
       });
 
@@ -2244,6 +2323,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createPost,
         deletePost,
         createStory,
+        selectedPublicUserId,
+        openPublicProfile,
+        closePublicProfile,
+        selectedClanDetailId,
+        openClanDetail,
+        closeClanDetail,
         fetchPostComments,
         addComment,
         deleteComment,

@@ -10,6 +10,8 @@ import { ClanSection } from "@/components/clan/ClanSection";
 import { ShopSection } from "@/components/shop/ShopSection";
 import { ProfileSection } from "@/components/profile/ProfileSection";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { PublicProfileModal } from "@/components/profile/PublicProfileModal";
+import { ClanDetailModal } from "@/components/clan/ClanDetailModal";
 
 const MainContent: React.FC = () => {
   const {
@@ -18,6 +20,12 @@ const MainContent: React.FC = () => {
     closeAuthModal,
     authModalTab,
     refreshUserData,
+    selectedPublicUserId,
+    closePublicProfile,
+    openPublicProfile,
+    selectedClanDetailId,
+    closeClanDetail,
+    openClanDetail,
   } = useSquad();
 
   return (
@@ -49,6 +57,22 @@ const MainContent: React.FC = () => {
         onClose={closeAuthModal}
         defaultTab={authModalTab}
         onSuccess={refreshUserData}
+      />
+
+      {/* Public User Profile Modal */}
+      <PublicProfileModal
+        isOpen={Boolean(selectedPublicUserId)}
+        userId={selectedPublicUserId}
+        onClose={closePublicProfile}
+        onOpenClanDetail={(clanId) => openClanDetail(clanId)}
+      />
+
+      {/* Clan Detail Modal */}
+      <ClanDetailModal
+        isOpen={Boolean(selectedClanDetailId)}
+        clanId={selectedClanDetailId}
+        onClose={closeClanDetail}
+        onOpenUserProfile={(userId) => openPublicProfile(userId)}
       />
     </main>
   );
