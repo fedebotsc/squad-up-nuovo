@@ -93,6 +93,17 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
       return;
     }
 
+    // Controllo preventivo permessi audio e disponibilità microfono
+    const micCheck = await agoraVoiceService.checkMicrophonePermission();
+    if (!micCheck.granted) {
+      toast({
+        title: "Microfono Richiesto 🎙️",
+        description: micCheck.error || "È necessario consentire l'accesso al microfono per entrare nella chat vocale del clan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Single instance: disconnect from standard squad room first if connected
     if (activeVoiceRoomId) {
       toast({

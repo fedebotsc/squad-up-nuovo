@@ -1628,7 +1628,18 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    // 2. Single Instance Check: if in another room, leave and clean up first
+    // 2. Controllo preventivo permessi audio e disponibilità microfono
+    const micCheck = await agoraVoiceService.checkMicrophonePermission();
+    if (!micCheck.granted) {
+      toast({
+        title: "Microfono Richiesto 🎙️",
+        description: micCheck.error || "Non è possibile accedere alla stanza vocale senza un microfono attivo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 3. Single Instance Check: if in another room, leave and clean up first
     if (activeVoiceRoomId && activeVoiceRoomId !== roomId) {
       toast({
         title: "Cambio Stanza",
@@ -1720,6 +1731,17 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const createVoiceRoom = async (name: string, category: string = "Warzone"): Promise<VoiceRoom> => {
+    // 0. Controllo preventivo permessi audio e disponibilità microfono
+    const micCheck = await agoraVoiceService.checkMicrophonePermission();
+    if (!micCheck.granted) {
+      toast({
+        title: "Microfono Richiesto 🎙️",
+        description: micCheck.error || "È necessario consentire l'accesso al microfono per creare ed entrare in una stanza vocale.",
+        variant: "destructive",
+      });
+      throw new Error(micCheck.error || "Permesso microfono non concesso.");
+    }
+
     // 1. Single Instance Check: Disconnect from previous room first
     if (activeVoiceRoomId) {
       toast({

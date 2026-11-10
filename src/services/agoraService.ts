@@ -313,7 +313,61 @@ class AgoraVoiceService {
   }
 
   /**
+   * Verifica preventiva della disponibilità e dei permessi del microfono tramite navigator.mediaDevices.getUserMedia({ audio: true }).
+   * Chiude immediatamente le tracce audio dopo il controllo per non occupare il dispositivo.
+   */
+  public async checkMicrophonePermission(): Promise<{ granted: boolean; error?: string; errorCode?: string }> {
+    if (typeof window === "undefined" || !navigator?.mediaDevices?.getUserMedia) {
+      return {
+        granted: false,
+        error: "Il tuo browser o il contesto attuale non supporta l'accesso al microfono (richiede HTTPS o localhost).",
+        errorCode: "MEDIA_DEVICES_NOT_SUPPORTED",
+      };
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Rilascia immediatamente tutte le tracce audio acquisite per non bloccare il microfono
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      return { granted: true };
+    } catch (err: any) {
+      console.warn("[Agora Voice] Controllo preventivo permessi audio fallito:", err?.name, err?.message);
+
+      let userFriendlyMsg = "Accesso al microfono negato o dispositivo audio non disponibile.";
+      let code = "MIC_PERMISSION_DENIED";
+
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        userFriendlyMsg = "Permesso microfono negato: consenti l'accesso al microfono nelle impostazioni del browser (o dall'icona del lucchetto) per entrare nella stanza vocale.";
+        code = "PERMISSION_DENIED";
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        userFriendlyMsg = "Nessun microfono rilevato: collega un microfono o una cuffia con microfono al dispositivo per partecipare alla voce.";
+        code = "NO_MIC_DEVICE";
+      } else if (err?.name === "NotReadableError" || err?.name === "TrackStartError") {
+        userFriendlyMsg = "Il microfono è attualmente occupato da un'altra applicazione (es. Discord, Meet, Zoom). Chiudi l'altra app e riprova.";
+        code = "MIC_BUSY";
+      } else if (err?.name === "OverconstrainedError") {
+        userFriendlyMsg = "Nessun microfono rilevato soddisfa i requisiti di sistema.";
+        code = "MIC_OVERCONSTRAINED";
+      } else if (err?.name === "SecurityError") {
+        userFriendlyMsg = "Accesso al microfono non consentito dal browser per motivi di sicurezza (richiede contesto protetto HTTPS).";
+        code = "MIC_SECURITY_ERROR";
+      }
+
+      return {
+        granted: false,
+        error: userFriendlyMsg,
+        errorCode: code,
+      };
+    }
+  }
+
+  /**
    * Connessione al canale vocale Agora:
+   * 0. Esegue controllo preventivo del microfono via getUserMedia.
    * 1. Esegue cleanup preventivo completo per azzerare sessioni precedenti.
    * 2. Chiama la Supabase Edge Function 'generate-agora-token' con channelName e uid.
    * 3. Passa il token JWT firmato ottenuto al metodo client.join(appId, channelName, token, uid).
@@ -338,7 +392,20 @@ class AgoraVoiceService {
       };
     }
 
-    // 2. Sanitizzazione nome canale per Agora
+    // 2. Controllo preventivo permessi audio e disponibilità microfono
+    const micCheck = await this.checkMicrophonePermission();
+    if (!micCheck.granted) {
+      console.warn("[Agora Voice] Accesso microfono rifiutato o non disponibile:", micCheck.error);
+      return {
+        success: false,
+        realSdk: false,
+        isPublishing: false,
+        error: micCheck.error,
+        errorCode: micCheck.errorCode || "MIC_PERMISSION_DENIED",
+      };
+    }
+
+    // 3. Sanitizzazione nome canale per Agora
     let sanitizedChannel = (channelName || "")
       .trim()
       .replace(/[^a-zA-Z0-9_-]/g, "_")
