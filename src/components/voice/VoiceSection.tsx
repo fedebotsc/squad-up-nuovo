@@ -241,17 +241,17 @@ export const VoiceSection: React.FC = () => {
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded-md flex items-center gap-1">
               <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-              Token RTC Attivo
+              Modalità App ID Only
             </span>
             <button
               onClick={() => {
                 setCustomAppIdInput(agoraVoiceService.getAppId());
-                setCustomTokenInput(agoraVoiceService.getToken() || "");
+                setCustomTokenInput("");
                 setIsAgoraConfigOpen(true);
               }}
               className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
             >
-              <span>Configura</span>
+              <span>Info</span>
             </button>
           </div>
         </div>
@@ -755,31 +755,26 @@ export const VoiceSection: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-                  Agora App ID
+                  Agora App ID (Attivo: {agoraVoiceService.getAppId()})
                 </label>
                 <input
                   type="text"
                   value={customAppIdInput}
                   onChange={(e) => setCustomAppIdInput(e.target.value)}
-                  placeholder="Incolla il tuo App ID Agora..."
+                  placeholder="App ID Agora..."
                   className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-cyan-500 font-mono"
+                  readOnly
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-zinc-300 block mb-1">
-                  Agora Token RTC (Opzionale / Se richiesto)
-                </label>
-                <textarea
-                  value={customTokenInput}
-                  onChange={(e) => setCustomTokenInput(e.target.value)}
-                  placeholder="Incolla il token generato dalla Console Agora (o lascia vuoto se il progetto è in modalità 'Testing / App ID Only')..."
-                  rows={3}
-                  className="w-full bg-zinc-900 text-zinc-200 text-xs rounded-xl px-3 py-2 border border-purple-900/40 focus:outline-none focus:border-cyan-500 font-mono resize-none"
-                />
-                <span className="text-[10px] text-zinc-400 block mt-1 leading-snug">
-                  Se ricevi l'errore <code className="text-amber-400">DYNAMIC_KEY_TIMEOUT</code>, nella Console Agora imposta la sicurezza del progetto su <strong>"Testing (App ID only)"</strong> oppure genera un Token temporaneo.
+              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 space-y-1.5 text-[11px] text-zinc-300">
+                <span className="font-bold text-cyan-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  Modalità App ID Only (Senza Token)
                 </span>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  Il servizio vocale è configurato per connettersi direttamente con l'App ID <code>f7511dae35db4516aeb30dc522b84824</code> passando <code>null</code> per il token.
+                </p>
               </div>
             </div>
 

@@ -14,8 +14,8 @@ export interface AgoraConnectionState {
   appId: string;
 }
 
-const DEFAULT_AGORA_APP_ID = "f7511dae35db4516aeb30dc522b84824";
-const DEFAULT_AGORA_TEMP_TOKEN = "007eJxTYNAyX6Sg3Ot9ba/Q63vVzxUnWqk84GTdu7pUauFGRnUmBysFhjRzU0PDlMRUY9OUJBNTQ7PE1CRjg5RkUyOjJAsTCyOTlzM/ZzUEMjK8L53AwAiFID4fQ3BgqKOLQmiAgl+of5g/AwMA2iQgUA==";
+// App ID fisso e prioritario per la modalità App ID-only (senza token)
+const AGORA_APP_ID = "f7511dae35db4516aeb30dc522b84824";
 
 class AgoraVoiceService {
   private client: IAgoraRTCClient | null = null;
@@ -38,64 +38,21 @@ class AgoraVoiceService {
   }
 
   /**
-   * Retrieves the current Agora App ID directly from environment variables.
+   * Restituisce l'App ID Agora (f7511dae35db4516aeb30dc522b84824).
    */
   public getAppId(): string {
     const envAppId = (import.meta.env.VITE_AGORA_APP_ID as string | undefined)?.trim();
     if (envAppId && envAppId.length >= 10 && !this.isPlaceholder(envAppId)) {
       return envAppId;
     }
-    if (typeof window !== "undefined") {
-      const storedAppId = localStorage.getItem("squadup_agora_appid");
-      if (storedAppId && storedAppId.trim().length >= 10) {
-        return storedAppId.trim();
-      }
-    }
-    return DEFAULT_AGORA_APP_ID;
-  }
-
-  public setCustomAppId(appId: string): void {
-    if (typeof window !== "undefined") {
-      if (appId.trim()) {
-        localStorage.setItem("squadup_agora_appid", appId.trim());
-      } else {
-        localStorage.removeItem("squadup_agora_appid");
-      }
-    }
+    return AGORA_APP_ID;
   }
 
   /**
-   * Retrieves the Agora Temp Token directly from environment variables.
+   * Modalità App ID-only: nessun token richiesto.
    */
   public getToken(): string | null {
-    // 1. Check VITE_AGORA_TEMP_TOKEN directly from environment
-    const envTempToken = (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim();
-    if (envTempToken && envTempToken.length > 5 && envTempToken !== "null" && envTempToken !== "undefined") {
-      return envTempToken;
-    }
-    // 2. Check VITE_AGORA_TOKEN directly from environment
-    const envToken = (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
-    if (envToken && envToken.length > 5 && envToken !== "null" && envToken !== "undefined") {
-      return envToken;
-    }
-    // 3. Check custom stored token
-    if (typeof window !== "undefined") {
-      const storedToken = localStorage.getItem("squadup_agora_token");
-      if (storedToken && storedToken.trim().length > 5) {
-        return storedToken.trim();
-      }
-    }
-    return DEFAULT_AGORA_TEMP_TOKEN;
-  }
-
-  public setCustomToken(token: string): void {
-    if (typeof window !== "undefined") {
-      if (token.trim()) {
-        localStorage.setItem("squadup_agora_token", token.trim());
-      } else {
-        localStorage.removeItem("squadup_agora_token");
-      }
-    }
+    return null;
   }
 
   private isPlaceholder(val: string): boolean {
@@ -108,11 +65,11 @@ class AgoraVoiceService {
   }
 
   /**
-   * Creates or returns the Agora RTC client instance with event listeners.
+   * Inizializza o restituisce il client AgoraRTC in modalità rtc.
    */
   public getClient(): IAgoraRTCClient {
     if (!this.client) {
-      console.log("[Agora Voice] Inizializzazione nuovo client AgoraRTC (mode: rtc, codec: vp8)");
+      console.log("[Agora Voice] Inizializzazione client AgoraRTC (mode: rtc, codec: vp8 - Modalità App ID Only)");
       this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       this.setupEventListeners(this.client);
     }
@@ -160,15 +117,6 @@ class AgoraVoiceService {
       this.onConnectionStateChangeCallback?.(curState);
     });
 
-    client.on("token-privilege-will-expire", () => {
-      console.warn("[Agora Voice Alert] Il token Agora sta per scadere (30 secondi rimanenti).");
-    });
-
-    client.on("token-privilege-did-expire", () => {
-      console.error("[Agora Voice Error] Il token Agora è scaduto. Riconnessione richiesta.");
-      this.onConnectionStateChangeCallback?.("DISCONNECTED");
-    });
-
     try {
       client.enableAudioVolumeIndicator();
       client.on("volume-indicator", (volumes) => {
@@ -188,21 +136,20 @@ class AgoraVoiceService {
   }
 
   /**
-   * Joins an Agora RTC Voice Channel with explicit validation, cleanup, and try/catch.
+   * Connessione al canale vocale Agora in modalità App ID-only:
+   * QUALSIASI token viene completamente ignorato, passando rigorosamente NULL a client.join().
    */
   public async joinVoiceChannel(
     channelName: string,
     userNameOrId?: string | number,
-    token?: string | null
+    _token?: string | null
   ): Promise<{ success: boolean; realSdk: boolean; error?: string; errorCode?: string; isPublishing: boolean }> {
-    // 1. Retrieve App ID directly from environment variables (with fallback)
-    const appId =
-      (import.meta.env.VITE_AGORA_APP_ID as string | undefined)?.trim() ||
-      this.getAppId();
+    // 1. App ID fisso o da env
+    const appId = this.getAppId();
 
     if (this.isAppIdPlaceholder()) {
-      const msg = "App ID Agora non configurato o non valido.";
-      console.error("[Agora Voice] Configurazione App ID mancante:", msg);
+      const msg = "App ID Agora non valido.";
+      console.error("[Agora Voice] App ID mancante:", msg);
       return {
         success: false,
         realSdk: false,
@@ -212,7 +159,7 @@ class AgoraVoiceService {
       };
     }
 
-    // 2. Strict Channel Name sanitization according to Agora rules
+    // 2. Sanitizzazione rigorosa nome canale
     let sanitizedChannel = (channelName || "")
       .trim()
       .replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -224,21 +171,7 @@ class AgoraVoiceService {
       sanitizedChannel = `channel_${Date.now()}`;
     }
 
-    // 3. Strict Token handling: retrieve directly from import.meta.env.VITE_AGORA_TEMP_TOKEN
-    const envTempToken =
-      (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim() ||
-      (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
-
-    let safeToken: string | null = null;
-    const resolvedToken = token || envTempToken || this.getToken();
-    if (resolvedToken && typeof resolvedToken === "string") {
-      const trimmed = resolvedToken.trim();
-      if (trimmed && trimmed !== "null" && trimmed !== "undefined" && trimmed !== '""') {
-        safeToken = trimmed;
-      }
-    }
-
-    // 4. UID handling: Positive 32-bit integer or let Agora auto-generate with null
+    // 3. UID positivo o casuale
     let numericUid: number | null = null;
     if (typeof userNameOrId === "number" && Number.isFinite(userNameOrId) && userNameOrId > 0) {
       numericUid = (Math.abs(Math.floor(userNameOrId)) % 899999) + 100000;
@@ -254,31 +187,31 @@ class AgoraVoiceService {
       numericUid = Math.floor(Math.random() * 899999) + 100000;
     }
 
-    // 5. MANDATORY CLEANUP: Leave prior channel and remove all listeners before attempting new join
-    console.log(`[Agora Voice] Esecuzione cleanup preventivo prima del join a "${sanitizedChannel}"...`);
+    // 4. Reset preventivo completo dell'istanza client per evitare conflitti di sessione
+    console.log(`[Agora Voice] Reset preventivo e cleanup prima del join a "${sanitizedChannel}"...`);
     await this.cleanup();
 
     this.isConnecting = true;
     this.isDisconnected = false;
 
-    // 6. Explicit Try/Catch with detailed SDK error handling
+    // 5. Try/Catch dettagliato: client.join() con TOKEN = null (App ID-only)
     try {
       const client = this.getClient();
 
-      console.log("[Agora Voice] Chiamata a client.join():", {
-        appId: `${appId.slice(0, 6)}••••••••••••${appId.slice(-4)}`,
+      console.log(`[Agora Voice] Tentativo client.join() App ID-only:`, {
+        appId: AGORA_APP_ID,
         channel: sanitizedChannel,
-        tokenConfigured: Boolean(safeToken),
-        numericUid,
+        token: null, // Ignora completamente qualsiasi token
+        uid: numericUid,
       });
 
-      // Pass directly import.meta.env.VITE_AGORA_APP_ID and import.meta.env.VITE_AGORA_TEMP_TOKEN
-      const joinedUid = await client.join(appId, sanitizedChannel, safeToken, numericUid);
+      // Chiamata SDK: passa ESCLUSIVAMENTE l'App ID e NULL per il token
+      const joinedUid = await client.join(appId, sanitizedChannel, null, numericUid);
       this.currentChannel = sanitizedChannel;
 
-      console.log(`[Agora Voice] Connessione riuscita al canale: "${sanitizedChannel}", UID effettivo: ${joinedUid}`);
+      console.log(`[Agora Voice] Connessione riuscita a "${sanitizedChannel}" (UID: ${joinedUid}) in modalità App ID-only!`);
 
-      // Open local microphone audio track
+      // Apertura microfono locale
       let isPublishing = false;
       try {
         this.closeLocalAudioTrack();
@@ -291,13 +224,13 @@ class AgoraVoiceService {
         if (this.localAudioTrack) {
           await client.publish([this.localAudioTrack]);
           isPublishing = true;
-          console.log("[Agora Voice] Traccia audio microfono pubblicata con successo.");
+          console.log("[Agora Voice] Traccia microfono pubblicata con successo.");
         }
       } catch (micErr: any) {
-        console.warn("[Agora Voice] Microfono locale non disponibile o permessi negati dal browser:", micErr?.message || micErr);
+        console.warn("[Agora Voice] Microfono locale non disponibile o permessi negati:", micErr?.message || micErr);
       }
 
-      // Check remote users already in channel
+      // Sottoscrizione partecipanti remoti
       for (const remoteUser of client.remoteUsers) {
         if (remoteUser.hasAudio) {
           try {
@@ -307,7 +240,7 @@ class AgoraVoiceService {
               remoteUser.audioTrack.play();
             }
           } catch (subErr: any) {
-            console.warn("[Agora Voice] Errore sottoscrizione utente già connesso:", subErr?.message || subErr);
+            console.warn("[Agora Voice] Errore sottoscrizione utente esistente:", subErr?.message || subErr);
           }
         }
       }
@@ -322,36 +255,28 @@ class AgoraVoiceService {
       const errorCode = err?.code || err?.name || "JOIN_ERROR";
       const errorMessage = err?.message || String(err);
 
-      // Print full exact Agora error to console as requested
       console.error("[Agora Voice Error Details]:", {
         code: errorCode,
         message: errorMessage,
         raw: err,
-        appId: `${appId.slice(0, 6)}...`,
+        appId: AGORA_APP_ID,
         channel: sanitizedChannel,
-        tokenUsed: Boolean(safeToken),
       });
 
-      // Perform clean teardown on failure
       await this.cleanup();
 
-      // Formulate explicit, actionable error message for the user
       let friendlyAlert = `Errore Agora [${errorCode}]: ${errorMessage}`;
 
       if (
         errorCode === "DYNAMIC_KEY_TIMEOUT" ||
         errorMessage.includes("DYNAMIC_KEY_TIMEOUT") ||
-        errorCode === "CANNOT_JOIN_CHANNEL: DYNAMIC_KEY_TIMEOUT" ||
-        errorCode === "INVALID_TOKEN" ||
-        errorCode === "TOKEN_EXPIRED"
+        errorCode === "CANNOT_JOIN_CHANNEL: DYNAMIC_KEY_TIMEOUT"
       ) {
-        friendlyAlert = `Errore Agora [${errorCode}]: Il tuo progetto Agora richiede un Token di sicurezza per connettersi. Nella console Agora imposta l'App ID in modalità "Testing (App ID only)" oppure incolla un Token temporaneo valido.`;
+        friendlyAlert = `Errore Agora [${errorCode}]: Questo App ID ha il certificato attivo nella console Agora. Per usare la modalità App ID-only senza token, disattiva il "Primary Certificate" nella Dashboard Agora (oppure crea un progetto in modalità "Testing: App ID only").`;
       } else if (errorCode === "CAN_NOT_GET_GATEWAY_SERVER") {
-        friendlyAlert = `Errore Agora [${errorCode}]: Impossibile raggiungere i server gateway Agora. Verifica la connessione a Internet o eventuali restrizioni di rete.`;
-      } else if (errorCode === "INVALID_APP_ID" || errorCode === "INVALID_VENDOR_KEY") {
-        friendlyAlert = `Errore Agora [${errorCode}]: L'App ID fornito non è valido o è stato eliminato dalla console Agora.`;
+        friendlyAlert = `Errore Agora [${errorCode}]: Gateway Agora irraggiungibile. Verifica la connessione a Internet.`;
       } else if (errorCode === "NOT_SUPPORTED") {
-        friendlyAlert = `Errore Agora [${errorCode}]: Il browser corrente o il contesto iframe non supporta WebRTC audio.`;
+        friendlyAlert = `Errore Agora [${errorCode}]: WebRTC audio non supportato nel browser corrente.`;
       }
 
       return {
@@ -443,7 +368,8 @@ class AgoraVoiceService {
   }
 
   /**
-   * Cleanly leaves the channel and removes all event listeners to prevent conflicting states.
+   * Reset completo dell'istanza client:
+   * Chiude la traccia locale, esegue client.leave() e rimuove tutti i listener prima di azzerare il client.
    */
   public async cleanup(): Promise<void> {
     this.closeLocalAudioTrack();
@@ -467,7 +393,7 @@ class AgoraVoiceService {
         console.warn("[Agora Voice Cleanup] Avviso removeAllListeners():", listenerErr?.message || listenerErr);
       }
 
-      // Reset client to null so next call creates a pristine client instance
+      // Reset client a null per ricreare un'istanza pulita
       this.client = null;
     }
 
