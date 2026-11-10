@@ -234,20 +234,26 @@ export const VoiceSection: React.FC = () => {
           <div className="flex items-center gap-1.5 truncate">
             <KeyRound className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <span className="text-zinc-400">App ID:</span>
-            <code className="text-purple-300 font-mono text-[10px] truncate max-w-[150px]">
+            <code className="text-purple-300 font-mono text-[10px] truncate max-w-[125px]">
               {maskedAppId}
             </code>
           </div>
-          <button
-            onClick={() => {
-              setCustomAppIdInput(agoraVoiceService.getAppId());
-              setCustomTokenInput(agoraVoiceService.getToken() || "");
-              setIsAgoraConfigOpen(true);
-            }}
-            className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
-          >
-            <span>Configura</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+              Token RTC Attivo
+            </span>
+            <button
+              onClick={() => {
+                setCustomAppIdInput(agoraVoiceService.getAppId());
+                setCustomTokenInput(agoraVoiceService.getToken() || "");
+                setIsAgoraConfigOpen(true);
+              }}
+              className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-bold bg-cyan-950/80 border border-cyan-500/40 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
+            >
+              <span>Configura</span>
+            </button>
+          </div>
         </div>
 
         <div className="pt-1 border-t border-zinc-800/80">

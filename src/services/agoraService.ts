@@ -14,6 +14,9 @@ export interface AgoraConnectionState {
   appId: string;
 }
 
+const DEFAULT_AGORA_APP_ID = "f7511dae35db4516aeb30dc522b84824";
+const DEFAULT_AGORA_TEMP_TOKEN = "007eJxTYNAyX6Sg3Ot9ba/Q63vVzxUnWqk84GTdu7pUauFGRnUmBysFhjRzU0PDlMRUY9OUJBNTQ7PE1CRjg5RkUyOjJAsTCyOTlzM/ZzUEMjK8L53AwAiFID4fQ3BgqKOLQmiAgl+of5g/AwMA2iQgUA==";
+
 class AgoraVoiceService {
   private client: IAgoraRTCClient | null = null;
   private localAudioTrack: IMicrophoneAudioTrack | null = null;
@@ -35,7 +38,7 @@ class AgoraVoiceService {
   }
 
   /**
-   * Retrieves the current Agora App ID from localStorage or environment variable.
+   * Retrieves the current Agora App ID from localStorage, environment variable, or default.
    */
   public getAppId(): string {
     if (typeof window !== "undefined") {
@@ -44,7 +47,7 @@ class AgoraVoiceService {
         return storedAppId.trim();
       }
     }
-    const rawId = import.meta.env.VITE_AGORA_APP_ID || "f7511dae35db4516aeb30dc522b84824";
+    const rawId = import.meta.env.VITE_AGORA_APP_ID || DEFAULT_AGORA_APP_ID;
     return rawId.trim();
   }
 
@@ -59,8 +62,7 @@ class AgoraVoiceService {
   }
 
   /**
-   * Retrieves any configured Agora Token from localStorage or environment.
-   * Returns strictly null if not configured or empty.
+   * Retrieves the configured Agora Temp Token from localStorage, environment, or default.
    */
   public getToken(): string | null {
     if (typeof window !== "undefined") {
@@ -76,7 +78,7 @@ class AgoraVoiceService {
         return trimmed;
       }
     }
-    return null;
+    return DEFAULT_AGORA_TEMP_TOKEN;
   }
 
   public setCustomToken(token: string): void {
