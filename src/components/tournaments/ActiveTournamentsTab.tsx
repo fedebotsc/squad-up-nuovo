@@ -110,6 +110,8 @@ export const ActiveTournamentsTab: React.FC = () => {
           {filteredTournaments.map((tournament) => {
             const isLive = tournament.status === "in_corso" || tournament.status === "live";
             const rawTourn = (tournament as any)?.raw || tournament;
+            const isChampionship = rawTourn.type === "leaderboard_championship" || tournament.category === "Classifica a Punteggio";
+            const formatBadge = isChampionship ? "Classifica a Punteggio" : "Eliminazione Diretta";
             const teamSizeNum = rawTourn.team_size || 3;
             const teamSizeLabel = teamSizeNum === 1 ? "Solo (1v1)" : teamSizeNum === 2 ? "Duo (2p)" : teamSizeNum === 3 ? "Trio (3p)" : "Squad (4p)";
             const bannerUrl = tournament.banner || rawTourn.banner_url;
@@ -129,9 +131,18 @@ export const ActiveTournamentsTab: React.FC = () => {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#121628] via-transparent to-black/40" />
                     <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/60 text-purple-200 uppercase">
-                        Eliminazione Diretta
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase ${
+                        isChampionship
+                          ? "bg-amber-950/90 border-amber-500/60 text-amber-200"
+                          : "bg-purple-950/90 border-purple-500/60 text-purple-200"
+                      }`}>
+                        {formatBadge}
                       </span>
+                      {isChampionship && rawTourn.total_games && (
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-cyan-950/90 border border-cyan-500/60 text-cyan-200">
+                          {rawTourn.total_games} Game
+                        </span>
+                      )}
                       <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-cyan-300 border border-cyan-500/40">
                         {teamSizeLabel}
                       </span>
@@ -157,8 +168,12 @@ export const ActiveTournamentsTab: React.FC = () => {
                       </span>
 
                       {!bannerUrl && (
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/40 text-purple-200 uppercase">
-                          Eliminazione Diretta
+                        <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border uppercase ${
+                          isChampionship
+                            ? "bg-amber-950 border-amber-500/40 text-amber-200"
+                            : "bg-purple-950 border border-purple-500/40 text-purple-200"
+                        }`}>
+                          {formatBadge}
                         </span>
                       )}
 

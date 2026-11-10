@@ -35,6 +35,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { uploadTournamentProof } from "@/services/tournamentVerificationService";
 import { initializeBracket, generateSampleTeamsForBracket, saveRegisteredTeams } from "@/services/tournamentBracketService";
+import { getChampionshipState } from "@/services/tournamentChampionshipService";
 
 interface CreateTournamentModalProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ interface CreateTournamentModalProps {
   onSuccess?: () => void;
 }
 
-export type TournamentFormat = "single_elimination" | "round_robin" | "battle_royale";
+export type TournamentFormat = "single_elimination" | "leaderboard_championship";
 export type KdRuleType = "open" | "min_only" | "max_only" | "range";
 export type EntryFeeType = "free" | "paid";
 export type ScoringMode = "fixed" | "multiplier";
@@ -115,9 +116,11 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const [secondPlacePrize, setSecondPlacePrize] = useState("350 SCoin");
   const [thirdPlacePrize, setThirdPlacePrize] = useState("150 SCoin");
 
-  // STEP 4: Componenti per Squadra
+  // STEP 4: Componenti per Squadra & Dimensione / Numero Game
   const [teamSize, setTeamSize] = useState<1 | 2 | 3 | 4>(3); // 1 = Solo, 2 = Duo, 3 = Trio, 4 = Squad
   const [bracketSize, setBracketSize] = useState<4 | 8 | 16>(8); // 8 teams default
+  const [totalGames, setTotalGames] = useState<number>(5); // Numero di Game (Giornate) per Classifica a Punteggio (Campionato)
+  const [championshipMaxTeams, setChampionshipMaxTeams] = useState<number>(16);
 
   // STEP 5: Sistema Punteggi
   const [killPoints, setKillPoints] = useState<number>(1);
@@ -215,7 +218,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     }
   };
 
-  const handleApplyPreset = (preset: "top3" | "top5" | "clear") => {
+  const handleApplyPreset = (preset: "top3" | "top5" | "top10" | "clear") => {
     if (preset === "clear") {
       setPlacementValues({});
       return;
@@ -223,14 +226,40 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
     if (scoringMode === "fixed") {
       if (preset === "top3") {
         setPlacementValues({ 1: "15", 2: "10", 3: "5" });
-      } else {
+      } else if (preset === "top5") {
         setPlacementValues({ 1: "20", 2: "15", 3: "10", 4: "7", 5: "5" });
+      } else if (preset === "top10") {
+        setPlacementValues({
+          1: "25",
+          2: "20",
+          3: "15",
+          4: "12",
+          5: "10",
+          6: "8",
+          7: "6",
+          8: "4",
+          9: "2",
+          10: "1",
+        });
       }
     } else {
       if (preset === "top3") {
         setPlacementValues({ 1: "2.0", 2: "1.5", 3: "1.2" });
-      } else {
+      } else if (preset === "top5") {
         setPlacementValues({ 1: "2.5", 2: "2.0", 3: "1.7", 4: "1.4", 5: "1.2" });
+      } else if (preset === "top10") {
+        setPlacementValues({
+          1: "2.5",
+          2: "2.0",
+          3: "1.8",
+          4: "1.6",
+          5: "1.4",
+          6: "1.3",
+          7: "1.2",
+          8: "1.1",
+          9: "1.0",
+          10: "1.0",
+        });
       }
     }
   };
@@ -308,14 +337,19 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         `${startDateDay}T${startTimeHour.padStart(2, "0")}:${startTimeMinute.padStart(2, "0")}:00`
       ).toISOString();
 
+      const maxTeamsLimit = selectedFormat === "single_elimination" ? bracketSize : championshipMaxTeams;
+
       const tournamentPayload = {
         name: tournamentName.trim(),
         title: tournamentName.trim(),
         game_mode: gameMode,
-        type: "single_elimination",
+        type: selectedFormat,
+        category: selectedFormat === "leaderboard_championship" ? "Classifica a Punteggio" : "Eliminazione Diretta",
         starts_at: finalStartsAt,
-        team_limit: bracketSize,
-        max_teams: bracketSize,
+        team_limit: maxTeamsLimit,
+        max_teams: maxTeamsLimit,
+        total_games: selectedFormat === "leaderboard_championship" ? totalGames : undefined,
+        current_game: 1,
         entry_fee_sc: entryType === "paid" ? entryFeeSCoin : 0,
         entry_fee_scoin: entryType === "paid" ? entryFeeSCoin : 0,
         prize_pool_scoin: hasPrizes ? totalPrizePool : 0,
@@ -367,8 +401,12 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         console.warn("[CreateTournament] Database insert fallback:", dbErr);
       }
 
-      // Initialize single elimination bracket
-      initializeBracket(createdTournamentId, bracketSize, []);
+      // Initialize format specific engine
+      if (selectedFormat === "single_elimination") {
+        initializeBracket(createdTournamentId, bracketSize, []);
+      } else {
+        getChampionshipState(createdTournamentId, totalGames, tournamentPayload.scoring_settings);
+      }
 
       // Format startsAt for UI display in strict 24h
       const formattedStartsAt24h = new Date(finalStartsAt).toLocaleString("it-IT", {
@@ -383,15 +421,15 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         id: createdTournamentId,
         title: tournamentPayload.name,
         game: gameMode,
-        category: "Eliminazione Diretta",
+        category: selectedFormat === "leaderboard_championship" ? "Classifica a Punteggio" : "Eliminazione Diretta",
         banner: finalBannerUrl,
         status: "upcoming" as const,
         prizePoolSCoin: hasPrizes ? totalPrizePool : 0,
         entryFeeSCoin: entryType === "paid" ? entryFeeSCoin : 0,
         teamsJoined: 0,
-        maxTeams: bracketSize,
+        maxTeams: maxTeamsLimit,
         startsAt: formattedStartsAt24h,
-        mode: `${teamSize === 1 ? "Solo" : teamSize === 2 ? "Duo" : teamSize === 3 ? "Trio" : "Squad"} (${teamSize}p)`,
+        mode: `${teamSize === 1 ? "Solo" : teamSize === 2 ? "Duo" : teamSize === 3 ? "Trio" : "Squad"} (${teamSize}p)${selectedFormat === "leaderboard_championship" ? ` • ${totalGames} Game` : ""}`,
         description: rulesText,
         raw: {
           ...tournamentPayload,
@@ -446,7 +484,9 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 Crea Nuovo Torneo
               </h3>
               <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                Configurazione torneo competitivo ad Eliminazione Diretta
+                {selectedFormat === "leaderboard_championship"
+                  ? "Configurazione torneo Classifica a Punteggio (Campionato per Game)"
+                  : "Configurazione torneo competitivo ad Eliminazione Diretta"}
               </p>
             </div>
           </div>
@@ -459,78 +499,51 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
           </button>
         </div>
 
-        {/* 3 Main Tournament Format Selection (shrink-0 & compact) */}
+        {/* 2 Main Tournament Format Selection (Eliminazione Diretta vs Classifica a Punteggio) */}
         <div className="shrink-0 px-3.5 sm:px-4 py-2 border-b border-purple-950/60 bg-zinc-950/40">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
               Tipologia di Torneo
             </span>
             <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
-              Eliminazione Diretta Attiva
+              {selectedFormat === "leaderboard_championship"
+                ? "Classifica a Punteggio (Campionato)"
+                : "Eliminazione Diretta"}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {/* 1: Eliminazione Diretta */}
             <button
               type="button"
               onClick={() => setSelectedFormat("single_elimination")}
-              className={`p-2 rounded-xl border text-left transition-all ${
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 selectedFormat === "single_elimination"
-                  ? "bg-purple-950/70 border-purple-500 shadow-sm ring-1 ring-purple-500/40"
-                  : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                  ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/40 text-white"
+                  : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Swords className={`w-3.5 h-3.5 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
-                <span className="text-[11px] font-bold text-white truncate">Eliminazione Diretta</span>
+                <Swords className={`w-4 h-4 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
+                <span className="text-xs font-bold text-white truncate">Eliminazione Diretta</span>
               </div>
-              <p className="text-[9px] text-zinc-400 truncate">Quarti, Semi e Finale</p>
+              <p className="text-[10px] text-zinc-400 truncate">Quarti, Semifinali e Finalissima a tabellone</p>
             </button>
 
-            {/* 2: Girone all'Italiana */}
+            {/* 2: Classifica a Punteggio (Campionato) */}
             <button
               type="button"
-              onClick={() => {
-                setSelectedFormat("round_robin");
-                toast({
-                  title: "Modalità Girone all'Italiana",
-                  description: "Formato disponibile. Clicca su Eliminazione Diretta per visualizzare il tabellone a scontri diretti.",
-                });
-              }}
-              className={`p-2 rounded-xl border text-left transition-all ${
-                selectedFormat === "round_robin"
-                  ? "bg-purple-950/70 border-purple-500 ring-1 ring-purple-500/40"
-                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+              onClick={() => setSelectedFormat("leaderboard_championship")}
+              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                selectedFormat === "leaderboard_championship"
+                  ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/40 text-white"
+                  : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-[11px] font-bold text-white truncate">Girone Italiana</span>
+                <Trophy className={`w-4 h-4 ${selectedFormat === "leaderboard_championship" ? "text-amber-400" : "text-zinc-500"}`} />
+                <span className="text-xs font-bold text-white truncate">Classifica a Punteggio</span>
               </div>
-              <p className="text-[9px] text-zinc-400 truncate">Tutti contro tutti</p>
-            </button>
-
-            {/* 3: Battle Royale a Punti */}
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedFormat("battle_royale");
-                toast({
-                  title: "Modalità Custom BR",
-                  description: "Formato cumulativo lobby. Clicca su Eliminazione Diretta per la gestione scontro a tabellone.",
-                });
-              }}
-              className={`p-2 rounded-xl border text-left transition-all ${
-                selectedFormat === "battle_royale"
-                  ? "bg-purple-950/70 border-purple-500 ring-1 ring-purple-500/40"
-                  : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <Target className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] font-bold text-white truncate">BR a Punti</span>
-              </div>
-              <p className="text-[9px] text-zinc-400 truncate">Classifica cumulata</p>
+              <p className="text-[10px] text-zinc-400 truncate">Campionato a Game cumulati con IA Vision</p>
             </button>
           </div>
         </div>
@@ -956,14 +969,19 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             </div>
           )}
 
-          {/* STEP 4: Componenti per Squadra */}
+          {/* STEP 4: Componenti per Squadra & Struttura Campionato */}
           {currentStep === 4 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 text-xs font-bold text-zinc-300">
                 <Users className="w-4 h-4 text-purple-400" />
-                <span>4. COMPONENTI PER SQUADRA & DIMENSIONE TABELLONE</span>
+                <span>
+                  {selectedFormat === "leaderboard_championship"
+                    ? "4. COMPONENTI PER SQUADRA & NUMERO DI GAME (GIORNATE)"
+                    : "4. COMPONENTI PER SQUADRA & DIMENSIONE TABELLONE"}
+                </span>
               </div>
 
+              {/* Team Size */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-zinc-300 block">
                   Giocatori per Squadra (Min 1 - Max 4)
@@ -979,7 +997,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                       key={item.size}
                       type="button"
                       onClick={() => setTeamSize(item.size as any)}
-                      className={`py-3 px-2 rounded-2xl border text-center transition-all ${
+                      className={`py-3 px-2 rounded-2xl border text-center transition-all cursor-pointer ${
                         teamSize === item.size
                           ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/30 text-white"
                           : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
@@ -992,32 +1010,113 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <label className="text-xs font-semibold text-zinc-300 block">
-                  Numero di Squadre nel Tabellone
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { total: 4, label: "4 Squadre", rounds: "Semifinali + Finale" },
-                    { total: 8, label: "8 Squadre", rounds: "Quarti + Semifinali + Finale (Standard)" },
-                    { total: 16, label: "16 Squadre", rounds: "Ottavi + Quarti + Semi + Finale" },
-                  ].map((bracket) => (
-                    <button
-                      key={bracket.total}
-                      type="button"
-                      onClick={() => setBracketSize(bracket.total as any)}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
-                        bracketSize === bracket.total
-                          ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/30 text-white"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-white">{bracket.label}</div>
-                      <div className="text-[10px] text-zinc-500 mt-0.5">{bracket.rounds}</div>
-                    </button>
-                  ))}
+              {/* If Single Elimination: Bracket Size */}
+              {selectedFormat === "single_elimination" ? (
+                <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  <label className="text-xs font-semibold text-zinc-300 block">
+                    Numero di Squadre nel Tabellone
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { total: 4, label: "4 Squadre", rounds: "Semifinali + Finale" },
+                      { total: 8, label: "8 Squadre", rounds: "Quarti + Semifinali + Finale (Standard)" },
+                      { total: 16, label: "16 Squadre", rounds: "Ottavi + Quarti + Semi + Finale" },
+                    ].map((bracket) => (
+                      <button
+                        key={bracket.total}
+                        type="button"
+                        onClick={() => setBracketSize(bracket.total as any)}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                          bracketSize === bracket.total
+                            ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/30 text-white"
+                            : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-white">{bracket.label}</div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">{bracket.rounds}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* If Classifica a Punteggio: Numero di Game (Giornate) & Limite Squadre */
+                <div className="space-y-3 pt-2 border-t border-zinc-800">
+                  <div className="p-3.5 rounded-2xl bg-zinc-950/80 border border-purple-900/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-cyan-400" />
+                          <span>Numero di Game (Giornate Totali)*:</span>
+                        </span>
+                        <p className="text-[10px] text-zinc-400">
+                          Quanti game complessivi disputeranno le squadre prima di decretare il vincitore
+                        </p>
+                      </div>
+
+                      {/* Numeric Stepper for Total Games */}
+                      <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setTotalGames((prev) => Math.max(1, prev - 1))}
+                          className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={totalGames}
+                          onChange={(e) => setTotalGames(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                          className="w-12 text-center text-xs font-black text-cyan-300 bg-transparent outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTotalGames((prev) => Math.min(20, prev + 1))}
+                          className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold flex items-center justify-center cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Presets for Game Count */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-zinc-500 font-bold">Preset Rapidi:</span>
+                      {[3, 4, 5, 6, 8, 10].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setTotalGames(num)}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${
+                            totalGames === num
+                              ? "bg-cyan-500 text-black font-black"
+                              : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                          }`}
+                        >
+                          {num} Game
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Max Teams in Championship */}
+                  <div className="p-3 rounded-2xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-between">
+                    <span className="text-xs text-zinc-300 font-medium">Limite Squadre Partecipanti:</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="2"
+                        max="64"
+                        value={championshipMaxTeams}
+                        onChange={(e) => setChampionshipMaxTeams(Math.max(2, parseInt(e.target.value) || 16))}
+                        className="w-20 px-2.5 py-1 text-center rounded-xl bg-zinc-900 border border-zinc-700 text-white text-xs font-bold outline-none"
+                      />
+                      <span className="text-xs font-bold text-zinc-400">Squadre</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1091,6 +1190,13 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                       className="text-[10px] text-purple-400 hover:underline px-1.5 py-0.5 rounded bg-purple-950/40"
                     >
                       Top 5
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset("top10")}
+                      className="text-[10px] text-cyan-400 hover:underline px-1.5 py-0.5 rounded bg-cyan-950/40"
+                    >
+                      Top 10
                     </button>
                     <button
                       type="button"

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useSquad } from "@/context/SquadContext";
 import { Trophy, Crosshair, Flame, RefreshCw, Shield, Swords } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getChampionshipState, ChampionshipState } from "@/services/tournamentChampionshipService";
+import { ChampionshipLeaderboardView } from "./ChampionshipLeaderboardView";
 
 interface LeaderboardRow {
   id: string;
@@ -15,10 +17,40 @@ interface LeaderboardRow {
 }
 
 export const LeaderboardTab: React.FC = () => {
-  const { leaderboard, selectedTournament, userProfile } = useSquad();
+  const { leaderboard, selectedTournament, userProfile, currentUser, isUniversalAdmin, setTournamentSubTab } = useSquad();
   const [dbLeaderboard, setDbLeaderboard] = useState<LeaderboardRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lobbyFilter, setLobbyFilter] = useState<"all" | "A" | "B">("all");
+
+  const rawTourn = (selectedTournament as any)?.raw || selectedTournament || {};
+  const isChampionship =
+    rawTourn.type === "leaderboard_championship" ||
+    selectedTournament?.category === "Classifica a Punteggio" ||
+    Boolean(rawTourn.total_games);
+
+  const [championshipState, setChampionshipState] = useState<ChampionshipState | null>(null);
+
+  const refreshChampionship = () => {
+    if (selectedTournament?.id) {
+      const state = getChampionshipState(
+        selectedTournament.id,
+        rawTourn.total_games || 5,
+        rawTourn.scoring_settings
+      );
+      setChampionshipState(state);
+    }
+  };
+
+  useEffect(() => {
+    if (isChampionship && selectedTournament?.id) {
+      refreshChampionship();
+    }
+  }, [selectedTournament?.id, isChampionship]);
+
+  const isOrganizer =
+    isUniversalAdmin ||
+    (currentUser?.id && rawTourn.owner_id === currentUser.id) ||
+    (Array.isArray(rawTourn.co_organizers) && rawTourn.co_organizers.includes(currentUser?.id));
 
   const isDoubleLobby = Boolean((selectedTournament as any)?.raw?.double_lobby_enabled);
 
@@ -97,6 +129,22 @@ export const LeaderboardTab: React.FC = () => {
           matches: 1,
           isMyTeam: e.isMyTeam,
         }));
+
+  if (isChampionship && championshipState && selectedTournament) {
+    return (
+      <ChampionshipLeaderboardView
+        tournamentId={selectedTournament.id}
+        championshipState={championshipState}
+        onRefresh={refreshChampionship}
+        isOrganizer={isOrganizer}
+        adminName={userProfile.name || "Organizzatore"}
+        adminId={currentUser?.id || ""}
+        onOpenTeamChat={() => {
+          setTournamentSubTab("match_room");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-3">

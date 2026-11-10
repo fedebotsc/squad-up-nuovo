@@ -41,6 +41,7 @@ import {
   ERROR_POST_GAME_UPLOADED_FOR_KD,
   ERROR_KD_PROFILE_UPLOADED_FOR_POST_GAME,
 } from "@/services/tournamentVerificationService";
+import { recordGameSubmission } from "@/services/tournamentChampionshipService";
 
 export interface TeamChatData {
   id: string;
@@ -107,6 +108,10 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
   const [kdAnalysisResult, setKdAnalysisResult] = useState<KDVerificationResult | null>(null);
 
   // Post-Game submission state
+  const isChampionship = rawTourn.type === "leaderboard_championship" || Boolean(rawTourn.total_games);
+  const totalChampionshipGames = rawTourn.total_games || 5;
+  const [selectedGameNumber, setSelectedGameNumber] = useState<number>(rawTourn.current_game || 1);
+
   const [showPostGameForm, setShowPostGameForm] = useState(false);
   const [placementFile, setPlacementFile] = useState<File | null>(null);
   const [killsFile, setKillsFile] = useState<File | null>(null);
@@ -478,7 +483,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         placementPoints: calc.placementPoints,
         killPoints: calc.killPoints,
         totalPoints: calc.totalPoints,
-        summaryMessage: calc.summaryMessage,
+        summaryMessage: isChampionship ? `[Game ${selectedGameNumber}] ${calc.summaryMessage}` : calc.summaryMessage,
         playerBreakdownText: postGameAnalysis?.player_breakdown_text,
         players: postGameAnalysis?.players,
         placementUrl,
@@ -487,8 +492,31 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         currentChatTotalPoints: chat.total_points || 0,
       });
 
+      // If Championship format, record in Championship state
+      if (isChampionship && rawTourn.id) {
+        try {
+          recordGameSubmission(rawTourn.id, chat.registration_id || chat.id, selectedGameNumber, {
+            gameNumber: selectedGameNumber,
+            placement: finalRank,
+            kills: finalKills,
+            placementPoints: calc.placementPoints,
+            killPoints: calc.killPoints,
+            totalPoints: calc.totalPoints,
+            multiplierUsed: calc.multiplierUsed,
+            placementProofUrl: placementUrl,
+            killsProofUrl: killsUrl,
+            submittedAt: new Date().toISOString(),
+            verifiedByAi: true,
+            breakdownText: postGameAnalysis?.player_breakdown_text,
+            summaryMessage: calc.summaryMessage,
+          });
+        } catch (champErr) {
+          console.warn("[TeamChat] Error saving championship game:", champErr);
+        }
+      }
+
       toast({
-        title: "Punteggio Registrato con Successo! 🏆",
+        title: isChampionship ? `Risultato Game ${selectedGameNumber} Registrato! 🏆` : "Punteggio Registrato con Successo! 🏆",
         description: `${calc.summaryMessage}. Classifica aggiornata.`,
       });
 
@@ -717,8 +745,39 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
             </button>
           </div>
 
+          {/* Championship Game Selector */}
+          {isChampionship && (
+            <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-purple-500/40 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-extrabold text-cyan-300 flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Seleziona Game di Gara per l'Invio Prove:</span>
+                </span>
+                <span className="text-[10px] text-zinc-400">
+                  Game Selezionato: <strong className="text-white">Game {selectedGameNumber} di {totalChampionshipGames}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {Array.from({ length: totalChampionshipGames }, (_, i) => i + 1).map((gNum) => (
+                  <button
+                    key={gNum}
+                    type="button"
+                    onClick={() => setSelectedGameNumber(gNum)}
+                    className={`py-1 px-2.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      selectedGameNumber === gNum
+                        ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/30 ring-1 ring-cyan-400"
+                        : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800"
+                    }`}
+                  >
+                    Game {gNum}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-[11px] text-zinc-300 leading-snug">
-            Carica le due foto di fine partita per far calcolare automaticamente all'IA i punti in classifica:
+            Carica le due foto di fine partita {isChampionship ? `per il Game ${selectedGameNumber}` : ""} per far calcolare automaticamente all'IA i punti in classifica:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

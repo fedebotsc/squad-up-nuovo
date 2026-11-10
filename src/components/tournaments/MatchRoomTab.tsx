@@ -45,6 +45,8 @@ import { TournamentTeamChatView, TeamChatData } from "./TournamentTeamChatView";
 import { LobbyManagementModal } from "./LobbyManagementModal";
 import { SingleEliminationBracketView } from "./SingleEliminationBracketView";
 import { TournamentRegistrationsReview } from "./TournamentRegistrationsReview";
+import { getChampionshipState, ChampionshipState } from "@/services/tournamentChampionshipService";
+import { ChampionshipLeaderboardView } from "./ChampionshipLeaderboardView";
 
 type RoomSubTab = "bracket" | "team_chats" | "registrations" | "lobby_leaderboards";
 
@@ -98,6 +100,30 @@ export const MatchRoomTab: React.FC = () => {
   const isDoubleLobby = Boolean(rawTourn.double_lobby_enabled);
   const requireKd = Boolean(rawTourn.require_kd_verification);
   const tournamentRulesText = rawTourn.rules || selectedTournament?.description || "";
+
+  const isChampionship =
+    rawTourn.type === "leaderboard_championship" ||
+    selectedTournament?.category === "Classifica a Punteggio" ||
+    Boolean(rawTourn.total_games);
+
+  const [championshipState, setChampionshipState] = useState<ChampionshipState | null>(null);
+
+  const refreshChampionship = () => {
+    if (selectedTournament?.id) {
+      const state = getChampionshipState(
+        selectedTournament.id,
+        rawTourn.total_games || 5,
+        rawTourn.scoring_settings
+      );
+      setChampionshipState(state);
+    }
+  };
+
+  useEffect(() => {
+    if (isChampionship && selectedTournament?.id) {
+      refreshChampionship();
+    }
+  }, [selectedTournament?.id, isChampionship]);
 
   const isOrganizer =
     isUniversalAdmin ||
@@ -595,8 +621,12 @@ export const MatchRoomTab: React.FC = () => {
                   : "bg-zinc-900/80 text-zinc-400 hover:text-white"
               }`}
             >
-              <Swords className="w-3.5 h-3.5" />
-              <span>Tabellone Match</span>
+              {isChampionship ? (
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              ) : (
+                <Swords className="w-3.5 h-3.5" />
+              )}
+              <span>{isChampionship ? "Classifica Campionato" : "Tabellone Match"}</span>
             </button>
 
             <button
@@ -625,7 +655,7 @@ export const MatchRoomTab: React.FC = () => {
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-              <span>Chat Squadre & KD</span>
+              <span>{isChampionship ? "Chat & Invio Game" : "Chat Squadre & KD"}</span>
               {teamChats.length > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-black text-[9px] font-black">
                   {teamChats.length}
@@ -644,8 +674,8 @@ export const MatchRoomTab: React.FC = () => {
                   : "bg-zinc-900/80 text-zinc-400 hover:text-white"
               }`}
             >
-              <Trophy className="w-3.5 h-3.5 text-amber-400" />
-              <span>Classifiche Live</span>
+              <Flame className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Lobby Live</span>
             </button>
           </div>
         )}
@@ -790,13 +820,33 @@ export const MatchRoomTab: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* VIEW 1: BRACKET & MATCHES TAB */}
+          {/* VIEW 1: BRACKET OR PROGRESSIVE CHAMPIONSHIP LEADERBOARD */}
           {activeRoomView === "bracket" && (
             <div className="space-y-4">
-              <SingleEliminationBracketView
-                tournament={selectedTournament}
-                isOrganizer={isOrganizer}
-              />
+              {isChampionship && championshipState ? (
+                <ChampionshipLeaderboardView
+                  tournamentId={selectedTournament.id}
+                  championshipState={championshipState}
+                  onRefresh={refreshChampionship}
+                  isOrganizer={isOrganizer}
+                  adminName={userProfile.name || "Organizzatore"}
+                  adminId={currentUser?.id || ""}
+                  onOpenTeamChat={(tId) => {
+                    const chat = teamChats.find(
+                      (c) => c.registration_id === tId || c.id === tId
+                    );
+                    if (chat) {
+                      setSelectedTeamChat(chat);
+                      setActiveRoomView("team_chats");
+                    }
+                  }}
+                />
+              ) : (
+                <SingleEliminationBracketView
+                  tournament={selectedTournament}
+                  isOrganizer={isOrganizer}
+                />
+              )}
             </div>
           )}
 
