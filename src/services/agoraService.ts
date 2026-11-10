@@ -3,6 +3,7 @@ import AgoraRTC, {
   IMicrophoneAudioTrack,
   IAgoraRTCRemoteUser,
 } from "agora-rtc-sdk-ng";
+import { supabase } from "@/integrations/supabase/client";
 
 // Log level 1 for detailed development warnings & error logging
 AgoraRTC.setLogLevel(1);
@@ -14,8 +15,7 @@ export interface AgoraConnectionState {
   appId: string;
 }
 
-// App ID fisso e prioritario per la modalità App ID-only (senza token)
-const AGORA_APP_ID = "f7511dae35db4516aeb30dc522b84824";
+const DEFAULT_AGORA_APP_ID = "f7511dae35db4516aeb30dc522b84824";
 
 class AgoraVoiceService {
   private client: IAgoraRTCClient | null = null;
@@ -38,21 +38,108 @@ class AgoraVoiceService {
   }
 
   /**
-   * Restituisce l'App ID Agora (f7511dae35db4516aeb30dc522b84824).
+   * Restituisce l'App ID Agora.
    */
   public getAppId(): string {
     const envAppId = (import.meta.env.VITE_AGORA_APP_ID as string | undefined)?.trim();
     if (envAppId && envAppId.length >= 10 && !this.isPlaceholder(envAppId)) {
       return envAppId;
     }
-    return AGORA_APP_ID;
+    return DEFAULT_AGORA_APP_ID;
+  }
+
+  public setCustomAppId(appId: string): void {
+    if (typeof window !== "undefined") {
+      if (appId.trim()) {
+        localStorage.setItem("squadup_agora_appid", appId.trim());
+      } else {
+        localStorage.removeItem("squadup_agora_appid");
+      }
+    }
+  }
+
+  public getToken(): string | null {
+    if (typeof window !== "undefined") {
+      const storedToken = localStorage.getItem("squadup_agora_token");
+      if (storedToken && storedToken.trim().length > 5) {
+        return storedToken.trim();
+      }
+    }
+    const envTemp = (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim();
+    if (envTemp && envTemp.length > 5) return envTemp;
+    const envToken = (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
+    if (envToken && envToken.length > 5) return envToken;
+    return null;
+  }
+
+  public setCustomToken(token: string): void {
+    if (typeof window !== "undefined") {
+      if (token.trim()) {
+        localStorage.setItem("squadup_agora_token", token.trim());
+      } else {
+        localStorage.removeItem("squadup_agora_token");
+      }
+    }
   }
 
   /**
-   * Modalità App ID-only: nessun token richiesto.
+   * Recupera il token firmato invocando la Supabase Edge Function 'generate-agora-token'.
+   * Passa channelName e uid e ritorna il token JWT firmato da passare al metodo client.join().
    */
-  public getToken(): string | null {
-    return null;
+  public async fetchSignedAgoraToken(
+    channelName: string,
+    uid: number | string
+  ): Promise<string | null> {
+    try {
+      console.log(`[Agora Voice] Invocazione Supabase Edge Function "generate-agora-token" per channel: "${channelName}", UID: ${uid}...`);
+
+      const { data, error } = await supabase.functions.invoke("generate-agora-token", {
+        body: {
+          channelName,
+          uid,
+        },
+      });
+
+      if (error) {
+        console.warn("[Agora Voice] Avviso supabase.functions.invoke('generate-agora-token'):", error.message || error);
+
+        // Fallback: chiamata HTTP diretta all'endpoint della Edge Function
+        const fallbackRes = await fetch("https://ojostglcbfbpsisfdibk.supabase.co/functions/v1/generate-agora-token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            channelName,
+            uid,
+          }),
+        });
+
+        if (fallbackRes.ok) {
+          const directData = await fallbackRes.json();
+          const signedToken = directData?.token || directData?.rtcToken || directData?.jwt || null;
+          if (signedToken) {
+            console.log("[Agora Voice] Token firmato JWT ricevuto con successo da endpoint Edge Function.");
+            return signedToken;
+          }
+        }
+      } else if (data) {
+        const signedToken = data?.token || data?.rtcToken || data?.jwt || null;
+        if (signedToken) {
+          console.log("[Agora Voice] Token firmato JWT generato e ricevuto con successo da generate-agora-token!");
+          return signedToken;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[Agora Voice] Eccezione durante la richiesta del token a generate-agora-token:", err?.message || err);
+    }
+
+    // Fallback prioritario alle variabili d'ambiente se l'edge function non è disponibile offline
+    const envToken =
+      (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim() ||
+      (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
+
+    return envToken || null;
   }
 
   private isPlaceholder(val: string): boolean {
@@ -69,7 +156,7 @@ class AgoraVoiceService {
    */
   public getClient(): IAgoraRTCClient {
     if (!this.client) {
-      console.log("[Agora Voice] Inizializzazione client AgoraRTC (mode: rtc, codec: vp8 - Modalità App ID Only)");
+      console.log("[Agora Voice] Inizializzazione client AgoraRTC (mode: rtc, codec: vp8)");
       this.client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       this.setupEventListeners(this.client);
     }
@@ -136,19 +223,21 @@ class AgoraVoiceService {
   }
 
   /**
-   * Connessione al canale vocale Agora in modalità App ID-only:
-   * QUALSIASI token viene completamente ignorato, passando rigorosamente NULL a client.join().
+   * Connessione al canale vocale Agora:
+   * 1. Esegue cleanup preventivo completo per azzerare sessioni precedenti.
+   * 2. Chiama la Supabase Edge Function 'generate-agora-token' con channelName e uid.
+   * 3. Passa il token JWT firmato ottenuto al metodo client.join(appId, channelName, token, uid).
    */
   public async joinVoiceChannel(
     channelName: string,
     userNameOrId?: string | number,
-    _token?: string | null
+    tokenOverride?: string | null
   ): Promise<{ success: boolean; realSdk: boolean; error?: string; errorCode?: string; isPublishing: boolean }> {
-    // 1. App ID fisso o da env
+    // 1. App ID da env o default
     const appId = this.getAppId();
 
     if (this.isAppIdPlaceholder()) {
-      const msg = "App ID Agora non valido.";
+      const msg = "App ID Agora non configurato o non valido.";
       console.error("[Agora Voice] App ID mancante:", msg);
       return {
         success: false,
@@ -159,7 +248,7 @@ class AgoraVoiceService {
       };
     }
 
-    // 2. Sanitizzazione rigorosa nome canale
+    // 2. Sanitizzazione nome canale per Agora
     let sanitizedChannel = (channelName || "")
       .trim()
       .replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -171,8 +260,8 @@ class AgoraVoiceService {
       sanitizedChannel = `channel_${Date.now()}`;
     }
 
-    // 3. UID positivo o casuale
-    let numericUid: number | null = null;
+    // 3. Calcolo UID numerico per la sessione
+    let numericUid: number;
     if (typeof userNameOrId === "number" && Number.isFinite(userNameOrId) && userNameOrId > 0) {
       numericUid = (Math.abs(Math.floor(userNameOrId)) % 899999) + 100000;
     } else if (typeof userNameOrId === "string" && userNameOrId.trim()) {
@@ -187,31 +276,37 @@ class AgoraVoiceService {
       numericUid = Math.floor(Math.random() * 899999) + 100000;
     }
 
-    // 4. Reset preventivo completo dell'istanza client per evitare conflitti di sessione
+    // 4. Reset preventivo completo dell'istanza client per evitare conflitti di sessioni aperte
     console.log(`[Agora Voice] Reset preventivo e cleanup prima del join a "${sanitizedChannel}"...`);
     await this.cleanup();
 
     this.isConnecting = true;
     this.isDisconnected = false;
 
-    // 5. Try/Catch dettagliato: client.join() con TOKEN = null (App ID-only)
+    // 5. CHIAMATA ALLA SUPABASE EDGE FUNCTION PER OTTENERE IL TOKEN JWT FIRMATO
+    let signedToken: string | null = tokenOverride || null;
+    if (!signedToken) {
+      signedToken = await this.fetchSignedAgoraToken(sanitizedChannel, numericUid);
+    }
+
+    // 6. Try/Catch con client.join(appId, channelName, signedToken, uid)
     try {
       const client = this.getClient();
 
-      console.log(`[Agora Voice] Tentativo client.join() App ID-only:`, {
-        appId: AGORA_APP_ID,
+      console.log(`[Agora Voice] Chiamata a client.join() con token firmato da Edge Function:`, {
+        appId: `${appId.slice(0, 6)}••••••••••••${appId.slice(-4)}`,
         channel: sanitizedChannel,
-        token: null, // Ignora completamente qualsiasi token
+        tokenAvailable: Boolean(signedToken),
         uid: numericUid,
       });
 
-      // Chiamata SDK: passa ESCLUSIVAMENTE l'App ID e NULL per il token
-      const joinedUid = await client.join(appId, sanitizedChannel, null, numericUid);
+      // Esegue il join passando App ID, Channel Name, Token firmato e UID
+      const joinedUid = await client.join(appId, sanitizedChannel, signedToken, numericUid);
       this.currentChannel = sanitizedChannel;
 
-      console.log(`[Agora Voice] Connessione riuscita a "${sanitizedChannel}" (UID: ${joinedUid}) in modalità App ID-only!`);
+      console.log(`[Agora Voice] Connessione riuscita a "${sanitizedChannel}" (UID: ${joinedUid}) con token Edge Function!`);
 
-      // Apertura microfono locale
+      // Apertura e pubblicazione microfono locale
       let isPublishing = false;
       try {
         this.closeLocalAudioTrack();
@@ -259,7 +354,7 @@ class AgoraVoiceService {
         code: errorCode,
         message: errorMessage,
         raw: err,
-        appId: AGORA_APP_ID,
+        appId: `${appId.slice(0, 6)}...`,
         channel: sanitizedChannel,
       });
 
@@ -272,7 +367,7 @@ class AgoraVoiceService {
         errorMessage.includes("DYNAMIC_KEY_TIMEOUT") ||
         errorCode === "CANNOT_JOIN_CHANNEL: DYNAMIC_KEY_TIMEOUT"
       ) {
-        friendlyAlert = `Errore Agora [${errorCode}]: Questo App ID ha il certificato attivo nella console Agora. Per usare la modalità App ID-only senza token, disattiva il "Primary Certificate" nella Dashboard Agora (oppure crea un progetto in modalità "Testing: App ID only").`;
+        friendlyAlert = `Errore Agora [${errorCode}]: Il token non è valido o è scaduto. La Supabase Edge Function generate-agora-token ha generato una chiave non sincronizzata con il certificato console.`;
       } else if (errorCode === "CAN_NOT_GET_GATEWAY_SERVER") {
         friendlyAlert = `Errore Agora [${errorCode}]: Gateway Agora irraggiungibile. Verifica la connessione a Internet.`;
       } else if (errorCode === "NOT_SUPPORTED") {
