@@ -38,17 +38,20 @@ class AgoraVoiceService {
   }
 
   /**
-   * Retrieves the current Agora App ID from localStorage, environment variable, or default.
+   * Retrieves the current Agora App ID directly from environment variables.
    */
   public getAppId(): string {
+    const envAppId = (import.meta.env.VITE_AGORA_APP_ID as string | undefined)?.trim();
+    if (envAppId && envAppId.length >= 10 && !this.isPlaceholder(envAppId)) {
+      return envAppId;
+    }
     if (typeof window !== "undefined") {
       const storedAppId = localStorage.getItem("squadup_agora_appid");
       if (storedAppId && storedAppId.trim().length >= 10) {
         return storedAppId.trim();
       }
     }
-    const rawId = import.meta.env.VITE_AGORA_APP_ID || DEFAULT_AGORA_APP_ID;
-    return rawId.trim();
+    return DEFAULT_AGORA_APP_ID;
   }
 
   public setCustomAppId(appId: string): void {
@@ -62,20 +65,24 @@ class AgoraVoiceService {
   }
 
   /**
-   * Retrieves the configured Agora Temp Token from localStorage, environment, or default.
+   * Retrieves the Agora Temp Token directly from environment variables.
    */
   public getToken(): string | null {
+    // 1. Check VITE_AGORA_TEMP_TOKEN directly from environment
+    const envTempToken = (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim();
+    if (envTempToken && envTempToken.length > 5 && envTempToken !== "null" && envTempToken !== "undefined") {
+      return envTempToken;
+    }
+    // 2. Check VITE_AGORA_TOKEN directly from environment
+    const envToken = (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
+    if (envToken && envToken.length > 5 && envToken !== "null" && envToken !== "undefined") {
+      return envToken;
+    }
+    // 3. Check custom stored token
     if (typeof window !== "undefined") {
       const storedToken = localStorage.getItem("squadup_agora_token");
       if (storedToken && storedToken.trim().length > 5) {
         return storedToken.trim();
-      }
-    }
-    const envToken = import.meta.env.VITE_AGORA_TOKEN as string | undefined;
-    if (envToken && typeof envToken === "string") {
-      const trimmed = envToken.trim();
-      if (trimmed && trimmed !== "null" && trimmed !== "undefined" && trimmed !== '""') {
-        return trimmed;
       }
     }
     return DEFAULT_AGORA_TEMP_TOKEN;
@@ -91,9 +98,13 @@ class AgoraVoiceService {
     }
   }
 
+  private isPlaceholder(val: string): boolean {
+    return !val || val === "la_tua_app_id_di_agora" || val.includes("la_tua_app_id");
+  }
+
   public isAppIdPlaceholder(): boolean {
     const appId = this.getAppId();
-    return !appId || appId === "la_tua_app_id_di_agora" || appId.includes("la_tua_app_id") || appId.length < 15;
+    return !appId || this.isPlaceholder(appId) || appId.length < 15;
   }
 
   /**
@@ -184,9 +195,11 @@ class AgoraVoiceService {
     userNameOrId?: string | number,
     token?: string | null
   ): Promise<{ success: boolean; realSdk: boolean; error?: string; errorCode?: string; isPublishing: boolean }> {
-    const appId = this.getAppId();
+    // 1. Retrieve App ID directly from environment variables (with fallback)
+    const appId =
+      (import.meta.env.VITE_AGORA_APP_ID as string | undefined)?.trim() ||
+      this.getAppId();
 
-    // 1. App ID validation
     if (this.isAppIdPlaceholder()) {
       const msg = "App ID Agora non configurato o non valido.";
       console.error("[Agora Voice] Configurazione App ID mancante:", msg);
@@ -211,9 +224,13 @@ class AgoraVoiceService {
       sanitizedChannel = `channel_${Date.now()}`;
     }
 
-    // 3. Strict Token handling: MUST be non-empty string OR strictly null (never undefined / empty string)
+    // 3. Strict Token handling: retrieve directly from import.meta.env.VITE_AGORA_TEMP_TOKEN
+    const envTempToken =
+      (import.meta.env.VITE_AGORA_TEMP_TOKEN as string | undefined)?.trim() ||
+      (import.meta.env.VITE_AGORA_TOKEN as string | undefined)?.trim();
+
     let safeToken: string | null = null;
-    const resolvedToken = token || this.getToken();
+    const resolvedToken = token || envTempToken || this.getToken();
     if (resolvedToken && typeof resolvedToken === "string") {
       const trimmed = resolvedToken.trim();
       if (trimmed && trimmed !== "null" && trimmed !== "undefined" && trimmed !== '""') {
@@ -255,7 +272,7 @@ class AgoraVoiceService {
         numericUid,
       });
 
-      // Actual Agora SDK join call
+      // Pass directly import.meta.env.VITE_AGORA_APP_ID and import.meta.env.VITE_AGORA_TEMP_TOKEN
       const joinedUid = await client.join(appId, sanitizedChannel, safeToken, numericUid);
       this.currentChannel = sanitizedChannel;
 
