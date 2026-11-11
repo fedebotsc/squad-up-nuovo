@@ -1758,20 +1758,23 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     console.log(`[SquadContext] Connessione Agora al canale "${channelName}" per la stanza "${targetRoom.name}"...`);
 
-    const res = await agoraVoiceService.joinVoiceChannel(
-      channelName,
-      currentUser?.id || userProfile.name
-    );
-    setIsRealSdkActive(res.realSdk);
+    try {
+      const res = await agoraVoiceService.joinVoiceChannel(
+        channelName,
+        currentUser?.id || userProfile.name
+      );
+      setIsRealSdkActive(res.realSdk);
 
-    if (res.success) {
-      toast({
-        title: "Canale Vocale Connesso 🎙️",
-        description: `Connesso a "${targetRoom.name}" con tecnologia Agora Web RTC.`,
-      });
-    } else if (res.error) {
-      console.error("[SquadContext] Errore connessione Agora:", res.error, res.errorCode);
+      if (res.success) {
+        toast({
+          title: "Canale Vocale Connesso 🎙️",
+          description: `Connesso a "${targetRoom.name}" con tecnologia Agora Web RTC.`,
+        });
+      }
+    } catch (joinErr: any) {
+      console.error("[SquadContext] Errore connessione Agora:", joinErr);
       setActiveVoiceRoomId(null);
+      setIsRealSdkActive(false);
 
       // Keep user in list with inactive status rather than immediately destroying newly created rooms
       setVoiceRooms((prev) =>
@@ -1790,7 +1793,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       toast({
         title: "Errore Connessione Vocale Agora",
-        description: res.error,
+        description: joinErr?.message || "Impossibile completare la connessione al canale vocale Agora.",
         variant: "destructive",
       });
     }
