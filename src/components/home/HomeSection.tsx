@@ -321,7 +321,7 @@ export const HomeSection: React.FC = () => {
   };
 
   return (
-    <div className="pb-24 md:pb-12 pt-3 max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto px-2 sm:px-4 space-y-5">
+    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
       {/* 24h Stories Tray */}
       <section aria-label="Storie 24h" className="relative">
         <div className="flex items-center justify-between mb-2 px-1">
@@ -332,13 +332,13 @@ export const HomeSection: React.FC = () => {
           <span className="text-[10px] text-zinc-400">Testo, Foto & Clip</span>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto pb-2 scrollbar-none scroll-smooth">
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none scroll-smooth">
           {/* Add story button */}
           <button
             onClick={handleAddStory}
             className="flex flex-col items-center shrink-0 group select-none cursor-pointer"
           >
-            <div className="relative w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-[#161b2e] border-2 border-dashed border-purple-500/60 p-0.5 flex items-center justify-center group-hover:border-purple-400 transition-colors">
+            <div className="relative w-16 h-16 rounded-2xl bg-[#161b2e] border-2 border-dashed border-purple-500/60 p-0.5 flex items-center justify-center group-hover:border-purple-400 transition-colors">
               <div className="w-full h-full rounded-xl bg-purple-950/40 flex items-center justify-center">
                 <Plus className="w-6 h-6 text-purple-400 group-hover:scale-110 transition-transform" />
               </div>
@@ -346,7 +346,7 @@ export const HomeSection: React.FC = () => {
                 +
               </div>
             </div>
-            <span className="text-[11px] sm:text-xs font-medium text-zinc-300 mt-1.5 truncate max-w-[70px] sm:max-w-[84px]">
+            <span className="text-[11px] font-medium text-zinc-300 mt-1.5 truncate max-w-[64px]">
               Crea Storia
             </span>
           </button>
@@ -360,7 +360,7 @@ export const HomeSection: React.FC = () => {
                 className="flex flex-col items-center shrink-0 group select-none cursor-pointer"
               >
                 <div
-                  className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl p-[2px] transition-transform group-hover:scale-105 ${
+                  className={`w-16 h-16 rounded-2xl p-[2px] transition-transform group-hover:scale-105 ${
                     story.hasUnread
                       ? "bg-gradient-to-tr from-purple-500 via-pink-500 to-cyan-400 shadow-[0_0_12px_rgba(139,92,246,0.5)]"
                       : "bg-zinc-700/60"
@@ -393,7 +393,7 @@ export const HomeSection: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <span className="text-[11px] sm:text-xs font-medium text-zinc-300 mt-1.5 truncate max-w-[70px] sm:max-w-[84px]">
+                <span className="text-[11px] font-medium text-zinc-300 mt-1.5 truncate max-w-[68px]">
                   {story.username}
                 </span>
               </button>
@@ -640,11 +640,11 @@ export const HomeSection: React.FC = () => {
                 }`}
               >
                 {/* Author Header (Clan vs Personal) */}
-                <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-2.5 sm:gap-4">
+                <div className="flex items-center justify-between">
                   {post.postedAsClan && post.clan ? (
                     <div
                       onClick={() => post.clan?.id && openClanDetail(post.clan.id)}
-                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer group/clan"
+                      className="flex items-center gap-2.5 min-w-0 cursor-pointer group/clan"
                       title="Visualizza dettagli clan"
                     >
                       <div className="relative shrink-0">
@@ -669,36 +669,36 @@ export const HomeSection: React.FC = () => {
                           <img
                             src={post.clan.avatarUrl}
                             alt={post.clan.name}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border-2 border-cyan-400/70 shadow-sm group-hover/clan:border-cyan-300 transition-colors"
+                            className="w-10 h-10 rounded-xl object-cover border-2 border-cyan-400/70 shadow-sm group-hover/clan:border-cyan-300 transition-colors"
                           />
                         ) : (
-                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-tr from-purple-800 via-indigo-700 to-cyan-600 flex items-center justify-center border-2 border-cyan-400/60 text-white shadow-sm">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-800 via-indigo-700 to-cyan-600 flex items-center justify-center border-2 border-cyan-400/60 text-white shadow-sm">
                             <Shield className="w-5 h-5 text-cyan-200" />
                           </div>
                         )}
                       </div>
 
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs sm:text-sm font-black text-white tracking-wide truncate max-w-[150px] sm:max-w-xs md:max-w-md group-hover/clan:text-cyan-300 transition-colors">
+                          <span className="text-xs font-black text-white tracking-wide truncate max-w-[130px] group-hover/clan:text-cyan-300 transition-colors">
                             {post.clan.name}
                           </span>
-                          <span className="text-[10px] sm:text-xs font-black px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/50">
+                          <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/50">
                             [{post.clan.tag}]
                           </span>
-                          <span className="text-[8px] sm:text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-cyan-500/20 text-amber-300 border border-amber-400/40 uppercase tracking-wider flex items-center gap-0.5">
+                          <span className="text-[8px] font-extrabold px-1.5 py-0.2 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-cyan-500/20 text-amber-300 border border-amber-400/40 uppercase tracking-wider flex items-center gap-0.5">
                             <Crown className="w-2.5 h-2.5 text-amber-400" />
                             CLAN UFFICIALE
                           </span>
                         </div>
-                        <div className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <div className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
                           <span
                             onClick={(e) => {
                               e.stopPropagation();
                               const targetId = post.userId || post.author.id;
                               if (targetId) openPublicProfile(targetId);
                             }}
-                            className="text-purple-300 truncate max-w-[130px] sm:max-w-xs hover:text-cyan-300 transition-colors cursor-pointer"
+                            className="text-purple-300 truncate max-w-[110px] hover:text-cyan-300 transition-colors cursor-pointer"
                             title="Visualizza profilo admin"
                           >
                             di {post.author.name} (Admin)
@@ -714,28 +714,28 @@ export const HomeSection: React.FC = () => {
                         const targetId = post.userId || post.author.id;
                         if (targetId) openPublicProfile(targetId);
                       }}
-                      className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 cursor-pointer group/author"
+                      className="flex items-center gap-2.5 min-w-0 cursor-pointer group/author"
                       title="Visualizza profilo giocatore"
                     >
                       {post.author.avatar ? (
                         <img
                           src={post.author.avatar}
                           alt={post.author.name}
-                          className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-purple-500/40 shrink-0 group-hover/author:border-cyan-400 transition-colors"
+                          className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0 group-hover/author:border-cyan-400 transition-colors"
                         />
                       ) : (
-                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0 group-hover/author:border-cyan-400 transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0 group-hover/author:border-cyan-400 transition-colors">
                           {post.author.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
 
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs sm:text-sm font-bold text-zinc-100 truncate max-w-[150px] sm:max-w-xs md:max-w-md group-hover/author:text-cyan-300 transition-colors">
+                          <span className="text-xs font-bold text-zinc-100 truncate max-w-[130px] group-hover/author:text-cyan-300 transition-colors">
                             {post.author.name}
                           </span>
                           {post.author.activisionId && (
-                            <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.2 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
+                            <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
                               COD: {post.author.activisionId}
                             </span>
                           )}
@@ -749,15 +749,15 @@ export const HomeSection: React.FC = () => {
                                   openClanDetail(clanData.id);
                                 }
                               }}
-                              className="text-[10px] sm:text-xs font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40 hover:bg-purple-800 hover:text-white transition-colors cursor-pointer"
+                              className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 border border-purple-600/40 hover:bg-purple-800 hover:text-white transition-colors cursor-pointer"
                               title="Visualizza clan"
                             >
                               [{post.author.clanTag}]
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] sm:text-xs text-zinc-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <span className="truncate max-w-[120px] sm:max-w-xs">{post.author.handle}</span>
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1">
+                          <span className="truncate max-w-[90px]">{post.author.handle}</span>
                           <span>•</span>
                           <span className="shrink-0">{post.timeAgo}</span>
                         </div>
@@ -765,7 +765,7 @@ export const HomeSection: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap justify-end">
+                  <div className="flex items-center gap-1.5">
                     {/* Follow button for player or clan */}
                     {post.postedAsClan && post.clan && (!clanData || clanData.id !== post.clan.id) && (
                       <button
@@ -841,13 +841,13 @@ export const HomeSection: React.FC = () => {
                 </div>
 
                 {/* Post Content */}
-                <p className="text-xs sm:text-sm text-zinc-100 leading-relaxed break-words whitespace-pre-wrap">
+                <p className="text-xs text-zinc-200 leading-relaxed break-words whitespace-pre-wrap">
                   {post.content}
                 </p>
 
                 {/* Media Preview */}
                 {post.image && (
-                  <div className="relative rounded-2xl overflow-hidden border border-purple-900/40 bg-zinc-950 aspect-[16/10] sm:aspect-[16/9] max-h-[500px]">
+                  <div className="relative rounded-xl overflow-hidden border border-purple-900/40 bg-zinc-950 aspect-[16/10]">
                     <img
                       src={post.image}
                       alt="Post media"

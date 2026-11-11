@@ -52,7 +52,7 @@ export const BottomNavbar: React.FC = () => {
   return (
     <nav
       aria-label="Navigazione Principale"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0e1220]/95 backdrop-blur-md border-t border-purple-900/40 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#0e1220]/95 backdrop-blur-md border-t border-purple-900/40 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]"
     >
       <div className="max-w-md mx-auto px-2 flex items-center justify-around h-16">
         {tabs.map((tab) => {

@@ -146,7 +146,7 @@ export const ProfileSection: React.FC = () => {
     AVATAR_FRAMES?.[0] || { borderClass: "border-purple-500", glowClass: "" };
 
   return (
-    <div className="pb-24 md:pb-12 pt-3 max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto px-2 sm:px-4 space-y-5">
+    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
       {/* Unauthenticated Guest Banner */}
       {!currentUser && (
         <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/90 via-[#161a32] to-cyan-950/70 p-4 shadow-xl space-y-3">
@@ -184,7 +184,7 @@ export const ProfileSection: React.FC = () => {
       {/* Player Profile Card with Custom Banner & Frame */}
       <div className="relative rounded-3xl overflow-hidden border border-purple-500/50 bg-[#0d1022] shadow-2xl">
         {/* Profile Banner - Resized for optimal height and artwork display */}
-        <div className="relative h-36 sm:h-48 md:h-56 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
+        <div className="relative h-36 sm:h-44 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
           {userProfile.bannerUrl ? (
             <img
               src={userProfile.bannerUrl}
@@ -201,7 +201,7 @@ export const ProfileSection: React.FC = () => {
             <button
               onClick={() => setShowCustomizer(true)}
               title="Personalizza Banner & Cornice"
-              className="absolute top-2.5 right-2.5 p-1.5 sm:p-2 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-lg"
+              className="absolute top-2.5 right-2.5 p-1.5 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-lg"
             >
               <Palette className="w-3.5 h-3.5 text-cyan-300" />
               <span>Personalizza</span>
@@ -209,14 +209,14 @@ export const ProfileSection: React.FC = () => {
           )}
         </div>
 
-        {/* Profile Body Content */}
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-8 sm:-mt-10 md:-mt-12 relative">
+        {/* Profile Body Content - Compact avatar positioned to avoid covering banner */}
+        <div className="px-4 pb-4 -mt-7 sm:-mt-8 relative">
           <div className="flex items-end justify-between gap-3">
-            <div className="flex items-end gap-3 sm:gap-4 min-w-0">
+            <div className="flex items-end gap-3 min-w-0">
               {/* Avatar with Custom Frame & Glow */}
               <div className="relative shrink-0">
                 <div
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-22 md:h-22 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
                     frameObj.borderClass
                   } ${frameObj.glowClass || ""} shadow-xl ring-2 ring-[#0d1022]`}
                 >
@@ -228,29 +228,29 @@ export const ProfileSection: React.FC = () => {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-purple-300">
-                      <User className="w-8 h-8 sm:w-10 sm:h-10" />
+                      <User className="w-7 h-7" />
                     </div>
                   )}
                 </div>
-                <span className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] sm:text-xs font-extrabold text-black shadow-md">
+                <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black shadow-md">
                   {userProfile.level}
                 </span>
               </div>
 
               {/* Name & Title */}
               <div className="min-w-0 pb-0.5">
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  <h2 className="text-base sm:text-xl md:text-2xl font-black text-white truncate max-w-xs sm:max-w-md">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h2 className="text-base font-black text-white truncate max-w-[140px]">
                     {userProfile.name}
                   </h2>
                   {isUniversalAdmin ? (
-                    <span className="text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
-                      <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400" />
+                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
+                      <Crown className="w-2.5 h-2.5 text-amber-400" />
                       GOD MODE
                     </span>
                   ) : isPro ? (
-                    <span className="text-[9px] sm:text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
-                      <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400" />
+                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-0.5">
+                      <Crown className="w-2.5 h-2.5 text-amber-400" />
                       PRO
                     </span>
                   ) : null}
@@ -259,34 +259,34 @@ export const ProfileSection: React.FC = () => {
                       type="button"
                       onClick={() => openClanDetail(clanData.id)}
                       title={`Visualizza dettagli Clan [${clanData.tag}]`}
-                      className="text-[10px] sm:text-xs font-black px-1.5 py-0.2 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-900/80 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                      className="text-[10px] font-black px-1.5 py-0.2 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-900/80 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                     >
                       <Shield className="w-2.5 h-2.5 text-cyan-400" />
                       <span>[{clanData.tag}]</span>
                     </button>
                   )}
                   {userProfile.activeTitle && (
-                    <span className="text-[10px] sm:text-xs font-mono font-black px-2 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]">
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]">
                       [{userProfile.activeTitle}]
                     </span>
                   )}
                   {userProfile.activeBadge && (
-                    <span className="text-[10px] sm:text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300">
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300">
                       🎖️ {userProfile.activeBadge}
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs sm:text-sm text-zinc-300 mt-0.5 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300 mt-0.5 flex-wrap">
                   <span className="text-cyan-400 font-semibold">{userProfile.rank}</span>
                   <span>•</span>
                   <span className="text-zinc-400">{userProfile.tag}</span>
                 </div>
 
                 {userProfile.activisionName && (
-                  <div className="flex items-center gap-1 text-[10px] sm:text-xs text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-2 py-0.5 mt-1 w-fit">
-                    <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400" />
-                    <span className="truncate max-w-xs">COD: {userProfile.activisionName}</span>
+                  <div className="flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 rounded-md px-1.5 py-0.5 mt-1 w-fit">
+                    <Gamepad2 className="w-3 h-3 text-cyan-400" />
+                    <span className="truncate max-w-[150px]">COD: {userProfile.activisionName}</span>
                   </div>
                 )}
               </div>
@@ -320,44 +320,44 @@ export const ProfileSection: React.FC = () => {
 
           {/* Dynamic stat highlights */}
           {hasStats ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 pt-3 sm:pt-4 mt-3 sm:mt-4 border-t border-zinc-800/80 text-center">
-              <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3.5 border border-zinc-800">
-                <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">K/D</span>
-                <span className="text-sm sm:text-lg font-black text-cyan-300">{userProfile.stats.kd ?? "-"}</span>
+            <div className="grid grid-cols-4 gap-2 pt-3 mt-3 border-t border-zinc-800/80 text-center">
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">K/D</span>
+                <span className="text-xs font-extrabold text-cyan-300">{userProfile.stats.kd ?? "-"}</span>
               </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3.5 border border-zinc-800">
-                <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Win Rate</span>
-                <span className="text-sm sm:text-lg font-black text-emerald-400">{userProfile.stats.winRate ?? "-"}</span>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Win Rate</span>
+                <span className="text-xs font-extrabold text-emerald-400">{userProfile.stats.winRate ?? "-"}</span>
               </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3.5 border border-zinc-800">
-                <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Match</span>
-                <span className="text-sm sm:text-lg font-black text-white">{userProfile.stats.matches}</span>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Match</span>
+                <span className="text-xs font-extrabold text-white">{userProfile.stats.matches}</span>
               </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3.5 border border-zinc-800">
-                <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Kill</span>
-                <span className="text-sm sm:text-lg font-black text-purple-300">{userProfile.stats.kills}</span>
+              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
+                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Kill</span>
+                <span className="text-xs font-extrabold text-purple-300">{userProfile.stats.kills}</span>
               </div>
             </div>
           ) : (
             <div className="pt-2 mt-2.5 border-t border-zinc-800/80 text-center">
-              <span className="text-[11px] sm:text-xs text-zinc-400 italic">
+              <span className="text-[11px] text-zinc-400 italic">
                 Gioca partite e tornei per registrare le tue statistiche
               </span>
             </div>
           )}
           {/* Social Follower & Following Row */}
-          <div className="grid grid-cols-3 gap-2.5 sm:gap-4 pt-2.5 sm:pt-3.5 mt-2.5 sm:mt-3.5 border-t border-zinc-800/80 text-center">
-            <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3 border border-purple-900/30">
-              <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Follower</span>
-              <span className="text-sm sm:text-base font-black text-cyan-300">{followersCount}</span>
+          <div className="grid grid-cols-3 gap-2 pt-2.5 mt-2.5 border-t border-zinc-800/80 text-center">
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Follower</span>
+              <span className="text-xs font-black text-cyan-300">{followersCount}</span>
             </div>
-            <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3 border border-purple-900/30">
-              <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Seguiti</span>
-              <span className="text-sm sm:text-base font-black text-purple-300">{followedUserIds.length}</span>
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Seguiti</span>
+              <span className="text-xs font-black text-purple-300">{followedUserIds.length}</span>
             </div>
-            <div className="bg-zinc-900/60 rounded-xl p-2.5 sm:p-3 border border-purple-900/30">
-              <span className="text-[10px] sm:text-xs uppercase font-bold text-zinc-400 block tracking-wider">Clan Seguiti</span>
-              <span className="text-sm sm:text-base font-black text-amber-300">{followedClanIds.length}</span>
+            <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">
+              <span className="text-[9px] uppercase font-bold text-zinc-400 block">Clan Seguiti</span>
+              <span className="text-xs font-black text-amber-300">{followedClanIds.length}</span>
             </div>
           </div>
         </div>
@@ -365,20 +365,20 @@ export const ProfileSection: React.FC = () => {
 
       {/* Universal Admin Card for fedezdesimone@gmail.com */}
       {isUniversalAdmin && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-[#1a142e] to-purple-950/40 border border-amber-500/50 rounded-3xl p-4 sm:p-5 shadow-xl flex items-center justify-between gap-3 animate-fade-in">
+        <div className="bg-gradient-to-r from-amber-500/15 via-[#1a142e] to-purple-950/40 border border-amber-500/50 rounded-3xl p-4 shadow-xl flex items-center justify-between gap-3 animate-fade-in">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-amber-300 font-black text-xs sm:text-sm">
+            <div className="flex items-center gap-1.5 text-amber-300 font-black text-xs">
               <Crown className="w-4 h-4 text-amber-400" />
               <span>Universal God Mode Attivo</span>
             </div>
-            <p className="text-[11px] sm:text-xs text-zinc-300 mt-0.5 leading-relaxed">
+            <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
               Hai SCoin infiniti e puoi accreditare SCoin a qualsiasi utente o eliminare qualsiasi torneo con rimborso.
             </p>
           </div>
 
           <button
             onClick={() => setShowUniversalAdmin(true)}
-            className="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.4)] shrink-0 transition-all cursor-pointer"
+            className="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.4)] shrink-0 transition-all cursor-pointer"
           >
             <ShieldAlert className="w-4 h-4 text-black" />
             <span>Pannello God Mode</span>
@@ -387,7 +387,7 @@ export const ProfileSection: React.FC = () => {
       )}
 
       {/* QUICK ACTIONS GRID: SHOP, PRO, CUSTOMIZER, REVIEWS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2">
         {/* Vai allo Shop Centrale */}
         <button
           onClick={() => setSquadNavTab("shop")}
