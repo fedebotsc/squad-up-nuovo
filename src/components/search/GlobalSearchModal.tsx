@@ -28,6 +28,7 @@ type SearchCategory = "all" | "players" | "clans" | "tournaments";
 interface SearchedPlayer {
   id: string;
   name: string;
+  username?: string;
   tag: string;
   avatar_url?: string;
   level: number;
@@ -65,6 +66,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 }) => {
   const {
     currentUser,
+    userProfile,
     isFollowingUser,
     followUser,
     unfollowUser,
@@ -113,14 +115,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       const { data: pData } = await supabase
         .from("profiles")
         .select("id, username, display_name, avatar_url, activision_id, subscription_tier, bio")
-        .limit(6);
+        .limit(8);
 
       if (pData) {
         setPlayers(
           pData.map((p: any) => ({
             id: p.id,
             name: p.display_name || p.username || "Giocatore",
-            tag: p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ",
+            username: p.username || "",
+            tag: p.username ? `@${p.username}` : (p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ"),
             avatar_url: p.avatar_url,
             level: p.subscription_tier === "pro" ? 50 : 15,
             rank: p.subscription_tier === "pro" ? "Pro Player" : "Competitor",
@@ -182,32 +185,62 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const runSearch = async (term: string) => {
     setIsLoading(true);
     try {
-      const sanitized = `%${term}%`;
+      // Clean query: remove leading @ or # so @S97 matches username S97
+      const cleanTerm = term.trim().replace(/^[@#]/, "");
+      const sanitized = `%${cleanTerm}%`;
+      const rawSanitized = `%${term.trim()}%`;
 
-      // 1. Search Players
-      const { data: pData } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, avatar_url, activision_id, subscription_tier, bio")
-        .or(`username.ilike.${sanitized},display_name.ilike.${sanitized},activision_id.ilike.${sanitized}`)
-        .limit(10);
+      // 1. Search Players by username, display_name or activision_id
+      let foundPlayers: SearchedPlayer[] = [];
+      try {
+        const { data: pData, error: pError } = await supabase
+          .from("profiles")
+          .select("id, username, display_name, avatar_url, activision_id, subscription_tier, bio")
+          .or(`username.ilike.${sanitized},display_name.ilike.${sanitized},username.ilike.${rawSanitized},display_name.ilike.${rawSanitized}`)
+          .limit(20);
 
-      if (pData) {
-        setPlayers(
-          pData.map((p: any) => ({
+        if (!pError && pData) {
+          foundPlayers = pData.map((p: any) => ({
             id: p.id,
             name: p.display_name || p.username || "Giocatore",
-            tag: p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ",
+            username: p.username || "",
+            tag: p.username ? `@${p.username}` : (p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ"),
             avatar_url: p.avatar_url,
             level: p.subscription_tier === "pro" ? 50 : 12,
             rank: p.subscription_tier === "pro" ? "Pro Player" : "Competitor",
             activision_name: p.activision_id,
             subscription_tier: p.subscription_tier,
             bio: p.bio,
-          }))
-        );
-      } else {
-        setPlayers([]);
+          }));
+        }
+      } catch (err) {
+        console.warn("[GlobalSearch] Errore ricerca profiles Supabase:", err);
       }
+
+      // Check if current logged-in user matches and wasn't returned yet
+      if (currentUser) {
+        const cUsername = (currentUser.user_metadata?.username || (currentUser as any).username || "").toLowerCase();
+        const cDisplayName = (userProfile?.name || currentUser.user_metadata?.display_name || "").toLowerCase();
+        const queryLower = cleanTerm.toLowerCase();
+        if (
+          (cUsername.includes(queryLower) || cDisplayName.includes(queryLower)) &&
+          !foundPlayers.some((p) => p.id === currentUser.id)
+        ) {
+          foundPlayers.unshift({
+            id: currentUser.id,
+            name: userProfile?.name || cDisplayName || "Il Tuo Profilo",
+            username: cUsername || undefined,
+            tag: cUsername ? `@${cUsername}` : "#SQ",
+            avatar_url: userProfile?.avatar || "",
+            level: userProfile?.level || 15,
+            rank: userProfile?.rank || "Competitor",
+            subscription_tier: userProfile?.subscriptionTier,
+            bio: userProfile?.bio,
+          });
+        }
+      }
+
+      setPlayers(foundPlayers);
 
       // 2. Search Clans
       const { data: cData } = await supabase
@@ -447,6 +480,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 <h4 className="text-xs font-bold text-white truncate max-w-[140px]">
                                   {p.name}
                                 </h4>
+                                {p.username && (
+                                  <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/60 px-1 rounded border border-cyan-800/40">
+                                    @{p.username}
+                                  </span>
+                                )}
                                 {p.subscription_tier === "pro" && (
                                   <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
                                     <Crown className="w-2.5 h-2.5 text-amber-400" />
@@ -456,8 +494,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                               </div>
                               <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
                                 <span className="text-cyan-400">{p.rank}</span>
-                                <span>•</span>
-                                <span>{p.tag}</span>
+                                {p.tag && p.tag !== `@${p.username}` && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{p.tag}</span>
+                                  </>
+                                )}
                               </div>
                               {p.activision_name && (
                                 <div className="flex items-center gap-1 text-[10px] text-cyan-300 mt-0.5">

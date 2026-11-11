@@ -234,7 +234,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 : "text-zinc-400 hover:text-white"
             }`}
           >
-            Player Pro
+            Player Pro Plus
           </button>
           <button
             onClick={() => setActiveTab("clan")}
@@ -260,9 +260,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                       <Crown className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-white">PLAYER PRO</h4>
+                      <h4 className="text-sm font-black text-white">PLAYER PRO PLUS</h4>
                       <span className="text-[10px] text-amber-400 font-bold">
-                        Singolo Giocatore
+                        Piano Individuale Completo
                       </span>
                     </div>
                   </div>
@@ -273,6 +273,12 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 </div>
 
                 <div className="space-y-2 pt-1 border-t border-zinc-800 text-xs text-zinc-300">
+                  <div className="flex items-start gap-2 bg-amber-500/10 p-2 rounded-xl border border-amber-500/30">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="text-amber-200">
+                      <strong className="text-white">Votazioni & Reputazione:</strong> Sblocca il potere di votare e assegnare badge ai giocatori e ai clan
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>
@@ -285,13 +291,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                     <span>
                       <strong className="text-white">2x SCoin Giornalieri:</strong> Riscatta 20 SC
                       al giorno anziché 10
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>
-                      <strong className="text-white">Recensioni & Valutazioni:</strong> Valuta i tuoi
-                      compagni di squadra
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

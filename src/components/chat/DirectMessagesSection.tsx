@@ -202,7 +202,8 @@ export const DirectMessagesSection: React.FC = () => {
   // 3. Search Players for New Chat
   const handleSearchPlayers = async (query: string) => {
     setSearchQuery(query);
-    if (!query.trim()) {
+    const clean = query.trim().replace(/^[@#]/, "");
+    if (!clean) {
       setSearchResults([]);
       return;
     }
@@ -213,8 +214,8 @@ export const DirectMessagesSection: React.FC = () => {
         .from("profiles")
         .select("id, username, display_name, avatar_url, clan_tag, activision_id")
         .neq("id", currentUser?.id || "")
-        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%,activision_id.ilike.%${query}%`)
-        .limit(10);
+        .or(`username.ilike.%${clean}%,display_name.ilike.%${clean}%,username.ilike.%${query.trim()}%,display_name.ilike.%${query.trim()}%`)
+        .limit(15);
 
       setSearchResults(data || []);
     } catch (err) {

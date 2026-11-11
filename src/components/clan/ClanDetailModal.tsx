@@ -19,6 +19,8 @@ import {
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import { ClanBadgesCard } from "./ClanBadgesCard";
+import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 
 interface ClanDetailModalProps {
   clanId: string | null;
@@ -72,6 +74,7 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [clan, setClan] = useState<ClanDetailData | null>(null);
   const [isFollowBusy, setIsFollowBusy] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !clanId) return;
@@ -395,6 +398,16 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
                 </div>
               </div>
 
+              {/* VALUTAZIONI CLAN & BADGE */}
+              <div className="pt-1">
+                <ClanBadgesCard
+                  clanId={clan.id}
+                  clanName={clan.name}
+                  clanTag={clan.tag}
+                  onOpenSubscriptionModal={() => setShowSubscriptionModal(true)}
+                />
+              </div>
+
               {/* CLAN MEMBERS LIST (Requirement 5) */}
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
@@ -465,6 +478,13 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
             </div>
           </div>
         ) : null}
+
+        {/* Subscription Modal for Pro Plus Upgrade */}
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          defaultTab="player"
+        />
       </div>
     </div>
   );

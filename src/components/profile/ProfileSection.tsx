@@ -34,6 +34,7 @@ import { RewardsHub } from "@/components/rewards/RewardsHub";
 import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 import { PlayerReviewsModal } from "./PlayerReviewsModal";
 import { UniversalAdminModal } from "@/components/admin/UniversalAdminModal";
+import { PlayerBadgesCard } from "./PlayerBadgesCard";
 
 export const ProfileSection: React.FC = () => {
   const {
@@ -132,12 +133,6 @@ export const ProfileSection: React.FC = () => {
       description: `Richiesta registrata per "${rewardTitle}".`,
     });
   };
-
-  const hasStats = Boolean(
-    userProfile.stats.matches > 0 ||
-    userProfile.stats.kills > 0 ||
-    userProfile.stats.kd !== null
-  );
 
   const isPro = userProfile.subscriptionTier === "pro";
   const frameObj =
@@ -318,33 +313,16 @@ export const ProfileSection: React.FC = () => {
             </div>
           )}
 
-          {/* Dynamic stat highlights */}
-          {hasStats ? (
-            <div className="grid grid-cols-4 gap-2 pt-3 mt-3 border-t border-zinc-800/80 text-center">
-              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-                <span className="text-[9px] uppercase font-bold text-zinc-400 block">K/D</span>
-                <span className="text-xs font-extrabold text-cyan-300">{userProfile.stats.kd ?? "-"}</span>
-              </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Win Rate</span>
-                <span className="text-xs font-extrabold text-emerald-400">{userProfile.stats.winRate ?? "-"}</span>
-              </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Match</span>
-                <span className="text-xs font-extrabold text-white">{userProfile.stats.matches}</span>
-              </div>
-              <div className="bg-zinc-900/60 rounded-xl p-2 border border-zinc-800">
-                <span className="text-[9px] uppercase font-bold text-zinc-400 block">Kill</span>
-                <span className="text-xs font-extrabold text-purple-300">{userProfile.stats.kills}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-2 mt-2.5 border-t border-zinc-800/80 text-center">
-              <span className="text-[11px] text-zinc-400 italic">
-                Gioca partite e tornei per registrare le tue statistiche
-              </span>
-            </div>
-          )}
+          {/* Valutazioni & Badge Ricevuti */}
+          <div className="pt-3 mt-3 border-t border-zinc-800/80">
+            <PlayerBadgesCard
+              targetUserId={currentUser?.id || userProfile.id || "current_user"}
+              targetUserName={userProfile.name}
+              isSelf={true}
+              onOpenSubscriptionModal={() => setShowSubscription(true)}
+            />
+          </div>
+
           {/* Social Follower & Following Row */}
           <div className="grid grid-cols-3 gap-2 pt-2.5 mt-2.5 border-t border-zinc-800/80 text-center">
             <div className="bg-zinc-900/60 rounded-xl p-2 border border-purple-900/30">

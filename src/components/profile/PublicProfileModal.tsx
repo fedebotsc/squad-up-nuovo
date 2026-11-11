@@ -21,6 +21,8 @@ import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { AVATAR_FRAMES } from "./cosmeticsData";
+import { PlayerBadgesCard } from "./PlayerBadgesCard";
+import { SubscriptionModal } from "@/components/subscription/SubscriptionModal";
 
 interface PublicProfileModalProps {
   userId: string | null;
@@ -81,6 +83,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const [profileData, setProfileData] = useState<PublicUserData | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isFollowBusy, setIsFollowBusy] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -490,35 +493,25 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                 )}
               </div>
 
-              {/* GAME STATS GRID */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1">
-                  <Trophy className="w-3 h-3 text-amber-400" />
-                  Statistiche di Gioco
-                </span>
-
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-zinc-900/80 rounded-xl p-2.5 border border-purple-900/30">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 block">K/D</span>
-                    <span className="text-xs font-black text-cyan-300">{profileData.stats.kd}</span>
-                  </div>
-                  <div className="bg-zinc-900/80 rounded-xl p-2.5 border border-purple-900/30">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 block">Win Rate</span>
-                    <span className="text-xs font-black text-emerald-400">{profileData.stats.winRate}</span>
-                  </div>
-                  <div className="bg-zinc-900/80 rounded-xl p-2.5 border border-purple-900/30">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 block">Match</span>
-                    <span className="text-xs font-black text-white">{profileData.stats.matches}</span>
-                  </div>
-                  <div className="bg-zinc-900/80 rounded-xl p-2.5 border border-purple-900/30">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 block">Vittorie</span>
-                    <span className="text-xs font-black text-amber-300">{profileData.tournamentsWon}</span>
-                  </div>
-                </div>
+              {/* VALUTAZIONI & BADGE RICEVUTI */}
+              <div className="pt-1">
+                <PlayerBadgesCard
+                  targetUserId={profileData.id}
+                  targetUserName={profileData.name}
+                  isSelf={currentUser?.id === profileData.id}
+                  onOpenSubscriptionModal={() => setShowSubscriptionModal(true)}
+                />
               </div>
             </div>
           </div>
         ) : null}
+
+        {/* Subscription Modal */}
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          defaultTab="player"
+        />
       </div>
     </div>
   );
