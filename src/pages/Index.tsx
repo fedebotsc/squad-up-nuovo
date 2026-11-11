@@ -38,7 +38,7 @@ const MainContent: React.FC = () => {
       <TopHeader />
 
       {/* Dynamic Subsection Rendering */}
-      <div className="flex-1 w-full max-w-md mx-auto">
+      <div className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6">
         {activeTab === "home" && <HomeSection />}
         {activeTab === "tournaments" && <TournamentsSection />}
         {activeTab === "voice" && <VoiceSection />}
