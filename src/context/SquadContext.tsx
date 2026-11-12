@@ -631,7 +631,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             username,
             display_name,
             avatar_url,
-            activision_id
+            activision_id,
+            subscription_tier
           )
         `)
         .order("created_at", { ascending: false })
@@ -681,8 +682,9 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 handle: authorHandle,
                 avatar: authorProf?.avatar_url || "",
                 clanTag: clanObj?.tag || undefined,
-                verified: false,
+                verified: Boolean(authorProf?.subscription_tier === "pro" || clanObj?.tier === "pro" || clanObj?.tier === "elite"),
                 activisionId: authorProf?.activision_id,
+                subscriptionTier: authorProf?.subscription_tier || undefined,
               },
               timeAgo: new Date(p.created_at).toLocaleDateString([], {
                 day: "numeric",
@@ -973,7 +975,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             username,
             display_name,
             avatar_url,
-            activision_id
+            activision_id,
+            subscription_tier
           )
         `)
         .single();
@@ -1008,8 +1011,9 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             handle: authorProf?.username ? `@${authorProf.username}` : `@${userProfile.name}`,
             avatar: authorProf?.avatar_url || userProfile.avatar,
             clanTag: clanObj?.tag || clanData?.tag,
-            verified: isPublishingAsClan,
-            activisionId: authorProf?.activision_id,
+            verified: Boolean(userProfile.subscriptionTier === "pro" || isPublishingAsClan || clanObj?.tier === "pro" || clanObj?.tier === "elite"),
+            activisionId: authorProf?.activision_id || userProfile.activisionName,
+            subscriptionTier: authorProf?.subscription_tier || userProfile.subscriptionTier,
           },
           timeAgo: "Adesso",
           game: game || "Warzone",

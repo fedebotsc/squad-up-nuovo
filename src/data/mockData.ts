@@ -49,6 +49,7 @@ export interface Post {
     clanTag?: string;
     verified?: boolean;
     activisionId?: string;
+    subscriptionTier?: string;
   };
   timeAgo: string;
   game: string;

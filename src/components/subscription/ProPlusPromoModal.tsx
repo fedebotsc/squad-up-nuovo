@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Crown, Sparkles, Check, ArrowRight, Shield, Award } from "lucide-react";
+import { X, Crown, Sparkles, Check, ArrowRight, Shield, Award, Flame } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 
 interface ProPlusPromoModalProps {
@@ -61,21 +61,21 @@ export const ProPlusPromoModal: React.FC<ProPlusPromoModalProps> = ({
         {/* Feature List Preview */}
         <div className="rounded-2xl bg-zinc-950/70 border border-amber-500/30 p-3 mb-4 text-left space-y-2">
           <div className="flex items-start gap-2">
+            <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+            <span className="text-xs text-zinc-200">
+              <strong className="text-amber-300">Boost Post &quot;Per te&quot;:</strong> I tuoi contenuti ottengono priorità e compaiono per primi nel feed di tutta la community
+            </span>
+          </div>
+          <div className="flex items-start gap-2">
             <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
             <span className="text-xs text-zinc-200">
-              <strong className="text-amber-300">Voti & Badge:</strong> Assegna badge positivi e negativi su profili giocatori e clan
+              <strong className="text-amber-300">Accesso Esclusivo Voti &amp; Badge:</strong> Assegna badge di reputazione su profili giocatori e clan
             </span>
           </div>
           <div className="flex items-start gap-2">
             <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
             <span className="text-xs text-zinc-200">
               <strong className="text-white">Badge Verificato PRO:</strong> Icona dorata accanto al tuo nome
-            </span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-            <span className="text-xs text-zinc-200">
-              <strong className="text-white">Doppi SCoin:</strong> 20 SC al giorno anziché 10
             </span>
           </div>
         </div>

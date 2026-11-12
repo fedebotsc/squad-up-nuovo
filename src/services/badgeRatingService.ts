@@ -198,36 +198,27 @@ export interface BadgeVoteRecord {
   createdAt: string;
 }
 
-// Storage helpers
-const PLAYER_VOTES_KEY = "squadup_player_badge_votes";
-const CLAN_VOTES_KEY = "squadup_clan_badge_votes";
+// Storage keys for real votes (no fake mock seeds)
+const PLAYER_VOTES_KEY = "squadup_real_player_votes_v2";
+const CLAN_VOTES_KEY = "squadup_real_clan_votes_v2";
 
-// Seed initial realistic badge counts based on target ID hash
-function getSeedVotes(targetId: string, badgeList: BadgeDefinition[]): Record<string, number> {
-  const hash = targetId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+export function getZeroBadgeCounts(badgeList: BadgeDefinition[]): Record<string, number> {
   const result: Record<string, number> = {};
-
-  badgeList.forEach((badge, idx) => {
-    if (badge.type === "positive") {
-      result[badge.id] = ((hash * (idx + 3)) % 14) + 1;
-    } else {
-      // Negative badges are usually rarer
-      result[badge.id] = (hash * (idx + 1)) % 4 === 0 ? ((hash * idx) % 3) : 0;
-    }
+  badgeList.forEach((badge) => {
+    result[badge.id] = 0;
   });
-
   return result;
 }
 
 export function getPlayerBadgeCounts(targetId: string): { counts: Record<string, number>; userVotes: string[] } {
-  const defaultCounts = getSeedVotes(targetId, PLAYER_BADGES);
+  const zeroCounts = getZeroBadgeCounts(PLAYER_BADGES);
 
   try {
     const raw = localStorage.getItem(`${PLAYER_VOTES_KEY}_${targetId}`);
     if (raw) {
       const stored = JSON.parse(raw);
       return {
-        counts: { ...defaultCounts, ...stored.counts },
+        counts: { ...zeroCounts, ...(stored.counts || {}) },
         userVotes: stored.userVotes || [],
       };
     }
@@ -235,18 +226,18 @@ export function getPlayerBadgeCounts(targetId: string): { counts: Record<string,
     console.warn("Errore lettura voti giocatore:", e);
   }
 
-  return { counts: defaultCounts, userVotes: [] };
+  return { counts: zeroCounts, userVotes: [] };
 }
 
 export function getClanBadgeCounts(clanId: string): { counts: Record<string, number>; userVotes: string[] } {
-  const defaultCounts = getSeedVotes(clanId, CLAN_BADGES);
+  const zeroCounts = getZeroBadgeCounts(CLAN_BADGES);
 
   try {
     const raw = localStorage.getItem(`${CLAN_VOTES_KEY}_${clanId}`);
     if (raw) {
       const stored = JSON.parse(raw);
       return {
-        counts: { ...defaultCounts, ...stored.counts },
+        counts: { ...zeroCounts, ...(stored.counts || {}) },
         userVotes: stored.userVotes || [],
       };
     }
@@ -254,7 +245,7 @@ export function getClanBadgeCounts(clanId: string): { counts: Record<string, num
     console.warn("Errore lettura voti clan:", e);
   }
 
-  return { counts: defaultCounts, userVotes: [] };
+  return { counts: zeroCounts, userVotes: [] };
 }
 
 export function togglePlayerBadgeVote(
@@ -319,13 +310,48 @@ export function toggleClanBadgeVote(
   return { counts: newCounts, userVotes: newUserVotes, hasVoted: !userVoted };
 }
 
-export function isUserPlayerProPlus(userProfile: any, currentUser: any, isUniversalAdmin: boolean): boolean {
+/**
+ * Checks whether user has permission to vote and award badges:
+ * Exclusively allowed for active "Player Pro" subscribers, "Clan Pro / Elite" subscribers, or Universal Admin.
+ */
+export function isUserEligibleToVote(
+  userProfile: any,
+  currentUser: any,
+  clanData: any,
+  isUniversalAdmin: boolean
+): boolean {
   if (isUniversalAdmin) return true;
   if (!userProfile && !currentUser) return false;
 
   const email = currentUser?.email?.toLowerCase();
   if (email === "fedezdesimone@gmail.com") return true;
 
-  const tier = userProfile?.subscriptionTier || userProfile?.subscription_tier;
-  return tier === "pro" || tier === "pro_plus" || userProfile?.isPro;
+  // 1. Player Pro subscriber
+  const pTier = (userProfile?.subscriptionTier || userProfile?.subscription_tier || "").toLowerCase();
+  if (pTier === "pro" || pTier === "pro_plus" || userProfile?.isPro) {
+    return true;
+  }
+
+  // 2. Clan Pro or Clan Elite subscriber
+  if (clanData) {
+    const cTier = (clanData.tier || clanData.subscription_tier || "").toLowerCase();
+    if (cTier === "pro" || cTier === "elite" || cTier.includes("pro") || cTier.includes("elite")) {
+      return true;
+    }
+    if (clanData.level && clanData.level >= 2) {
+      return true;
+    }
+  }
+
+  return false;
 }
+
+// Backwards compatibility
+export const isUserPlayerProPlus = (
+  userProfile: any,
+  currentUser: any,
+  isUniversalAdmin: boolean,
+  clanData?: any
+): boolean => {
+  return isUserEligibleToVote(userProfile, currentUser, clanData, isUniversalAdmin);
+};

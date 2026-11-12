@@ -15,12 +15,15 @@ import {
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import { isUserEligibleToVote } from "@/services/badgeRatingService";
+import { ProPlusPromoModal } from "@/components/subscription/ProPlusPromoModal";
 
 interface PlayerReviewsModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetUserId?: string;
   targetUserName?: string;
+  onOpenSubscriptionModal?: () => void;
 }
 
 const POSITIVE_TAGS = [
@@ -45,26 +48,29 @@ export const PlayerReviewsModal: React.FC<PlayerReviewsModalProps> = ({
   onClose,
   targetUserId,
   targetUserName,
+  onOpenSubscriptionModal,
 }) => {
-  const { currentUser, userProfile, openAuthModal } = useSquad();
+  const { currentUser, userProfile, openAuthModal, clanData, isUniversalAdmin } = useSquad();
 
   // Target defaults to current user's profile if omitted
   const actualTargetId = targetUserId || currentUser?.id;
   const actualTargetName = targetUserName || userProfile.name;
   const isSelf = currentUser && currentUser.id === actualTargetId;
+  const hasProVoteAccess = isUserEligibleToVote(userProfile, currentUser, clanData, isUniversalAdmin);
 
   const [summary, setSummary] = useState<any>({
     total_ratings: 0,
-    positive_percentage: 100,
-    skill_avg: 85,
-    communication_avg: 90,
-    teamplay_avg: 88,
-    fair_play_avg: 92,
-    reputation_badge: "Operatore Affidabile",
+    positive_percentage: null,
+    skill_avg: null,
+    communication_avg: null,
+    teamplay_avg: null,
+    fair_play_avg: null,
+    reputation_badge: "Nuovo Operatore",
   });
 
   const [reviewsList, setReviewsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showPromoModal, setShowPromoModal] = useState(false);
 
   // Submission form state
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -133,6 +139,11 @@ export const PlayerReviewsModal: React.FC<PlayerReviewsModalProps> = ({
         description: "Non puoi valutare il tuo stesso profilo.",
         variant: "destructive",
       });
+      return;
+    }
+
+    if (!hasProVoteAccess) {
+      setShowPromoModal(true);
       return;
     }
 

@@ -21,7 +21,7 @@ import {
   BadgeDefinition,
   getClanBadgeCounts,
   toggleClanBadgeVote,
-  isUserPlayerProPlus,
+  isUserEligibleToVote,
 } from "@/services/badgeRatingService";
 import { ProPlusPromoModal } from "@/components/subscription/ProPlusPromoModal";
 import { toast } from "@/components/ui/use-toast";
@@ -55,7 +55,7 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
     }
   }, [clanId]);
 
-  const hasProPlus = isUserPlayerProPlus(userProfile, currentUser, isUniversalAdmin);
+  const hasProVoteAccess = isUserEligibleToVote(userProfile, currentUser, clanData, isUniversalAdmin);
   const isClanMember = clanData?.id === clanId;
 
   const handleVoteBadge = (badge: BadgeDefinition) => {
@@ -64,8 +64,17 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
       return;
     }
 
-    // Restriction: Player Pro Plus only
-    if (!hasProPlus) {
+    if (isClanMember) {
+      toast({
+        title: "Operazione non consentita",
+        description: "Non puoi votare o assegnare badge al tuo stesso Clan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Restriction: Player Pro or Clan Pro/Elite only
+    if (!hasProVoteAccess) {
       setShowPromoModal(true);
       return;
     }
@@ -122,7 +131,7 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
   );
   const grandTotal = totalPositive + totalNegative;
   const positivePercentage =
-    grandTotal > 0 ? Math.round((totalPositive / grandTotal) * 100) : 100;
+    grandTotal > 0 ? Math.round((totalPositive / grandTotal) * 100) : null;
 
   return (
     <div className="rounded-2xl bg-zinc-900/80 border border-cyan-900/40 p-3.5 space-y-3 shadow-md">
@@ -134,28 +143,34 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
           </div>
           <div>
             <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
-              Valutazioni Clan & Badge
+              Valutazioni Clan &amp; Badge
             </h4>
             <p className="text-[10px] text-zinc-400">
-              Reputazione e feedback assegnati dai giocatori Pro
+              Reputazione reale rilasciata dai membri Player Pro e Clan Pro
             </p>
           </div>
         </div>
 
         {/* Clan Score percentage pill */}
         <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-950/80 border border-zinc-800 text-right">
-          <span
-            className={`text-xs font-black ${
-              positivePercentage >= 75
-                ? "text-emerald-400"
-                : positivePercentage >= 50
-                ? "text-amber-400"
-                : "text-rose-400"
-            }`}
-          >
-            {positivePercentage}%
-          </span>
-          <span className="text-[9px] font-bold text-zinc-500 uppercase">Fiducia</span>
+          {positivePercentage !== null ? (
+            <>
+              <span
+                className={`text-xs font-black ${
+                  positivePercentage >= 75
+                    ? "text-emerald-400"
+                    : positivePercentage >= 50
+                    ? "text-amber-400"
+                    : "text-rose-400"
+                }`}
+              >
+                {positivePercentage}%
+              </span>
+              <span className="text-[9px] font-bold text-zinc-500 uppercase">Fiducia</span>
+            </>
+          ) : (
+            <span className="text-[10px] font-bold text-zinc-500">Nessun voto</span>
+          )}
         </div>
       </div>
 
@@ -187,12 +202,12 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
         </button>
       </div>
 
-      {/* Pro Plus Notice if user is not Pro Plus */}
-      {!hasProPlus && (
+      {/* Pro Notice if user is not Pro */}
+      {!hasProVoteAccess && (
         <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200">
           <div className="flex items-center gap-1.5">
             <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>Passa a <strong>Player Pro Plus</strong> per votare questo Clan</span>
+            <span>Passa a <strong>Player Pro</strong> per votare questo Clan</span>
           </div>
           <button
             type="button"
@@ -252,30 +267,32 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
                   {count}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => handleVoteBadge(badge)}
-                  title={
-                    hasProPlus
-                      ? hasVoted
-                        ? "Rimuovi il tuo voto"
-                        : `Vota ${badge.name}`
-                      : "Riservato a Player Pro Plus"
-                  }
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                    hasVoted
-                      ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-sm"
-                      : hasProPlus
-                      ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
-                      : "bg-zinc-900/60 text-zinc-500 border border-zinc-800 hover:text-amber-400"
-                  }`}
-                >
-                  {hasProPlus ? (
-                    <span className="text-xs font-black">{hasVoted ? "✓" : "+"}</span>
-                  ) : (
-                    <Lock className="w-3 h-3 text-amber-400/70" />
-                  )}
-                </button>
+                {!isClanMember && (
+                  <button
+                    type="button"
+                    onClick={() => handleVoteBadge(badge)}
+                    title={
+                      hasProVoteAccess
+                        ? hasVoted
+                          ? "Rimuovi il tuo voto"
+                          : `Vota ${badge.name}`
+                        : "Riservato a Player Pro e Clan Pro"
+                    }
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                      hasVoted
+                        ? "bg-cyan-600 hover:bg-cyan-500 text-white shadow-sm"
+                        : hasProVoteAccess
+                        ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                        : "bg-zinc-900/60 text-zinc-500 border border-zinc-800 hover:text-amber-400"
+                    }`}
+                  >
+                    {hasProVoteAccess ? (
+                      <span className="text-xs font-black">{hasVoted ? "✓" : "+"}</span>
+                    ) : (
+                      <Lock className="w-3 h-3 text-amber-400/70" />
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -287,8 +304,8 @@ export const ClanBadgesCard: React.FC<ClanBadgesCardProps> = ({
         isOpen={showPromoModal}
         onClose={() => setShowPromoModal(false)}
         onOpenSubscriptionModal={onOpenSubscriptionModal}
-        title="Vota i Clan con Player Pro Plus"
-        description="Assegnare badge di reputazione (positivi o negativi) ai Clan richiede un abbonamento Player Pro Plus attivo."
+        title="Vota i Clan con Player Pro o Clan Pro"
+        description="Assegnare badge di reputazione ai Clan richiede un abbonamento Player Pro o Clan Pro/Elite attivo."
       />
     </div>
   );

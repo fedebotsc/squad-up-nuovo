@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2, UserPlus, User, Send, MessageCircle, Search, Bell } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, Send, Search, Bell } from "lucide-react";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
 import { AVATAR_FRAMES } from "@/components/profile/cosmeticsData";
@@ -24,8 +24,9 @@ export const TopHeader: React.FC = () => {
     "border-purple-500/60";
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/90 backdrop-blur-md border-b border-purple-900/30">
-      <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-[#0b0e17]/95 backdrop-blur-md border-b border-purple-900/30">
+      {/* Top Bar with Brand & Quick Action Controls */}
+      <div className="max-w-md mx-auto px-4 h-13 flex items-center justify-between">
         {/* SquadUP Logo & Brand */}
         <div
           onClick={() => setActiveTab("home")}
@@ -48,14 +49,14 @@ export const TopHeader: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Voice, SCoin Wallet Badge & Auth */}
-        <div className="flex items-center gap-2">
+        {/* Quick Voice, SCoin Wallet Badge & Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Active Voice Pill */}
           {activeVoiceRoomId && (
             <button
               onClick={() => setActiveTab("voice")}
               title="Canale Vocale Connesso"
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-emerald-950/50 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50 transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-950/50 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-900/50 transition-colors cursor-pointer"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -66,20 +67,23 @@ export const TopHeader: React.FC = () => {
             </button>
           )}
 
-          {/* Global Search Button (Persone, Clan, Tornei) */}
+          {/* SCoin Wallet Chip (Redirects to Shop) */}
           <button
-            onClick={() => setIsSearchOpen(true)}
-            title="Cerca persone, clan e tornei"
-            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative group"
+            onClick={() => setActiveTab("shop")}
+            title="Vai allo Shop SquadUP"
+            className="flex items-center gap-1 px-2 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
           >
-            <Search className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <Coins className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span className="text-xs font-bold tracking-wide">
+              {sCoinBalance.toLocaleString()}
+            </span>
           </button>
 
           {/* Notifications Bell Button */}
           <button
             onClick={() => setIsNotificationsOpen(true)}
             title="Centro Notifiche"
-            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-amber-400 transition-colors cursor-pointer shadow-sm relative group"
+            className="p-1.5 sm:p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-amber-400 transition-colors cursor-pointer shadow-sm relative group"
           >
             <Bell className="w-4 h-4 text-zinc-300 group-hover:text-amber-300 group-hover:scale-110 transition-transform" />
             {unreadNotificationsCount > 0 && (
@@ -89,33 +93,21 @@ export const TopHeader: React.FC = () => {
             )}
           </button>
 
-          {/* Direct Messages Shortcut (Instagram style) */}
+          {/* Direct Messages Shortcut */}
           <button
             onClick={() => setActiveTab("messages")}
             title="Direct Messages"
-            className="p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative"
+            className="p-1.5 sm:p-2 rounded-full bg-zinc-900/80 hover:bg-purple-950/60 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative"
           >
             <Send className="w-4 h-4 rotate-12 text-zinc-400 hover:text-cyan-400 transition-colors" />
           </button>
 
-          {/* SCoin Wallet Chip (Redirects to Shop) */}
-          <button
-            onClick={() => setActiveTab("shop")}
-            title="Vai allo Shop SquadUP"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/10 via-purple-900/30 to-amber-500/10 border border-amber-500/30 text-amber-300 hover:border-amber-400/60 transition-all shadow-[0_0_10px_rgba(245,158,11,0.15)] cursor-pointer"
-          >
-            <Coins className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-            <span className="text-xs font-bold tracking-wide">
-              {sCoinBalance.toLocaleString()}
-            </span>
-          </button>
-
-          {/* User Status / Login Button */}
+          {/* User Avatar / Login Button */}
           {currentUser ? (
             <button
               onClick={() => setActiveTab("profile")}
               title={userProfile.name}
-              className={`w-8 h-8 rounded-full overflow-hidden border-2 ${frameBorder} bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform`}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 ${frameBorder} bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform`}
             >
               {userProfile.avatar ? (
                 <img
@@ -124,7 +116,7 @@ export const TopHeader: React.FC = () => {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-xs font-bold">
+                <span className="text-[11px] font-bold">
                   {userProfile.name.slice(0, 2).toUpperCase()}
                 </span>
               )}
@@ -139,6 +131,27 @@ export const TopHeader: React.FC = () => {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Sleek Aligned Global Search Bar */}
+      <div className="max-w-md mx-auto px-4 pb-2.5 pt-0.5">
+        <button
+          type="button"
+          onClick={() => setIsSearchOpen(true)}
+          className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800/90 border border-purple-900/50 hover:border-cyan-500/50 text-zinc-400 hover:text-zinc-200 text-xs shadow-inner transition-all group cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Search className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="truncate text-xs text-zinc-400 group-hover:text-zinc-200">
+              Cerca giocatori, tag clan o tornei...
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-purple-950/80 text-purple-300 border border-purple-700/50 font-bold group-hover:border-cyan-400/50 transition-colors">
+              Cerca
+            </span>
+          </div>
+        </button>
       </div>
 
       {/* Global Search Modal (Persone, Clan, Tornei) */}

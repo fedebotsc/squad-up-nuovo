@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect } from "react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -12,10 +12,8 @@ import {
   Crown,
   Sparkles,
   Gamepad2,
-  Calendar,
   Coins,
   ChevronRight,
-  Flame,
 } from "lucide-react";
 
 interface GlobalSearchModalProps {
@@ -84,26 +82,24 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<SearchCategory>("all");
   const [isLoading, setIsLoading] = useState(false);
-  const [, startTransition] = useTransition();
 
   const [players, setPlayers] = useState<SearchedPlayer[]>([]);
   const [clans, setClans] = useState<SearchedClan[]>([]);
   const [tournamentResults, setTournamentResults] = useState<SearchedTournament[]>([]);
 
-  // Search logic querying Supabase
+  // Search logic querying Supabase & Local Fallbacks
   useEffect(() => {
     if (!isOpen) return;
 
     const term = searchQuery.trim();
     if (!term) {
-      // Load quick suggestions / trending
       fetchSuggestions();
       return;
     }
 
     const timer = setTimeout(() => {
       runSearch(term);
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [searchQuery, isOpen]);
@@ -117,7 +113,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         .select("id, username, display_name, avatar_url, activision_id, subscription_tier, bio")
         .limit(8);
 
-      if (pData) {
+      if (pData && pData.length > 0) {
         setPlayers(
           pData.map((p: any) => ({
             id: p.id,
@@ -138,9 +134,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       const { data: cData } = await supabase
         .from("clans")
         .select("id, name, tag, game_mode, avatar_url, tier, description")
-        .limit(5);
+        .limit(6);
 
-      if (cData) {
+      if (cData && cData.length > 0) {
         setClans(
           cData.map((c: any) => ({
             id: c.id,
@@ -155,13 +151,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         );
       }
 
-      // 3. Suggested Tournaments
+      // 3. Suggested Tournaments (From DB or local state)
       const { data: tData } = await supabase
         .from("tournaments")
         .select("id, name, game_mode, type, status, entry_fee_sc, prize_description, starts_at")
         .limit(6);
 
-      if (tData) {
+      if (tData && tData.length > 0) {
         setTournamentResults(
           tData.map((t: any) => ({
             id: t.id,
@@ -172,6 +168,19 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             entry_fee_sc: t.entry_fee_sc,
             prize_description: t.prize_description,
             starts_at: t.starts_at,
+          }))
+        );
+      } else if (tournaments && tournaments.length > 0) {
+        setTournamentResults(
+          tournaments.map((t) => ({
+            id: t.id,
+            name: t.title,
+            game_mode: t.game,
+            type: t.category,
+            status: t.status,
+            entry_fee_sc: t.entryFeeSCoin,
+            prize_description: `${t.prizePoolSCoin} SCoin`,
+            starts_at: t.startsAt,
           }))
         );
       }
@@ -185,18 +194,18 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const runSearch = async (term: string) => {
     setIsLoading(true);
     try {
-      // Clean query: remove leading @ or # so @S97 matches username S97
-      const cleanTerm = term.trim().replace(/^[@#]/, "");
+      // Clean query: remove leading @, #, or brackets
+      const cleanTerm = term.trim().replace(/^[@#\[\]]/g, "").replace(/[\[\]]/g, "");
       const sanitized = `%${cleanTerm}%`;
       const rawSanitized = `%${term.trim()}%`;
 
-      // 1. Search Players by username, display_name or activision_id
+      // 1. Search Players
       let foundPlayers: SearchedPlayer[] = [];
       try {
         const { data: pData, error: pError } = await supabase
           .from("profiles")
           .select("id, username, display_name, avatar_url, activision_id, subscription_tier, bio")
-          .or(`username.ilike.${sanitized},display_name.ilike.${sanitized},username.ilike.${rawSanitized},display_name.ilike.${rawSanitized}`)
+          .or(`username.ilike.${sanitized},display_name.ilike.${sanitized},activision_id.ilike.${sanitized},activision_id.ilike.${rawSanitized}`)
           .limit(20);
 
         if (!pError && pData) {
@@ -214,16 +223,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           }));
         }
       } catch (err) {
-        console.warn("[GlobalSearch] Errore ricerca profiles Supabase:", err);
+        console.warn("[GlobalSearch] Errore profiles:", err);
       }
 
-      // Check if current logged-in user matches and wasn't returned yet
+      // Check current logged-in user match
       if (currentUser) {
         const cUsername = (currentUser.user_metadata?.username || (currentUser as any).username || "").toLowerCase();
         const cDisplayName = (userProfile?.name || currentUser.user_metadata?.display_name || "").toLowerCase();
+        const cActivision = (userProfile?.activisionName || "").toLowerCase();
         const queryLower = cleanTerm.toLowerCase();
         if (
-          (cUsername.includes(queryLower) || cDisplayName.includes(queryLower)) &&
+          (cUsername.includes(queryLower) || cDisplayName.includes(queryLower) || cActivision.includes(queryLower)) &&
           !foundPlayers.some((p) => p.id === currentUser.id)
         ) {
           foundPlayers.unshift({
@@ -234,48 +244,54 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             avatar_url: userProfile?.avatar || "",
             level: userProfile?.level || 15,
             rank: userProfile?.rank || "Competitor",
+            activision_name: userProfile?.activisionName,
             subscription_tier: userProfile?.subscriptionTier,
             bio: userProfile?.bio,
           });
         }
       }
-
       setPlayers(foundPlayers);
 
       // 2. Search Clans
-      const { data: cData } = await supabase
-        .from("clans")
-        .select("id, name, tag, game_mode, avatar_url, tier, description")
-        .or(`name.ilike.${sanitized},tag.ilike.${sanitized},description.ilike.${sanitized}`)
-        .limit(10);
+      try {
+        const { data: cData } = await supabase
+          .from("clans")
+          .select("id, name, tag, game_mode, avatar_url, tier, description")
+          .or(`name.ilike.${sanitized},tag.ilike.${sanitized},description.ilike.${sanitized}`)
+          .limit(10);
 
-      if (cData) {
-        setClans(
-          cData.map((c: any) => ({
-            id: c.id,
-            name: c.name,
-            tag: c.tag,
-            game_mode: c.game_mode || "Warzone",
-            avatar_url: c.avatar_url,
-            tier: c.tier || "base",
-            members_count: 5,
-            description: c.description,
-          }))
-        );
-      } else {
+        if (cData) {
+          setClans(
+            cData.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              tag: c.tag,
+              game_mode: c.game_mode || "Warzone",
+              avatar_url: c.avatar_url,
+              tier: c.tier || "base",
+              members_count: 8,
+              description: c.description,
+            }))
+          );
+        } else {
+          setClans([]);
+        }
+      } catch (err) {
+        console.warn("[GlobalSearch] Errore clans:", err);
         setClans([]);
       }
 
-      // 3. Search Tournaments
-      const { data: tData } = await supabase
-        .from("tournaments")
-        .select("id, name, game_mode, type, status, entry_fee_sc, prize_description, starts_at")
-        .or(`name.ilike.${sanitized},game_mode.ilike.${sanitized},prize_description.ilike.${sanitized}`)
-        .limit(10);
+      // 3. Search Tournaments (Supabase + Local fallback)
+      let foundTournaments: SearchedTournament[] = [];
+      try {
+        const { data: tData } = await supabase
+          .from("tournaments")
+          .select("id, name, game_mode, type, status, entry_fee_sc, prize_description, starts_at")
+          .or(`name.ilike.${sanitized},game_mode.ilike.${sanitized},prize_description.ilike.${sanitized}`)
+          .limit(10);
 
-      if (tData) {
-        setTournamentResults(
-          tData.map((t: any) => ({
+        if (tData && tData.length > 0) {
+          foundTournaments = tData.map((t: any) => ({
             id: t.id,
             name: t.name,
             game_mode: t.game_mode,
@@ -284,11 +300,36 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             entry_fee_sc: t.entry_fee_sc,
             prize_description: t.prize_description,
             starts_at: t.starts_at,
-          }))
-        );
-      } else {
-        setTournamentResults([]);
+          }));
+        }
+      } catch (err) {
+        console.warn("[GlobalSearch] Errore tournaments:", err);
       }
+
+      // Fallback/merge with tournaments in state
+      if (tournaments && tournaments.length > 0) {
+        const qLow = cleanTerm.toLowerCase();
+        tournaments.forEach((lt) => {
+          if (
+            (lt.title.toLowerCase().includes(qLow) ||
+              lt.game.toLowerCase().includes(qLow) ||
+              lt.category.toLowerCase().includes(qLow)) &&
+            !foundTournaments.some((t) => t.id === lt.id)
+          ) {
+            foundTournaments.push({
+              id: lt.id,
+              name: lt.title,
+              game_mode: lt.game,
+              type: lt.category,
+              status: lt.status,
+              entry_fee_sc: lt.entryFeeSCoin,
+              prize_description: `${lt.prizePoolSCoin} SCoin`,
+              starts_at: lt.startsAt,
+            });
+          }
+        });
+      }
+      setTournamentResults(foundTournaments);
     } catch (err) {
       console.warn("[GlobalSearch] Errore ricerca:", err);
     } finally {
@@ -300,6 +341,26 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     const found = tournaments.find((t) => t.id === tournId);
     if (found) {
       setSelectedTournament(found);
+    } else {
+      const searched = tournamentResults.find((t) => t.id === tournId);
+      if (searched) {
+        setSelectedTournament({
+          id: searched.id,
+          title: searched.name,
+          game: searched.game_mode || "Warzone",
+          category: searched.type || "Battle Royale",
+          status: (searched.status as any) || "iscrizioni",
+          prizePoolSCoin: 500,
+          entryFeeSCoin: searched.entry_fee_sc || 0,
+          teamsJoined: 4,
+          maxTeams: 16,
+          startsAt: searched.starts_at || "Stasera 21:00",
+          mode: searched.game_mode || "Warzone Resurgence",
+          banner: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
+          rules: "Kill Race e Bracket ufficiale",
+          participants: [],
+        });
+      }
     }
     setActiveTab("tournaments");
     setTournamentSubTab("active");
@@ -315,6 +376,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     onClose();
   };
 
+  const handleSelectPlayer = (playerId: string) => {
+    openPublicProfile(playerId);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const totalResults = players.length + clans.length + tournamentResults.length;
@@ -323,16 +389,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div className="bg-[#0f1322] border border-purple-900/50 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-6 flex flex-col max-h-[90vh]">
         {/* Header & Search Bar */}
-        <div className="p-4 border-b border-purple-900/30 bg-[#121628]/90 space-y-3 shrink-0">
+        <div className="p-4 border-b border-purple-900/30 bg-[#121628]/95 space-y-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
                 <Search className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-white">Ricerca Globale</h3>
+                <h3 className="text-sm font-extrabold text-white">Ricerca Globale SquadUP</h3>
                 <p className="text-[10px] text-zinc-400">
-                  Trova giocatori, clan competitivi e tornei attivi
+                  Trova giocatori, tag clan o tornei competitivi
                 </p>
               </div>
             </div>
@@ -344,16 +410,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             </button>
           </div>
 
-          {/* Search Input */}
+          {/* Search Input Bar */}
           <div className="relative">
-            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca nome giocatore, tag clan, o torneo..."
+              placeholder="Cerca nome giocatore, tag clan [#TAG], o torneo..."
               autoFocus
-              className="w-full pl-9 pr-8 py-2.5 rounded-2xl bg-zinc-900/90 border border-purple-900/50 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all"
+              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-zinc-900/90 border border-purple-900/50 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all shadow-inner"
             />
             {searchQuery && (
               <button
@@ -366,7 +432,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           </div>
 
           {/* Categories Pill Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
             <button
               onClick={() => setActiveCategory("all")}
               className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer ${
@@ -386,7 +452,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Persone ({players.length})</span>
+              <span>Giocatori ({players.length})</span>
             </button>
             <button
               onClick={() => setActiveCategory("clans")}
@@ -448,16 +514,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       return (
                         <div
                           key={p.id}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-purple-600/50 transition-all flex items-center justify-between gap-3 shadow-sm"
+                          onClick={() => handleSelectPlayer(p.id)}
+                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
                         >
-                          <div
-                            onClick={() => {
-                              openPublicProfile(p.id);
-                              onClose();
-                            }}
-                            className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
-                            title="Visualizza profilo pubblico"
-                          >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className="relative shrink-0">
                               {p.avatar_url ? (
                                 <img
@@ -477,7 +537,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <h4 className="text-xs font-bold text-white truncate max-w-[140px]">
+                                <h4 className="text-xs font-bold text-white truncate max-w-[140px] group-hover:text-cyan-300 transition-colors">
                                   {p.name}
                                 </h4>
                                 {p.username && (
@@ -513,7 +573,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           {/* Follow Button */}
                           {!isSelf && (
                             <button
-                              onClick={() => (following ? unfollowUser(p.id) : followUser(p.id))}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (following) {
+                                  unfollowUser(p.id);
+                                } else {
+                                  followUser(p.id);
+                                }
+                              }}
                               className={`py-1.5 px-3 rounded-xl font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
                                 following
                                   ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40"
@@ -557,20 +624,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       return (
                         <div
                           key={clan.id}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-purple-600/50 transition-all flex items-center justify-between gap-3 shadow-sm"
+                          onClick={() => handleSelectClan(clan.id)}
+                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
                         >
-                          <div
-                            onClick={() => handleSelectClan(clan.id)}
-                            className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
-                            title="Visualizza dettagli clan"
-                          >
-                            <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs shrink-0">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs shrink-0 group-hover:scale-105 transition-transform">
                               [{clan.tag}]
                             </div>
 
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <h4 className="text-xs font-bold text-white truncate max-w-[140px]">
+                                <h4 className="text-xs font-bold text-white truncate max-w-[140px] group-hover:text-cyan-300 transition-colors">
                                   {clan.name}
                                 </h4>
                                 {clan.tier === "elite" ? (
@@ -585,7 +649,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   </span>
                                 ) : (
                                   <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">
-                                    BASE (50 Max)
+                                    BASE
                                   </span>
                                 )}
                               </div>
@@ -597,7 +661,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                           {/* Follow Clan Button */}
                           <button
-                            onClick={() => (following ? unfollowClan(clan.id) : followClan(clan.id))}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (following) {
+                                unfollowClan(clan.id);
+                              } else {
+                                followClan(clan.id);
+                              }
+                            }}
                             className={`py-1.5 px-3 rounded-xl font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
                               following
                                 ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40"
@@ -639,9 +710,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         <div
                           key={t.id}
                           onClick={() => handleSelectTournament(t.id)}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-purple-600/50 transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
+                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-amber-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
                               <Trophy className="w-5 h-5" />
                             </div>
@@ -653,21 +724,21 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                               <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
                                 <span className="text-cyan-400 font-semibold">{t.game_mode}</span>
                                 <span>•</span>
-                                <span className="flex items-center gap-1 text-amber-300">
+                                <span className="flex items-center gap-1 text-amber-300 font-bold">
                                   <Coins className="w-3 h-3" />
                                   {t.entry_fee_sc > 0 ? `${t.entry_fee_sc} SC` : "Gratuito"}
                                 </span>
                               </div>
                               {t.prize_description && (
-                                <p className="text-[10px] text-zinc-500 truncate max-w-[200px] mt-0.5">
+                                <p className="text-[10px] text-zinc-400 truncate max-w-[200px] mt-0.5">
                                   Montepremi: {t.prize_description}
                                 </p>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 text-xs font-bold text-cyan-400 shrink-0">
-                            <span>Dettagli</span>
+                          <div className="flex items-center gap-1 text-xs font-bold text-cyan-400 shrink-0 group-hover:text-amber-300 transition-colors">
+                            <span>Apri Torneo</span>
                             <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                           </div>
                         </div>

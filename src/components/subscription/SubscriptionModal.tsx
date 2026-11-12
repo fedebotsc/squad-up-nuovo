@@ -273,10 +273,16 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 </div>
 
                 <div className="space-y-2 pt-1 border-t border-zinc-800 text-xs text-zinc-300">
+                  <div className="flex items-start gap-2 bg-amber-500/15 p-2 rounded-xl border border-amber-500/40">
+                    <Flame className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+                    <span className="text-amber-200">
+                      <strong className="text-white">Boost Post &quot;Per te&quot;:</strong> I tuoi contenuti hanno priorità e appaiono per primi in cima al feed di tutti gli utenti
+                    </span>
+                  </div>
                   <div className="flex items-start gap-2 bg-amber-500/10 p-2 rounded-xl border border-amber-500/30">
                     <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span className="text-amber-200">
-                      <strong className="text-white">Votazioni & Reputazione:</strong> Sblocca il potere di votare e assegnare badge ai giocatori e ai clan
+                      <strong className="text-white">Accesso Esclusivo a Voti &amp; Badge:</strong> Sblocca il potere di votare e assegnare badge di reputazione a giocatori e clan
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -296,14 +302,14 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>
-                      <strong className="text-white">1 GB Storage Social</strong> per caricare clip
+                      <strong className="text-white">1 GB Storage Social</strong> per clip
                       e screenshot ad alta risoluzione
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>
-                      <strong className="text-white">Priorità & Sconti</strong> nell'iscrizione ai
+                      <strong className="text-white">Priorità &amp; Sconti</strong> nell&apos;iscrizione ai
                       tornei ufficiali
                     </span>
                   </div>
@@ -358,9 +364,17 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5 pt-1 border-t border-zinc-800 text-xs text-zinc-300">
+                  <div className="flex items-center gap-2 text-purple-300 font-bold bg-purple-950/60 p-1.5 rounded-lg border border-purple-500/30">
+                    <Flame className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span>Boost Prioritario Post Clan nel Feed &quot;Per te&quot;</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-purple-300 font-bold bg-purple-950/60 p-1.5 rounded-lg border border-purple-500/30">
+                    <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span>Accesso Esclusivo Voti &amp; Badge Reputazione</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span>Roster esteso a <strong className="text-white">25 membri</strong></span>
+                    <span>Roster esteso a <strong className="text-white">100 membri</strong></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -405,6 +419,14 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5 pt-1 border-t border-zinc-800 text-xs text-zinc-300">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold bg-cyan-950/60 p-1.5 rounded-lg border border-cyan-500/30">
+                    <Flame className="w-3.5 h-3.5 text-cyan-400 shrink-0 animate-pulse" />
+                    <span>Massimo Boost Prioritario Post nel Feed &quot;Per te&quot;</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold bg-cyan-950/60 p-1.5 rounded-lg border border-cyan-500/30">
+                    <Shield className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Accesso Esclusivo Votazioni &amp; Badge Reputazione Clan</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                     <span>Roster <strong className="text-white">Illimitato</strong> (Academy + Main Team)</span>

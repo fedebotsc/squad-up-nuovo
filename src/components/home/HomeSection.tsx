@@ -192,12 +192,44 @@ export const HomeSection: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Boost priority algorithm for "Per te" feed (Player Pro & Clan Pro / Elite)
+  const isPostBoosted = (post: Post): boolean => {
+    // 1. Clan Pro / Elite boost
+    if (post.postedAsClan && post.clan) {
+      const tier = (post.clan.tier || "").toLowerCase();
+      if (tier === "pro" || tier === "elite" || tier.includes("pro") || tier.includes("elite")) {
+        return true;
+      }
+    }
+    // 2. Player Pro boost
+    const authorTier = ((post.author as any)?.subscriptionTier || "").toLowerCase();
+    if (authorTier === "pro" || authorTier === "pro_plus") {
+      return true;
+    }
+    if (currentUser && (post.userId === currentUser.id || post.author.id === currentUser.id)) {
+      if (userProfile?.subscriptionTier === "pro") return true;
+    }
+    return false;
+  };
+
   const filteredPosts = posts.filter((post) => {
     if (feedTab === "for_you") return true;
     const authorUserId = post.userId || post.author.id;
     const isUserFollowed = isFollowingUser(authorUserId) || followedUserIds.includes(authorUserId);
     const isClanFollowed = Boolean(post.postedAsClan && post.clan && isFollowingClan(post.clan.id));
     return isUserFollowed || isClanFollowed;
+  });
+
+  // Sort: In "Per te", posts with Boost (Player Pro / Clan Pro / Clan Elite) appear first
+  const displayPosts = [...filteredPosts].sort((a, b) => {
+    if (feedTab === "for_you") {
+      const aBoost = isPostBoosted(a) ? 1 : 0;
+      const bBoost = isPostBoosted(b) ? 1 : 0;
+      if (aBoost !== bBoost) {
+        return bBoost - aBoost;
+      }
+    }
+    return 0;
   });
 
   const handleStartCompose = () => {
@@ -622,19 +654,22 @@ export const HomeSection: React.FC = () => {
 
       {/* Feed Posts */}
       <div className="space-y-4">
-        {filteredPosts.length > 0 ? (
-          filteredPosts.map((post) => {
+        {displayPosts.length > 0 ? (
+          displayPosts.map((post) => {
             const isAuthor =
               currentUser && (currentUser.id === post.userId || currentUser.id === post.author.id);
             const isCommentsExpanded = expandedPostId === post.id;
             const postComments = commentsMap[post.id] || [];
             const isLoadingComments = loadingCommentsPostId === post.id;
+            const boosted = isPostBoosted(post);
 
             return (
               <article
                 key={post.id}
                 className={`border rounded-2xl p-4 shadow-md space-y-3 transition-all ${
-                  post.postedAsClan && post.clan
+                  boosted
+                    ? "bg-gradient-to-b from-[#18132e] via-[#121628] to-[#0f1224] border-amber-500/50 shadow-[0_4px_22px_rgba(245,158,11,0.12)]"
+                    : post.postedAsClan && post.clan
                     ? "bg-gradient-to-b from-[#141830] to-[#0f1224] border-cyan-500/40 shadow-[0_4px_20px_rgba(6,182,212,0.12)]"
                     : "bg-[#121628]/90 border-purple-900/30 hover:border-purple-700/40"
                 }`}
@@ -766,6 +801,17 @@ export const HomeSection: React.FC = () => {
                   )}
 
                   <div className="flex items-center gap-1.5">
+                    {/* Algorithm Boost Badge (Per te) */}
+                    {boosted && feedTab === "for_you" && (
+                      <span
+                        title="Post con priorità Algoritmo Boost Pro nel feed Per te"
+                        className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-yellow-500/20 border border-amber-500/50 text-amber-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-[0_0_8px_rgba(245,158,11,0.25)] shrink-0"
+                      >
+                        <Flame className="w-3 h-3 text-amber-400 animate-pulse" />
+                        <span>BOOST PRO</span>
+                      </span>
+                    )}
+
                     {/* Follow button for player or clan */}
                     {post.postedAsClan && post.clan && (!clanData || clanData.id !== post.clan.id) && (
                       <button

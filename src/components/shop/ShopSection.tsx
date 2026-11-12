@@ -610,12 +610,19 @@ export const ShopSection: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-zinc-300 mb-4 leading-relaxed">
-                  Sblocca il badge dorato verificato, moltiplicatore 2x premi torneo,
-                  banner premium illimitati e cumulo anzianità per le ricompense d'élite.
+                  Include la massima priorità per i tuoi post nel feed &quot;Per te&quot;, accesso esclusivo al rilascio di voti e badge di reputazione, badge verificato dorato e moltiplicatore ricompense.
                 </p>
 
                 <ul className="space-y-2 text-xs font-mono text-zinc-300 border-t border-amber-900/40 pt-3 mb-5">
-                  <li className="flex items-center gap-2 text-amber-300">
+                  <li className="flex items-center gap-2 text-amber-300 font-bold bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/30">
+                    <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+                    <span>Boost Priorità Post nel Feed &quot;Per te&quot;</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-amber-300 font-bold bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/30">
+                    <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Accesso Esclusivo a Voti &amp; Rilascio Badge</span>
+                  </li>
+                  <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-amber-400 stroke-[3]" />
                     <span>Progressione Anzianità (3, 6, 9, 12 Mesi)</span>
                   </li>
@@ -625,7 +632,7 @@ export const ShopSection: React.FC = () => {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-amber-400 stroke-[3]" />
-                    <span>Slot Prioritari nelle Squad Room</span>
+                    <span>Slot Prioritari nelle Squad Room &amp; 2x SCoin</span>
                   </li>
                 </ul>
               </div>
@@ -669,18 +676,25 @@ export const ShopSection: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-zinc-300 mb-4 leading-relaxed">
-                  Espande la capienza del Clan a 100 operatori, stemma [PRO] nei tabelloni,
-                  chat vocale a bassa latenza e creazione ruoli personalizzati.
+                  Include il boost algoritmico dei post del Clan nel feed &quot;Per te&quot;, accesso ai voti e badge reputazione per tutto il clan, stemma [PRO] e capienza a 100 operatori.
                 </p>
 
                 <ul className="space-y-2 text-xs font-mono text-zinc-300 border-t border-cyan-900/40 pt-3 mb-5">
-                  <li className="flex items-center gap-2 text-cyan-300">
+                  <li className="flex items-center gap-2 text-cyan-300 font-bold bg-cyan-950/60 p-1.5 rounded-lg border border-cyan-500/30">
+                    <Flame className="w-3.5 h-3.5 text-cyan-400 animate-pulse shrink-0" />
+                    <span>Boost Prioritario Post Clan nel Feed &quot;Per te&quot;</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-cyan-300 font-bold bg-cyan-950/60 p-1.5 rounded-lg border border-cyan-500/30">
+                    <Shield className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Accesso Esclusivo Votazioni &amp; Badge Reputazione</span>
+                  </li>
+                  <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-cyan-400 stroke-[3]" />
                     <span>Capienza aumentata a 100 Operatori</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-cyan-400 stroke-[3]" />
-                    <span>Badge Clan Verificato PRO</span>
+                    <span>Badge Clan Verificato PRO nei tabelloni</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-cyan-400 stroke-[3]" />
@@ -728,11 +742,18 @@ export const ShopSection: React.FC = () => {
                 </div>
 
                 <p className="text-xs text-zinc-300 mb-4 leading-relaxed">
-                  Il vertice per i clan competitivi. Fino a 250 membri, gestione tornei
-                  integrata, stemmi personalizzati ad alta risoluzione e supporto prioritaro.
+                  Il vertice per i clan competitivi. Boost prioritario assoluto nel feed &quot;Per te&quot;, potere di voto e rilascio badge Clan Elite, fino a 250 membri e gestione tornei integrata.
                 </p>
 
                 <ul className="space-y-2 text-xs font-mono text-zinc-300 border-t border-purple-900/40 pt-3 mb-5">
+                  <li className="flex items-center gap-2 text-purple-300 font-bold bg-purple-950/60 p-1.5 rounded-lg border border-purple-500/40">
+                    <Flame className="w-3.5 h-3.5 text-purple-400 animate-pulse shrink-0" />
+                    <span>Massimo Boost Prioritario Post nel Feed &quot;Per te&quot;</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-purple-300 font-bold bg-purple-950/60 p-1.5 rounded-lg border border-purple-500/40">
+                    <Award className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span>Accesso Esclusivo Votazioni &amp; Badge Reputazione</span>
+                  </li>
                   <li className="flex items-center gap-2 text-purple-300">
                     <Check className="w-3.5 h-3.5 text-purple-400 stroke-[3]" />
                     <span>Capienza massima a 250 Operatori</span>

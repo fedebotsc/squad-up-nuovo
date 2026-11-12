@@ -12,11 +12,8 @@ import {
   Flame,
   MicOff,
   Target,
-  Sparkles,
   Lock,
   Crown,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import {
@@ -24,7 +21,7 @@ import {
   BadgeDefinition,
   getPlayerBadgeCounts,
   togglePlayerBadgeVote,
-  isUserPlayerProPlus,
+  isUserEligibleToVote,
 } from "@/services/badgeRatingService";
 import { ProPlusPromoModal } from "@/components/subscription/ProPlusPromoModal";
 import { toast } from "@/components/ui/use-toast";
@@ -42,7 +39,7 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
   isSelf = false,
   onOpenSubscriptionModal,
 }) => {
-  const { currentUser, userProfile, isUniversalAdmin, openAuthModal } = useSquad();
+  const { currentUser, userProfile, isUniversalAdmin, openAuthModal, clanData } = useSquad();
   const [badgeData, setBadgeData] = useState<{
     counts: Record<string, number>;
     userVotes: string[];
@@ -58,7 +55,7 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
     }
   }, [targetUserId]);
 
-  const hasProPlus = isUserPlayerProPlus(userProfile, currentUser, isUniversalAdmin);
+  const hasProVoteAccess = isUserEligibleToVote(userProfile, currentUser, clanData, isUniversalAdmin);
 
   const handleVoteBadge = (badge: BadgeDefinition) => {
     if (!currentUser) {
@@ -75,8 +72,8 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
       return;
     }
 
-    // Restriction: Player Pro Plus only
-    if (!hasProPlus) {
+    // Restriction: Player Pro or Clan Pro/Elite only
+    if (!hasProVoteAccess) {
       setShowPromoModal(true);
       return;
     }
@@ -136,7 +133,7 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
   );
   const grandTotal = totalPositive + totalNegative;
   const positivePercentage =
-    grandTotal > 0 ? Math.round((totalPositive / grandTotal) * 100) : 100;
+    grandTotal > 0 ? Math.round((totalPositive / grandTotal) * 100) : null;
 
   return (
     <div className="rounded-2xl bg-zinc-900/80 border border-purple-900/40 p-3.5 space-y-3 shadow-md">
@@ -152,26 +149,32 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
             </h4>
             <p className="text-[10px] text-zinc-400">
               {isSelf
-                ? "Feedback e reputazione ricevuti dagli altri utenti"
-                : "Votato dalla community di SquadUP"}
+                ? "Reputazione reale ricevuta da membri Pro"
+                : "Votato dai membri Player Pro e Clan Pro"}
             </p>
           </div>
         </div>
 
         {/* Reputation Score pill */}
         <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-950/80 border border-zinc-800 text-right">
-          <span
-            className={`text-xs font-black ${
-              positivePercentage >= 75
-                ? "text-emerald-400"
-                : positivePercentage >= 50
-                ? "text-amber-400"
-                : "text-rose-400"
-            }`}
-          >
-            {positivePercentage}%
-          </span>
-          <span className="text-[9px] font-bold text-zinc-500 uppercase">Positivi</span>
+          {positivePercentage !== null ? (
+            <>
+              <span
+                className={`text-xs font-black ${
+                  positivePercentage >= 75
+                    ? "text-emerald-400"
+                    : positivePercentage >= 50
+                    ? "text-amber-400"
+                    : "text-rose-400"
+                }`}
+              >
+                {positivePercentage}%
+              </span>
+              <span className="text-[9px] font-bold text-zinc-500 uppercase">Positivi</span>
+            </>
+          ) : (
+            <span className="text-[10px] font-bold text-zinc-500">Nessun voto</span>
+          )}
         </div>
       </div>
 
@@ -203,12 +206,12 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
         </button>
       </div>
 
-      {/* Pro Plus Voting Notice if looking at someone else's profile */}
-      {!isSelf && !hasProPlus && (
+      {/* Pro Voting Notice if looking at someone else's profile without Pro access */}
+      {!isSelf && !hasProVoteAccess && (
         <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200">
           <div className="flex items-center gap-1.5">
             <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>Passa a <strong>Player Pro Plus</strong> per assegnare badge</span>
+            <span>Passa a <strong>Player Pro</strong> per votare e assegnare badge</span>
           </div>
           <button
             type="button"
@@ -220,7 +223,7 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
         </div>
       )}
 
-      {/* Badges List */}
+      {/* Badges Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {(activeTab === "positive" ? positiveBadges : negativeBadges).map((badge) => {
           const count = badgeData.counts[badge.id] || 0;
@@ -248,7 +251,7 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
                     </span>
                     {hasVoted && (
                       <span className="text-[9px] font-black px-1 py-0.2 rounded bg-purple-500/30 text-purple-300 border border-purple-400/40">
-                        Il tuo voto
+                        Votato
                       </span>
                     )}
                   </div>
@@ -273,21 +276,21 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
                     type="button"
                     onClick={() => handleVoteBadge(badge)}
                     title={
-                      hasProPlus
+                      hasProVoteAccess
                         ? hasVoted
                           ? "Rimuovi il tuo voto"
-                          : `Assegna ${badge.name}`
-                        : "Riservato a Player Pro Plus"
+                          : `Vota ${badge.name}`
+                        : "Riservato agli abbonati Pro"
                     }
                     className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                       hasVoted
                         ? "bg-purple-600 hover:bg-purple-500 text-white shadow-sm"
-                        : hasProPlus
+                        : hasProVoteAccess
                         ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
                         : "bg-zinc-900/60 text-zinc-500 border border-zinc-800 hover:text-amber-400"
                     }`}
                   >
-                    {hasProPlus ? (
+                    {hasProVoteAccess ? (
                       <span className="text-xs font-black">{hasVoted ? "✓" : "+"}</span>
                     ) : (
                       <Lock className="w-3 h-3 text-amber-400/70" />
@@ -300,13 +303,13 @@ export const PlayerBadgesCard: React.FC<PlayerBadgesCardProps> = ({
         })}
       </div>
 
-      {/* Promotional modal triggered on non-Pro Plus attempt */}
+      {/* Modal promozionale Player Pro Plus */}
       <ProPlusPromoModal
         isOpen={showPromoModal}
         onClose={() => setShowPromoModal(false)}
         onOpenSubscriptionModal={onOpenSubscriptionModal}
-        title="Vota i Giocatori con Player Pro Plus"
-        description="Assegnare badge di reputazione (positivi o negativi) ai profili giocatori richiede un abbonamento Player Pro Plus attivo."
+        title="Vota con Player Pro o Clan Pro"
+        description="Il rilascio di badge di reputazione a giocatori o clan è riservato agli utenti in possesso di un abbonamento Player Pro o Clan Pro/Elite."
       />
     </div>
   );
