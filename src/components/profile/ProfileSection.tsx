@@ -306,9 +306,6 @@ export const ProfileSection: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#121628] flex items-center justify-center text-[10px] font-extrabold text-black shadow-md">
-                  {userProfile.level}
-                </span>
               </div>
 
               {/* Name & Title */}

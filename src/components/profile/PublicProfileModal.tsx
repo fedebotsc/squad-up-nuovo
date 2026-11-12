@@ -330,9 +330,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                       </div>
                     )}
                   </div>
-                  <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-500 border-2 border-[#0e1224] flex items-center justify-center text-[10px] font-black text-black shadow-md">
-                    {profileData.level}
-                  </span>
                 </div>
 
                 {/* Follow & Message Buttons */}

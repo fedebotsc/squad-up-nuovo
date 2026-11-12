@@ -539,9 +539,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   {p.name.slice(0, 2).toUpperCase()}
                                 </div>
                               )}
-                              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-cyan-500 text-black font-extrabold text-[9px] flex items-center justify-center">
-                                {p.level}
-                              </span>
                             </div>
 
                             <div className="min-w-0">
