@@ -182,7 +182,6 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
       setIsCreatingRole(false);
     }
   };
-  };
 
   const handleDeleteRole = async (roleId: string, roleTitle: string) => {
     if (!isOwner) return;
