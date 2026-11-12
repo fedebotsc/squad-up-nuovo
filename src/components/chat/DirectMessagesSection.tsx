@@ -268,7 +268,7 @@ export const DirectMessagesSection: React.FC = () => {
   // Not logged in view
   if (!currentUser) {
     return (
-      <div className="pb-24 pt-4 max-w-md mx-auto px-3.5 space-y-4">
+      <div className="pb-24 pt-4 w-full max-w-4xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
         <div className="bg-[#121628]/95 border border-purple-500/40 rounded-3xl p-8 text-center space-y-4 shadow-xl">
           <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-500 p-0.5 flex items-center justify-center shadow-lg">
             <div className="w-full h-full bg-[#0e1220] rounded-[14px] flex items-center justify-center">
@@ -297,7 +297,7 @@ export const DirectMessagesSection: React.FC = () => {
   }
 
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3">
+    <div className="pb-24 pt-2 w-full max-w-4xl mx-auto px-2 sm:px-4 space-y-3 animate-fade-in">
       {/* CASE A: CONVERSATION ACTIVE WITH PARTNER */}
       {selectedPartner ? (
         <div className="bg-[#101426] border border-purple-900/40 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[75vh]">

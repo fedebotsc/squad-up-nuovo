@@ -170,7 +170,7 @@ export const ClanSection: React.FC = () => {
   // If Explore Tab is active, render ExploreClansView
   if (clanMainTab === "explore") {
     return (
-      <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+      <div className="pb-24 pt-2 w-full max-w-5xl mx-auto px-2 sm:px-4 space-y-3.5 animate-fade-in">
         {renderTopSwitch()}
         <ExploreClansView />
 
@@ -189,7 +189,7 @@ export const ClanSection: React.FC = () => {
   // EMPTY STATE (NOT IN A CLAN)
   if (!clanData) {
     return (
-      <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+      <div className="pb-24 pt-2 w-full max-w-5xl mx-auto px-2 sm:px-4 space-y-3.5 animate-fade-in">
         {renderTopSwitch()}
 
         <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-7 text-center space-y-4 shadow-lg">
@@ -252,7 +252,7 @@ export const ClanSection: React.FC = () => {
 
   // AUTHENTIC CLAN VIEW
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-3.5">
+    <div className="pb-24 pt-2 w-full max-w-5xl mx-auto px-2 sm:px-4 space-y-3.5 animate-fade-in">
       {renderTopSwitch()}
 
       {/* Clan Hero Card with Custom Banner */}
@@ -520,8 +520,8 @@ export const ClanSection: React.FC = () => {
                   <Radio className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="text-xs font-bold text-white block">Stanza Vocale Clan Agora</span>
-                  <span className="text-[10px] text-zinc-400">Canale crittografato Agora per il clan</span>
+                  <span className="text-xs font-bold text-white block">Stanza Vocale Clan</span>
+                  <span className="text-[10px] text-zinc-400">Canale crittografato per il clan</span>
                 </div>
               </div>
               <button

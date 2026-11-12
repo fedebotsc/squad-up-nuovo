@@ -353,7 +353,7 @@ export const HomeSection: React.FC = () => {
   };
 
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+    <div className="pb-24 pt-2 w-full max-w-3xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
       {/* 24h Stories Tray */}
       <section aria-label="Storie 24h" className="relative">
         <div className="flex items-center justify-between mb-2 px-1">

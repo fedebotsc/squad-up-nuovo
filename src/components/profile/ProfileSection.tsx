@@ -220,7 +220,7 @@ export const ProfileSection: React.FC = () => {
     AVATAR_FRAMES?.[0] || { borderClass: "border-purple-500", glowClass: "" };
 
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+    <div className="pb-24 pt-2 w-full max-w-4xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
       {/* Unauthenticated Guest Banner */}
       {!currentUser && (
         <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/90 via-[#161a32] to-cyan-950/70 p-4 shadow-xl space-y-3">

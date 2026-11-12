@@ -35,7 +35,6 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
     toggleDeafen,
     userSpeaking,
     userProfile,
-    agoraAppId,
     activeVoiceRoomId,
     leaveVoiceRoom,
   } = useSquad();
@@ -120,16 +119,16 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
         setIsConnected(true);
         toast({
           title: "Canale Vocale Clan Connesso 🎙️",
-          description: `Sei ora in voce con i membri del clan [${clanData.tag}] con tecnologia Agora RTC.`,
+          description: `Sei ora in voce con i membri del clan [${clanData.tag}].`,
         });
       } else {
-        throw new Error(res.error || "Impossibile connettersi al canale Agora.");
+        throw new Error(res.error || "Impossibile connettersi al canale vocale.");
       }
     } catch (err: any) {
-      console.error("[ClanVoiceTab] Errore connessione Agora:", err);
+      console.error("[ClanVoiceTab] Errore connessione:", err);
       toast({
         title: "Errore Connessione Vocale",
-        description: err.message || "Impossibile collegarsi al canale Agora del clan.",
+        description: err.message || "Impossibile collegarsi al canale vocale del clan.",
         variant: "destructive",
       });
     } finally {
@@ -171,7 +170,7 @@ export const ClanVoiceTab: React.FC<ClanVoiceTabProps> = ({
                   Stanza Vocale Clan [{clanData.tag}]
                 </h3>
                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40">
-                  Agora RTC
+                  Voce HD
                 </span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-0.5">

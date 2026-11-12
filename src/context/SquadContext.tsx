@@ -1645,7 +1645,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       agoraVoiceService.setMuted(next);
       toast({
         title: next ? "Microfono Disattivato" : "Microfono Attivo",
-        description: next ? "Nessuno sentirà la tua voce." : "Trasmissione audio attiva su Agora.",
+        description: next ? "Nessuno sentirà la tua voce." : "Trasmissione audio attiva.",
       });
       return next;
     });
@@ -1760,7 +1760,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveVoiceRoomId(roomId);
     const channelName = targetRoom.name.replace(/\s+/g, "_");
 
-    console.log(`[SquadContext] Connessione Agora al canale "${channelName}" per la stanza "${targetRoom.name}"...`);
+    console.log(`[SquadContext] Connessione audio al canale "${channelName}" per la stanza "${targetRoom.name}"...`);
 
     try {
       const res = await agoraVoiceService.joinVoiceChannel(
@@ -1772,11 +1772,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (res.success) {
         toast({
           title: "Canale Vocale Connesso 🎙️",
-          description: `Connesso a "${targetRoom.name}" con tecnologia Agora Web RTC.`,
+          description: `Connesso a "${targetRoom.name}" in audio HD.`,
         });
       }
     } catch (joinErr: any) {
-      console.error("[SquadContext] Errore connessione Agora:", joinErr);
+      console.error("[SquadContext] Errore connessione:", joinErr);
       setActiveVoiceRoomId(null);
       setIsRealSdkActive(false);
 
@@ -1796,8 +1796,8 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
 
       toast({
-        title: "Errore Connessione Vocale Agora",
-        description: joinErr?.message || "Impossibile completare la connessione al canale vocale Agora.",
+        title: "Errore Connessione Vocale",
+        description: joinErr?.message || "Impossibile completare la connessione al canale vocale.",
         variant: "destructive",
       });
     }

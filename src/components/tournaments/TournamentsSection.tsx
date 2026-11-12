@@ -15,7 +15,7 @@ export const TournamentsSection: React.FC = () => {
   ];
 
   return (
-    <div className="pb-24 pt-2 max-w-md mx-auto px-3.5 space-y-4">
+    <div className="pb-24 pt-2 w-full max-w-5xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
       {/* Top AI Bar */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-300">

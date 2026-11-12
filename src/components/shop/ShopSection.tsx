@@ -480,7 +480,7 @@ export const ShopSection: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-24 pt-2 px-2 sm:px-4 max-w-7xl mx-auto animate-fade-in">
+    <div className="space-y-6 pb-24 pt-2 px-1 sm:px-3 w-full max-w-5xl mx-auto animate-fade-in">
       {/* ========================================================
           TACTICAL HUD SHOP HEADER // CALL OF DUTY ARMORY
           ======================================================== */}
@@ -595,11 +595,11 @@ export const ShopSection: React.FC = () => {
             {/* 1. Player Pro Card */}
             <div className="relative rounded-2xl border border-amber-500/60 bg-gradient-to-b from-[#181005] via-[#0d0903] to-[#050401] p-5 shadow-[0_0_25px_rgba(245,158,11,0.2)] flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="px-2.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/60 text-[10px] font-mono font-black text-amber-300 uppercase">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="px-2.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/60 text-[10px] font-mono font-black text-amber-300 uppercase whitespace-nowrap">
                     OPERATORE SINGOLO
                   </span>
-                  <Crown className="w-5 h-5 text-amber-400" />
+                  <Crown className="w-5 h-5 text-amber-400 shrink-0" />
                 </div>
 
                 <h3 className="text-xl font-black text-white uppercase tracking-tight">
@@ -661,11 +661,11 @@ export const ShopSection: React.FC = () => {
             {/* 2. Clan Pro Card */}
             <div className="relative rounded-2xl border border-cyan-500/60 bg-gradient-to-b from-[#05131f] via-[#030910] to-[#010408] p-5 shadow-[0_0_25px_rgba(6,182,212,0.2)] flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="px-2.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/60 text-[10px] font-mono font-black text-cyan-300 uppercase">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="px-2.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/60 text-[10px] font-mono font-black text-cyan-300 uppercase whitespace-nowrap">
                     CLAN LEVEL 2
                   </span>
-                  <Shield className="w-5 h-5 text-cyan-400" />
+                  <Shield className="w-5 h-5 text-cyan-400 shrink-0" />
                 </div>
 
                 <h3 className="text-xl font-black text-white uppercase tracking-tight">
@@ -727,11 +727,11 @@ export const ShopSection: React.FC = () => {
             {/* 3. Clan Elite Card */}
             <div className="relative rounded-2xl border border-purple-500/70 bg-gradient-to-b from-[#140624] via-[#090212] to-[#040108] p-5 shadow-[0_0_30px_rgba(168,85,247,0.25)] flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="px-2.5 py-0.5 rounded bg-purple-950/80 border border-purple-500/70 text-[10px] font-mono font-black text-purple-300 uppercase">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="px-2.5 py-0.5 rounded bg-purple-950/80 border border-purple-500/70 text-[10px] font-mono font-black text-purple-300 uppercase whitespace-nowrap">
                     CLAN LEVEL 3 SUPREME
                   </span>
-                  <Award className="w-5 h-5 text-purple-400" />
+                  <Award className="w-5 h-5 text-purple-400 shrink-0" />
                 </div>
 
                 <h3 className="text-xl font-black text-white uppercase tracking-tight">
@@ -808,17 +808,17 @@ export const ShopSection: React.FC = () => {
             <span className="text-[11px] font-mono text-zinc-300">ACCREDITO ISTANTANEO</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
             {SCOIN_PACKAGES.map((pack) => {
               const isProcessing = processingId === `pack-${pack.id}`;
 
               return (
                 <div
                   key={pack.id}
-                  className={`relative p-5 rounded-2xl border bg-gradient-to-b ${pack.color} ${pack.border} flex flex-col justify-between transition-all hover:scale-[1.02]`}
+                  className={`relative p-4 sm:p-5 rounded-2xl border bg-gradient-to-b ${pack.color} ${pack.border} flex flex-col justify-between transition-all hover:scale-[1.01]`}
                 >
                   {pack.badge && (
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-black font-mono font-black text-[9px] uppercase tracking-wider shadow-md">
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-black font-mono font-black text-[9px] uppercase tracking-wider shadow-md whitespace-nowrap z-10">
                       {pack.badge}
                     </span>
                   )}

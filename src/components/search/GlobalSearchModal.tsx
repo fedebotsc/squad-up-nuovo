@@ -19,6 +19,7 @@ import {
 interface GlobalSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialQuery?: string;
 }
 
 type SearchCategory = "all" | "players" | "clans" | "tournaments";
@@ -61,6 +62,7 @@ interface SearchedTournament {
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   isOpen,
   onClose,
+  initialQuery = "",
 }) => {
   const {
     currentUser,
@@ -79,9 +81,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     openClanDetail,
   } = useSquad();
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeCategory, setActiveCategory] = useState<SearchCategory>("all");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialQuery) {
+        setSearchQuery(initialQuery);
+      }
+    }
+  }, [isOpen, initialQuery]);
 
   const [players, setPlayers] = useState<SearchedPlayer[]>([]);
   const [clans, setClans] = useState<SearchedClan[]>([]);
