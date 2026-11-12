@@ -15,15 +15,19 @@ import {
   ArrowRight,
   Flame,
   Crosshair,
+  UserCheck,
+  Ban,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSquad } from "@/context/SquadContext";
 import { toast } from "@/components/ui/use-toast";
 import {
-  fileToBase64,
-  analyzeMatchScreenshotWithAI,
-  MatchScreenshotAnalysis,
-} from "@/services/openRouterService";
+  arbitrateTournamentScreenshotWithGemini,
+  GeminiTournamentRefereeResult,
+  fetchUserAndClanTournamentContext,
+  getGeminiTournamentApiKey,
+} from "@/services/geminiTournamentRefereeService";
+import { MatchScreenshotAnalysis } from "@/services/openRouterService";
 
 export interface TournamentMatchItem {
   id: string;
@@ -64,9 +68,13 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [ocrResult, setOcrResult] = useState<MatchScreenshotAnalysis | null>(null);
 
-  // Editable scores before saving
+  // Gemini 2.5 Flash strict referee result & rejection state
+  const [refereeResult, setRefereeResult] = useState<GeminiTournamentRefereeResult | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Editable extracted statistics
+  const [extractedPlacement, setExtractedPlacement] = useState<number | null>(null);
   const [score1, setScore1] = useState<number>(0);
   const [score2, setScore2] = useState<number>(0);
 
@@ -87,15 +95,23 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
     if (file) {
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
-      setOcrResult(null);
+      setRefereeResult(null);
+      setValidationError(null);
+      setExtractedPlacement(null);
     }
   };
 
+  /**
+   * Arbitrage screenshot using Google Gemini 2.5 Flash with strict rules:
+   * 1. Identity Check (username, Activision ID, Clan members from Supabase)
+   * 2. Eliminazioni vs Assist (clean kills only)
+   * 3. Authentic post-match COD screen
+   */
   const handleAnalyzeScreenshot = async () => {
     if (!selectedFile) {
       toast({
         title: "Screenshot mancante",
-        description: "Seleziona prima uno screenshot della schermata finale di gara.",
+        description: "Seleziona prima uno screenshot della schermata finale del match di Call of Duty.",
         variant: "destructive",
       });
       return;
@@ -107,36 +123,60 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
     }
 
     setIsProcessing(true);
+    setValidationError(null);
 
     try {
-      const base64 = await fileToBase64(selectedFile);
-      const mime = selectedFile.type || "image/jpeg";
+      // 1. Fetch dynamic Supabase user & clan context and teammates
+      const userContext = await fetchUserAndClanTournamentContext(currentUser.id, [
+        player1Display,
+        player2Display,
+      ]);
 
-      const analysis = await analyzeMatchScreenshotWithAI({
-        imageBase64: base64,
-        mimeType: mime,
-        tournamentRules: tournamentRules || "Vince chi realizza più kill o gol.",
-        matchInfo: {
-          round_name: match.round_name,
-          player1_name: player1Display,
-          player2_name: player2Display,
-          game_mode: gameMode || "Competitivo",
-        },
+      // 2. Call Google Gemini 2.5 Flash REST endpoint
+      const result = await arbitrateTournamentScreenshotWithGemini({
+        file: selectedFile,
+        userId: currentUser.id,
+        extraTeammates: [player1Display, player2Display],
       });
 
-      setOcrResult(analysis);
-      setScore1(analysis.score_player1);
-      setScore2(analysis.score_player2);
+      // 3. Evaluate strict validation result
+      if (!result.valid) {
+        // BLOCK IMMEDIATELY
+        setRefereeResult(result);
+        setValidationError(result.reason);
+
+        toast({
+          title: "Arbitraggio Rifiutato dall'Arbitro IA",
+          description: result.reason,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // VALID: populate extracted placement & kills
+      setRefereeResult(result);
+      setValidationError(null);
+
+      const parsedPlacement = result.placement !== null && result.placement !== undefined ? result.placement : 1;
+      const parsedKills = result.kills !== null && result.kills !== undefined ? result.kills : 0;
+
+      setExtractedPlacement(parsedPlacement);
+      setScore1(parsedKills);
+      setScore2(0);
 
       toast({
-        title: "OCR IA Completato con Successo! 🎯",
-        description: `Punteggio rilevato: ${player1Display} ${analysis.score_player1} - ${analysis.score_player2} ${player2Display} (Confidenza ${analysis.confidence}%).`,
+        title: "Screenshot Convalidato dall'Arbitro IA! 🎯",
+        description: `Identità verificata (${result.matched_player || player1Display}). Piazzamento #${parsedPlacement} • ${parsedKills} Kill pulite registrate.`,
       });
     } catch (err: any) {
-      console.error("[MatchOCR] Errore analisi:", err);
+      console.error("[MatchOCR] Errore analisi Gemini 2.5 Flash:", err);
+      const msg = err.message || "Impossibile analizzare l'immagine con Gemini 2.5 Flash.";
+      setValidationError(msg);
+      setRefereeResult(null);
+
       toast({
-        title: "Errore durante l'analisi OCR",
-        description: err.message || "Impossibile analizzare l'immagine con Gemini Flash.",
+        title: "Errore Arbitraggio Gemini 2.5 Flash",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -144,8 +184,25 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
     }
   };
 
+  /**
+   * Save extracted placement & kills to Supabase database.
+   * STRICT BLOCK: If valid is false or missing, abort immediately!
+   */
   const handleSaveAndConfirmMatch = async () => {
     if (!match || !currentUser) return;
+
+    // RIGOROUS BLOCK: valid must be true
+    if (!refereeResult || refereeResult.valid !== true) {
+      toast({
+        title: "Invio Bloccato da Supabase",
+        description:
+          validationError ||
+          refereeResult?.reason ||
+          "Lo screenshot non è stato approvato dall'arbitro IA. È obbligatorio uno screenshot valido prima del salvataggio.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -174,17 +231,24 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
       const winnerKey =
         score1 > score2 ? "player1" : score2 > score1 ? "player2" : "draw";
 
+      const verifiedPlacement = extractedPlacement ?? refereeResult.placement ?? 1;
+      const verifiedKills = refereeResult.kills ?? score1;
+
       const updatedParsedData = {
         ...(match.ai_parsed_data || {}),
         team1_name: player1Display,
         team2_name: player2Display,
-        ocr_result: ocrResult,
+        referee_gemini_2_5_flash: refereeResult,
+        placement: verifiedPlacement,
+        kills: verifiedKills,
+        matched_player: refereeResult.matched_player,
+        referee_reason: refereeResult.reason,
         verified_by: userProfile.name,
         verified_at: new Date().toISOString(),
         winner: winnerKey,
       };
 
-      // 2. Update tournament_matches row
+      // 2. Update tournament_matches row in Supabase with verified fields
       const { error: updateMatchErr } = await supabase
         .from("tournament_matches")
         .update({
@@ -199,7 +263,7 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
 
       if (updateMatchErr) throw updateMatchErr;
 
-      // 3. Update tournament_leaderboards in real-time for player1 / team1
+      // 3. Update tournament_leaderboards in real-time with extracted kills and placement points
       const team1Id = match.player1_id ? `player_${match.player1_id}` : `team_p1_${match.id.slice(0, 6)}`;
       const { data: existingTeam1 } = await supabase
         .from("tournament_leaderboards")
@@ -208,14 +272,14 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
         .eq("team_id", team1Id)
         .maybeSingle();
 
-      const team1Kills = ocrResult?.player1_details?.kills ?? score1;
-      const team1ScoreEarned = (winnerKey === "player1" ? 15 : 5) + team1Kills * 2;
+      const placementScore = verifiedPlacement === 1 ? 15 : verifiedPlacement === 2 ? 10 : verifiedPlacement <= 5 ? 5 : 1;
+      const team1ScoreEarned = placementScore + verifiedKills * 2;
 
       if (existingTeam1) {
         await supabase
           .from("tournament_leaderboards")
           .update({
-            total_kills: (existingTeam1.total_kills || 0) + team1Kills,
+            total_kills: (existingTeam1.total_kills || 0) + verifiedKills,
             total_score: (existingTeam1.total_score || 0) + team1ScoreEarned,
             matches_played: (existingTeam1.matches_played || 0) + 1,
             updated_at: new Date().toISOString(),
@@ -226,41 +290,8 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
           tournament_id: match.tournament_id,
           team_id: team1Id,
           team_name: player1Display,
-          total_kills: team1Kills,
+          total_kills: verifiedKills,
           total_score: team1ScoreEarned,
-          matches_played: 1,
-        });
-      }
-
-      // Update tournament_leaderboards for player2 / team2
-      const team2Id = match.player2_id ? `player_${match.player2_id}` : `team_p2_${match.id.slice(0, 6)}`;
-      const { data: existingTeam2 } = await supabase
-        .from("tournament_leaderboards")
-        .select("*")
-        .eq("tournament_id", match.tournament_id)
-        .eq("team_id", team2Id)
-        .maybeSingle();
-
-      const team2Kills = ocrResult?.player2_details?.kills ?? score2;
-      const team2ScoreEarned = (winnerKey === "player2" ? 15 : 5) + team2Kills * 2;
-
-      if (existingTeam2) {
-        await supabase
-          .from("tournament_leaderboards")
-          .update({
-            total_kills: (existingTeam2.total_kills || 0) + team2Kills,
-            total_score: (existingTeam2.total_score || 0) + team2ScoreEarned,
-            matches_played: (existingTeam2.matches_played || 0) + 1,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingTeam2.id);
-      } else {
-        await supabase.from("tournament_leaderboards").insert({
-          tournament_id: match.tournament_id,
-          team_id: team2Id,
-          team_name: player2Display,
-          total_kills: team2Kills,
-          total_score: team2ScoreEarned,
           matches_played: 1,
         });
       }
@@ -276,25 +307,25 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
         await supabase.from("tournament_messages").insert({
           match_chat_id: chats[0].id,
           sender_id: currentUser.id,
-          message: `🏁 Risultato Ufficiale ${match.round_name}: ${player1Display} ${score1} - ${score2} ${player2Display}. Convalidato dall'Arbitro IA con screenshot.`,
+          message: `🏁 Risultato Ufficiale ${match.round_name}: ${player1Display} (Piazzamento #${verifiedPlacement}, ${verifiedKills} Kill). Convalidato dall'Arbitro IA Google Gemini 2.5 Flash [Identità confermata: ${refereeResult.matched_player || player1Display}].`,
           image_url: uploadedScreenshotUrl || null,
           is_screenshot: true,
           ai_status: "verified",
-          detected_kills: team1Kills + team2Kills,
-          detected_placement: winnerKey === "player1" ? 1 : 2,
-          score_awarded: Math.max(team1ScoreEarned, team2ScoreEarned),
+          detected_kills: verifiedKills,
+          detected_placement: verifiedPlacement,
+          score_awarded: team1ScoreEarned,
         });
       }
 
       toast({
         title: "Match Convalidato & Classifica Aggiornata! 🏆",
-        description: `I punteggi (${score1} - ${score2}) e la classifica in tempo reale sono stati salvati su Supabase.`,
+        description: `Piazzamento #${verifiedPlacement} e ${verifiedKills} Kill registrati con successo nel database Supabase.`,
       });
 
       onMatchUpdated();
       onClose();
     } catch (err: any) {
-      console.error("[MatchOCR] Errore salvataggio:", err);
+      console.error("[MatchOCR] Errore salvataggio Supabase:", err);
       toast({
         title: "Errore durante il salvataggio",
         description: err.message || "Impossibile aggiornare il match su Supabase.",
@@ -304,6 +335,9 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
       setIsProcessing(false);
     }
   };
+
+  const isGeminiApproved = refereeResult?.valid === true;
+  const isGeminiRejected = refereeResult !== null && refereeResult.valid === false;
 
   return (
     <>
@@ -325,15 +359,15 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
               </span>
               <span className="text-[10px] font-mono text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-500/40 flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-cyan-400" />
-                <span>IA Arbitro Centralizzata</span>
+                <span>Gemini 2.5 Flash Arbitro</span>
               </span>
             </div>
 
             <h3 className="text-base sm:text-lg font-extrabold text-white mt-1">
-              Analisi Screenshot &amp; Risultato Match
+              Arbitraggio Screenshot &amp; Risultati Match
             </h3>
             <p className="text-[11px] text-zinc-400">
-              Carica lo screenshot finale: Gemini Flash estrarrà automaticamente gol, kill e vincitore convalidando la classifica.
+              Verifica inflessibile: Identità giocatore/team, estrazione Kill pulite (senza assist) e validità schermata post-match.
             </p>
           </div>
 
@@ -343,12 +377,12 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
             <div className="bg-[#121628] border border-purple-900/40 rounded-2xl p-3 flex items-center justify-between">
               {/* Player 1 */}
               <div className="flex-1 text-center min-w-0">
-                <span className="text-[10px] text-zinc-400 block font-medium">Giocatore/Squadra 1</span>
+                <span className="text-[10px] text-zinc-400 block font-medium">Giocatore/Squadra</span>
                 <span className="text-xs sm:text-sm font-extrabold text-white truncate block">
                   {player1Display}
                 </span>
                 <span className="text-base sm:text-lg font-black text-cyan-400 mt-0.5 block">
-                  {score1}
+                  {score1} <span className="text-xs font-semibold text-zinc-400">Kill</span>
                 </span>
               </div>
 
@@ -361,12 +395,12 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
 
               {/* Player 2 */}
               <div className="flex-1 text-center min-w-0">
-                <span className="text-[10px] text-zinc-400 block font-medium">Giocatore/Squadra 2</span>
+                <span className="text-[10px] text-zinc-400 block font-medium">Avversario / Lobby</span>
                 <span className="text-xs sm:text-sm font-extrabold text-white truncate block">
                   {player2Display}
                 </span>
                 <span className="text-base sm:text-lg font-black text-rose-400 mt-0.5 block">
-                  {score2}
+                  {extractedPlacement !== null ? `#${extractedPlacement}` : "Piazz."}
                 </span>
               </div>
             </div>
@@ -374,16 +408,18 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
             {/* Screenshot Upload Zone */}
             <div className="space-y-2">
               <label className="text-[11px] font-bold text-zinc-300 flex items-center justify-between">
-                <span>Screenshot Tabellone Finale o Vittoria:</span>
+                <span>Screenshot Schermata Finale Call of Duty:</span>
                 {previewUrl && (
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedFile(null);
                       setPreviewUrl(null);
-                      setOcrResult(null);
+                      setRefereeResult(null);
+                      setValidationError(null);
+                      setExtractedPlacement(null);
                     }}
-                    className="text-[10px] text-rose-400 hover:underline"
+                    className="text-[10px] text-rose-400 hover:underline cursor-pointer"
                   >
                     Rimuovi
                   </button>
@@ -409,7 +445,7 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-xl bg-purple-600 text-white font-bold text-xs"
+                      className="px-3 py-1.5 rounded-xl bg-purple-600 text-white font-bold text-xs cursor-pointer"
                     >
                       Cambia Immagine
                     </button>
@@ -425,10 +461,10 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
                   </div>
                   <div>
                     <span className="text-xs font-bold text-white block">
-                      Clicca per caricare lo screenshot del match
+                      Clicca per caricare la schermata post-partita
                     </span>
                     <span className="text-[10px] text-zinc-400">
-                      PNG, JPG o WebP con tabellone dei punti, gol, kill o posizionamento
+                      Schermata di fine match CoD con colonna Eliminazioni pulite e Posizionamento
                     </span>
                   </div>
                 </div>
@@ -436,7 +472,7 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
             </div>
 
             {/* Analyze Button */}
-            {!ocrResult && selectedFile && (
+            {selectedFile && !isGeminiApproved && (
               <button
                 type="button"
                 disabled={isProcessing}
@@ -446,101 +482,104 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
-                    <span>Gemini Flash sta eseguendo l'OCR del tabellone...</span>
+                    <span>Gemini 2.5 Flash sta eseguendo l'arbitraggio inflessibile...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Esegui OCR con Gemini Flash (OpenRouter)</span>
+                    <span>Esegui Arbitraggio con Gemini 2.5 Flash</span>
                   </>
                 )}
               </button>
             )}
 
-            {/* OCR Extracted Result Box */}
-            {ocrResult && (
-              <div className="bg-[#121628] border border-emerald-500/50 rounded-2xl p-4 space-y-3 animate-fade-in shadow-md">
+            {/* 1. SEVERE REJECTION ALERT BOX (valid: false) */}
+            {(isGeminiRejected || validationError) && (
+              <div className="bg-rose-950/40 border border-rose-500/60 rounded-2xl p-4 space-y-2 animate-fade-in shadow-xl">
+                <div className="flex items-center gap-2">
+                  <Ban className="w-5 h-5 text-rose-400 shrink-0" />
+                  <span className="text-xs font-black text-rose-300 uppercase tracking-wide">
+                    Arbitraggio Rifiutato (Invio a Supabase Bloccato)
+                  </span>
+                </div>
+                <div className="text-xs text-rose-200 leading-relaxed font-medium bg-black/40 p-3 rounded-xl border border-rose-900/50">
+                  {validationError || refereeResult?.reason}
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>
+                    Lo screenshot non rispetta i requisiti di identità, schermata autentica o conteggio kill. Carica una schermata conforme per procedere.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* 2. SUCCESS APPROVAL BOX (valid: true) */}
+            {isGeminiApproved && refereeResult && (
+              <div className="bg-[#121628] border border-emerald-500/60 rounded-2xl p-4 space-y-3 animate-fade-in shadow-xl">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <div className="flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     <span className="text-xs font-extrabold text-emerald-300">
-                      Risultato OCR Rilevato
+                      Screenshot Ufficiale Convalidato
                     </span>
                   </div>
-                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-500/40">
-                    Confidenza {ocrResult.confidence}%
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/40">
+                    gemini-2.5-flash: APPROVED
                   </span>
                 </div>
 
-                {/* Score Controls */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl space-y-1">
-                    <span className="text-[10px] font-bold text-zinc-400 block truncate">
-                      Punteggio {player1Display}
+                {/* Extracted Player Identity & Match Data */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl space-y-0.5">
+                    <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 text-cyan-400" />
+                      Giocatore Verificato:
                     </span>
+                    <span className="font-extrabold text-white block truncate">
+                      {refereeResult.matched_player || "Nome Utente Riconosciuto"}
+                    </span>
+                  </div>
+
+                  <div className="bg-zinc-900/80 border border-zinc-800 p-2.5 rounded-xl space-y-0.5">
+                    <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                      <Trophy className="w-3 h-3 text-amber-400" />
+                      Piazzamento Finale:
+                    </span>
+                    <span className="font-extrabold text-amber-300 block">
+                      #{extractedPlacement !== null ? extractedPlacement : "N/D"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Score Controls */}
+                <div className="bg-zinc-900/90 border border-zinc-800 p-3 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-zinc-300">
+                      Eliminazioni Pulite Rilevate (Senza Assist):
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-950/60 text-cyan-300 border border-cyan-500/30">
+                      Assist Esclusi
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
                     <input
                       type="number"
                       value={score1}
                       onChange={(e) => setScore1(Number(e.target.value))}
-                      className="w-full p-1.5 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-cyan-400 font-extrabold text-center"
+                      className="w-24 p-2 bg-zinc-950 border border-zinc-700 rounded-lg text-base text-cyan-400 font-black text-center"
                     />
-                    {ocrResult.player1_details && (
-                      <div className="text-[9px] text-zinc-400 space-y-0.5 pt-1">
-                        {ocrResult.player1_details.kills !== undefined && (
-                          <div>Kill: {ocrResult.player1_details.kills}</div>
-                        )}
-                        {ocrResult.player1_details.damage !== undefined && (
-                          <div>Danno: {ocrResult.player1_details.damage}</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="bg-zinc-900/90 border border-zinc-800 p-2.5 rounded-xl space-y-1">
-                    <span className="text-[10px] font-bold text-zinc-400 block truncate">
-                      Punteggio {player2Display}
+                    <span className="text-[11px] text-zinc-400">
+                      Kill effettive assegnate a <strong className="text-white">{player1Display}</strong> per la classifica.
                     </span>
-                    <input
-                      type="number"
-                      value={score2}
-                      onChange={(e) => setScore2(Number(e.target.value))}
-                      className="w-full p-1.5 bg-zinc-950 border border-zinc-700 rounded-lg text-sm text-rose-400 font-extrabold text-center"
-                    />
-                    {ocrResult.player2_details && (
-                      <div className="text-[9px] text-zinc-400 space-y-0.5 pt-1">
-                        {ocrResult.player2_details.kills !== undefined && (
-                          <div>Kill: {ocrResult.player2_details.kills}</div>
-                        )}
-                        {ocrResult.player2_details.damage !== undefined && (
-                          <div>Danno: {ocrResult.player2_details.damage}</div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Winner Notice */}
-                <div className="bg-amber-950/30 border border-amber-500/30 p-2 rounded-xl flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="font-bold text-amber-200">
-                      Vincitore designato:
-                    </span>
+                {/* Reason explanation text */}
+                {refereeResult.reason && (
+                  <div className="text-[11px] text-zinc-300 italic bg-black/40 p-2.5 rounded-xl border border-zinc-800">
+                    "{refereeResult.reason}"
                   </div>
-                  <span className="font-extrabold text-white">
-                    {score1 > score2
-                      ? player1Display
-                      : score2 > score1
-                      ? player2Display
-                      : "Pareggio"}
-                  </span>
-                </div>
-
-                {/* Explanation */}
-                {ocrResult.explanation && (
-                  <p className="text-[10px] text-zinc-400 leading-relaxed italic bg-zinc-950/60 p-2 rounded-xl">
-                    "{ocrResult.explanation}"
-                  </p>
                 )}
               </div>
             )}
@@ -551,26 +590,35 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="py-2.5 px-4 rounded-xl border border-zinc-800 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs transition-colors"
+              className="py-2.5 px-4 rounded-xl border border-zinc-800 hover:bg-zinc-800 text-zinc-300 font-semibold text-xs transition-colors cursor-pointer"
             >
               Chiudi
             </button>
 
             <button
               type="button"
-              disabled={isProcessing}
+              disabled={isProcessing || !isGeminiApproved}
               onClick={handleSaveAndConfirmMatch}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.35)] transition-all cursor-pointer"
+              className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                isGeminiApproved
+                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                  : "bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60"
+              }`}
             >
               {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>Aggiornamento classifica in corso...</span>
+                  <span>Salvataggio su Supabase in corso...</span>
+                </>
+              ) : isGeminiApproved ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>Salva Risultati Estratti su Supabase</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                  <span>Conferma & Aggiorna Classifica Live</span>
+                  <Ban className="w-4 h-4 text-zinc-500" />
+                  <span>Invio Bloccato (Richiede Arbitraggio Approvato)</span>
                 </>
               )}
             </button>

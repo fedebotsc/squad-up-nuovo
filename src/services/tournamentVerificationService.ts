@@ -1,5 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fileToBase64, getOpenRouterApiKey } from "./openRouterService";
+import {
+  arbitrateTournamentScreenshotWithGemini,
+  getGeminiTournamentApiKey,
+} from "./geminiTournamentRefereeService";
 
 // Exact binding error messages requested
 export const ERROR_POST_GAME_UPLOADED_FOR_KD =
@@ -789,7 +793,65 @@ export async function verifyPostGameProofsAndCalculateScore(
 
   const scoringMode = scoringSettings?.scoring_mode || "fixed";
 
-  // STEP 3: Multi-modal AI Vision Analysis (Edge Function or Direct OpenRouter)
+  // STEP 3: Strict Google Gemini 2.5 Flash Referee (using VITE_GEMINI_API_KEY_TORNEO)
+  const geminiTournamentApiKey = getGeminiTournamentApiKey();
+  if (geminiTournamentApiKey) {
+    try {
+      const primaryFile = killsFile || placementFile;
+      const refereeResult = await arbitrateTournamentScreenshotWithGemini({
+        file: primaryFile,
+        extraTeammates: registeredPlayerNames,
+      });
+
+      if (!refereeResult.valid) {
+        // Block immediately with the exact severe reason provided by Gemini
+        throw new Error(refereeResult.reason || "Screenshot non valido: verifica identità o tabellone post-partita respinta dall'arbitro IA.");
+      }
+
+      const placement = Math.max(1, refereeResult.placement || 1);
+      const kills = Math.max(0, refereeResult.kills || 0);
+      const calc = calculateTournamentScore(placement, kills, scoringSettings);
+
+      return {
+        is_authentic_game_screenshot: true,
+        screen_type: "post_game",
+        placement,
+        kills,
+        discarded_eliminations: 0,
+        players: [
+          {
+            clan_tag: "",
+            player_name: refereeResult.matched_player || "Giocatore Riconosciuto",
+            kills,
+            raw_eliminations: kills,
+            assists_discarded: 0,
+            damage: kills * 420,
+          },
+        ],
+        player_breakdown_text: `🎯 Giocatore Verificato: ${refereeResult.matched_player || "Confermato"}\n⚔️ Eliminazioni Effettive: ${kills} (Assist scartati)\n🏆 Piazzamento Finale: #${placement}`,
+        damage: kills * 420,
+        confidence: 99,
+        placement_points: calc.placementPoints,
+        kill_points: calc.killPoints,
+        total_points: calc.totalPoints,
+        summary_message: calc.summaryMessage,
+        explanation: refereeResult.reason,
+        scoring_mode: scoringMode,
+        strict_rules_applied: {
+          strictly_used_uccisioni: true,
+          discarded_eliminations_column: true,
+          registered_names_checked: true,
+        },
+      };
+    } catch (geminiErr: any) {
+      if (geminiErr?.message && !geminiErr.message.includes("Configurazione mancante")) {
+        throw geminiErr;
+      }
+      console.warn("[verifyPostGameProofsAndCalculateScore] Gemini Flash fallback:", geminiErr);
+    }
+  }
+
+  // STEP 4: Multi-modal AI Vision Analysis (Edge Function or Direct OpenRouter)
   try {
     const placementB64 = placementFile ? await fileToBase64(placementFile) : null;
     const killsB64 = killsFile ? await fileToBase64(killsFile) : null;

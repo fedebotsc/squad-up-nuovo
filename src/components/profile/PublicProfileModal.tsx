@@ -266,7 +266,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           id: profileData.id,
           display_name: profileData.name,
           username: profileData.tag.replace(/^@/, ""),
-          avatar_url: profileData.avatar,
+          avatar_url: profileData.avatarUrl,
           clan_tag: profileData.clan?.tag,
           is_clan: false,
         })

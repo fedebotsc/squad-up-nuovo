@@ -395,7 +395,8 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         placementFile,
         killsFile,
         scoringSettings,
-        rawTourn.rules
+        rawTourn.rules,
+        [chat.team_name]
       );
 
       setPostGameAnalysis(result);
@@ -446,6 +447,15 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
    * Invia il resoconto automatico in chat e salva i punti nella classifica della lobby.
    */
   const handleConfirmAndCommitScore = async () => {
+    if (!postGameAnalysis) {
+      toast({
+        title: "Invio Bloccato da Supabase",
+        description: "Devi prima completare l'arbitraggio dello screenshot con Google Gemini 2.5 Flash con esito positivo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!placementFile && !killsFile && !postGameAnalysis) return;
 
     setIsSubmittingPostGame(true);

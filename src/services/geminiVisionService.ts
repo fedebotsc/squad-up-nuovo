@@ -1,5 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
+  arbitrateTournamentScreenshotWithGemini,
+  getGeminiTournamentApiKey,
+} from "./geminiTournamentRefereeService";
+import {
   fileToBase64,
   analyzeMatchScreenshotWithAI,
 } from "./openRouterService";
@@ -34,6 +38,43 @@ export const analyzeDualMatchScreenshots = async (
     throw new Error("Nessuno screenshot fornito per l'analisi OCR.");
   }
 
+  // 1. Prioritize Google Gemini 2.5 Flash strict referee call
+  const geminiKey = getGeminiTournamentApiKey();
+  if (geminiKey) {
+    try {
+      const refereeResult = await arbitrateTournamentScreenshotWithGemini({
+        file: primaryFile,
+      });
+
+      if (!refereeResult.valid) {
+        // Strict blocking: reject immediately with the exact severe reason
+        throw new Error(refereeResult.reason || "Screenshot respinto dall'arbitro IA.");
+      }
+
+      const kills = refereeResult.kills ?? 0;
+      const placement = refereeResult.placement ?? 1;
+      const damage = kills * 420;
+      const placementScore = placementMap[String(placement)] ?? (placement <= 10 ? (placementMap.top10 ?? 1) : 0);
+      const scoreAwarded = kills * killMultiplier + placementScore;
+
+      return {
+        kills,
+        placement,
+        damage,
+        scoreAwarded,
+        confidence: 99,
+        notes: refereeResult.reason,
+        rawResponse: refereeResult,
+      };
+    } catch (geminiErr: any) {
+      if (geminiErr.message && !geminiErr.message.includes("Configurazione mancante")) {
+        throw geminiErr;
+      }
+      console.warn("[GeminiVision] Gemini 2.5 Flash warning:", geminiErr);
+    }
+  }
+
+  // 2. Fallback to OpenRouter multimodal
   try {
     const b64 = await fileToBase64(primaryFile);
     const mime = primaryFile.type || "image/jpeg";

@@ -227,7 +227,7 @@ export const ProfileSection: React.FC = () => {
       AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)) ||
     AVATAR_FRAMES?.[0] || { borderClass: "border-purple-500", glowClass: "" };
 
-  const effectiveFrameOverlay = customFrameUrl || frameObj?.frameUrl;
+  const effectiveFrameOverlay = customFrameUrl || (frameObj as any)?.frameUrl;
 
   return (
     <div className="pb-24 pt-2 w-full max-w-4xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
