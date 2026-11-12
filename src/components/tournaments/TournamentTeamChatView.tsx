@@ -409,9 +409,11 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
       });
     } catch (err: any) {
       setPostGameAnalysis(null);
+      setEditPlacement(null as any);
+      setEditKills(0);
       const errMsg =
         err?.message ||
-        "Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.";
+        "Il nome del giocatore registrato non è presente in questa schermata di fine partita. Carica uno screenshot corretto dove risulti tu o la tua squadra.";
 
       // Post rejection notification into the team chat
       try {

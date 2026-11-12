@@ -141,9 +141,12 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
 
       // 3. Evaluate strict validation result
       if (!result.valid) {
-        // BLOCK IMMEDIATELY
+        // BLOCK IMMEDIATELY: clear any score or placement
         setRefereeResult(result);
         setValidationError(result.reason);
+        setExtractedPlacement(null);
+        setScore1(0);
+        setScore2(0);
 
         toast({
           title: "Arbitraggio Rifiutato dall'Arbitro IA",
@@ -173,6 +176,9 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
       const msg = err.message || "Impossibile analizzare l'immagine con Gemini 2.5 Flash.";
       setValidationError(msg);
       setRefereeResult(null);
+      setExtractedPlacement(null);
+      setScore1(0);
+      setScore2(0);
 
       toast({
         title: "Errore Arbitraggio Gemini 2.5 Flash",

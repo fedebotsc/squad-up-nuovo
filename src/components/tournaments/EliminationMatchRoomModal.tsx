@@ -152,7 +152,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
       });
     } catch (err: any) {
       console.warn("[MatchRoom] Errore verifica post-game:", err);
-      const errMsg = err.message || "Immagine non valida: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.";
+      const errMsg = err.message || "Il nome del giocatore registrato non è presente in questa schermata di fine partita. Carica uno screenshot corretto dove risulti tu o la tua squadra.";
 
       if (teamSlot === "team1") {
         setTeam1Analysis(null);

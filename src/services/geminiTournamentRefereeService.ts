@@ -1,5 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export const REJECTION_REASON_NAME_NOT_FOUND =
+  "Il nome del giocatore registrato non è presente in questa schermata di fine partita. Carica uno screenshot corretto dove risulti tu o la tua squadra.";
+
 export interface GeminiTournamentRefereeResult {
   valid: boolean;
   reason: string;
@@ -13,6 +16,7 @@ export interface UserTournamentContext {
   username: string;
   activisionId: string;
   teamMembers: string;
+  candidateNames: string[];
   clanTag?: string;
   clanName?: string;
 }
@@ -33,6 +37,17 @@ export function getGeminiTournamentApiKey(): string {
 }
 
 /**
+ * Sanitizes and strips clan tags, hashtags, and whitespace for resilient name comparison
+ */
+export function sanitizePlayerName(raw: string): string {
+  return raw
+    .replace(/\[.*?\]/g, "") // remove [CLAN] tags
+    .split("#")[0] // remove #12344 battle tag suffix
+    .trim()
+    .toLowerCase();
+}
+
+/**
  * Dynamically fetches user profile & clan members from Supabase database
  * to supply the referee system prompt with accurate identity information.
  */
@@ -47,12 +62,22 @@ export async function fetchUserAndClanTournamentContext(
     targetUserId = authData?.user?.id;
   }
 
+  const candidateNames: string[] = [];
+
   if (!targetUserId) {
+    if (extraTeammates && extraTeammates.length > 0) {
+      extraTeammates.forEach((t) => {
+        const clean = t.trim();
+        if (clean && !candidateNames.includes(clean)) candidateNames.push(clean);
+      });
+    }
+
     return {
       userId: "",
       username: "Utente_Ospite",
       activisionId: "Non registrato",
       teamMembers: extraTeammates && extraTeammates.length > 0 ? extraTeammates.join(", ") : "Nessun membro clan (Giocatore Singolo)",
+      candidateNames,
     };
   }
 
@@ -75,6 +100,10 @@ export async function fetchUserAndClanTournamentContext(
       activisionId = profile.activision_id || (profile as any).activision_name || "Non registrato";
       clanId = profile.clan_id || null;
       clanTag = profile.clan_tag || "";
+
+      if (profile.username) candidateNames.push(profile.username);
+      if (profile.display_name && !candidateNames.includes(profile.display_name)) candidateNames.push(profile.display_name);
+      if (profile.activision_id && !candidateNames.includes(profile.activision_id)) candidateNames.push(profile.activision_id);
     }
   } catch (err) {
     console.warn("[RefereeService] Errore caricamento profilo Supabase:", err);
@@ -151,6 +180,10 @@ export async function fetchUserAndClanTournamentContext(
             if (prof.id !== targetUserId && !teamMembersList.includes(desc)) {
               teamMembersList.push(desc);
             }
+
+            if (prof.username && !candidateNames.includes(prof.username)) candidateNames.push(prof.username);
+            if (prof.display_name && !candidateNames.includes(prof.display_name)) candidateNames.push(prof.display_name);
+            if (prof.activision_id && !candidateNames.includes(prof.activision_id)) candidateNames.push(prof.activision_id);
           }
         });
       }
@@ -163,8 +196,9 @@ export async function fetchUserAndClanTournamentContext(
   if (extraTeammates && extraTeammates.length > 0) {
     extraTeammates.forEach((tm) => {
       const clean = tm.trim();
-      if (clean && !teamMembersList.includes(clean)) {
-        teamMembersList.push(clean);
+      if (clean) {
+        if (!teamMembersList.includes(clean)) teamMembersList.push(clean);
+        if (!candidateNames.includes(clean)) candidateNames.push(clean);
       }
     });
   }
@@ -179,6 +213,7 @@ export async function fetchUserAndClanTournamentContext(
     username,
     activisionId,
     teamMembers: teamMembersString,
+    candidateNames,
     clanTag,
     clanName,
   };
@@ -186,6 +221,7 @@ export async function fetchUserAndClanTournamentContext(
 
 /**
  * Builds the exact, severe referee system prompt demanded by Call of Duty tournament regulations.
+ * Incorporates mandatory cross-check between registered player/team names and OCR text.
  */
 export function buildCodRefereeSystemPrompt(context: {
   username: string;
@@ -195,9 +231,20 @@ export function buildCodRefereeSystemPrompt(context: {
   return `Sei un arbitro eSport inflessibile per Call of Duty. Devi analizzare lo screenshot confrontandolo con i dati dell'utente che sta caricando l'immagine (Username registrato: ${context.username}, Activision ID: ${context.activisionId}, Membri del Team/Clan: ${context.teamMembers}).
 
 Esegui tassativamente questi controlli:
-1. VERIFICA IDENTITÀ: Cerca nell'immagine il nome utente o l'Activision ID registrato. L'immagine DEVE appartenere al giocatore o a un membro del suo team. Se lo screenshot appartiene a un giocatore estraneo o non verificabile, imposta \`valid: false\` e motiva il rifiuto.
+1. CONTROLLO INCROCIATO RIGOROSO NOME / FOTO:
+Confronta attentamente il nome dell'utente registrato ('${context.username}'), il suo Activision ID ('${context.activisionId}') o i nomi dei membri del team ('${context.teamMembers}') con tutti i testi e nomi presenti nell'immagine della classifica di Call of Duty.
+Se il nome registrato (o l'Activision ID o un membro del team registrato) NON compare fisicamente all'interno dello screenshot della classifica, DEVI restituire TASSATIVAMENTE ed ESATTAMENTE:
+{
+  "valid": false,
+  "reason": "Il nome del giocatore registrato non è presente in questa schermata di fine partita. Carica uno screenshot corretto dove risulti tu o la tua squadra.",
+  "placement": null,
+  "kills": null,
+  "matched_player": null
+}
+
 2. DISTINZIONE ELIMINAZIONI / ASSIST: Per il conteggio delle kill, cerca specificamente la voce 'Eliminazioni' (o 'Kills') pulite ed evita di sommare gli 'Assist' (se presenti separatamente), registrando esclusivamente il numero effettivo delle eliminazioni personali o di squadra richieste.
-3. VALIDITÀ DELLA SCHERMATA: Lo screenshot deve essere una schermata di fine match di Call of Duty leggibile, non contraffatta o ritagliata in modo sospetto.
+
+3. VALIDITÀ DELLA SCHERMATA: Lo screenshot deve essere una schermata di fine match di Call of Duty leggibile, non contraffatta o ritagliata in modo sospetto. Non indovinare o inventare dati non chiaramente visibili.
 
 Rispondi SOLO ed ESCLUSIVAMENTE in formato JSON puro (senza blocchi di markdown o testo aggiuntivo) con questa struttura esatta:
 {
@@ -205,7 +252,7 @@ Rispondi SOLO ed ESCLUSIVAMENTE in formato JSON puro (senza blocchi di markdown 
   "reason": "stringa con la motivazione dettagliata in italiano dell'approvazione o del rifiuto",
   "placement": number | null,
   "kills": number | null,
-  "matched_player": "stringa con il nome trovato nella foto che ha confermato l'identità"
+  "matched_player": "stringa con il nome trovato nella foto che ha confermato l'identità" | null
 }`;
 }
 
@@ -234,7 +281,6 @@ function extractAndParseJson(rawText: string): any {
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```[a-zA-Z]*\n?/, "").replace(/\n?```$/, "").trim();
   }
-  // If JSON is surrounded by other characters
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -244,8 +290,41 @@ function extractAndParseJson(rawText: string): any {
 }
 
 /**
+ * Programmatic cross-check verification:
+ * Verifies that the matched_player reported by the AI actually corresponds to
+ * the registered user or a registered team member.
+ */
+export function verifyMatchedPlayerAgainstContext(
+  matchedPlayer: string | null | undefined,
+  candidateNames: string[]
+): boolean {
+  if (!matchedPlayer || !matchedPlayer.trim()) return false;
+
+  const cleanMatched = sanitizePlayerName(matchedPlayer);
+  if (!cleanMatched || cleanMatched.length < 2) return false;
+
+  for (const candidate of candidateNames) {
+    if (!candidate || candidate === "Utente" || candidate === "Non registrato") continue;
+
+    const cleanCandidate = sanitizePlayerName(candidate);
+    if (!cleanCandidate || cleanCandidate.length < 2) continue;
+
+    if (
+      cleanMatched === cleanCandidate ||
+      cleanMatched.includes(cleanCandidate) ||
+      cleanCandidate.includes(cleanMatched)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Main Call: Executes REST API request to Google Gemini (gemini-2.5-flash)
  * using import.meta.env.VITE_GEMINI_API_KEY_TORNEO.
+ * Enforces zero-tolerance check on player name presence.
  */
 export async function arbitrateTournamentScreenshotWithGemini(params: {
   file?: File | null;
@@ -281,7 +360,7 @@ export async function arbitrateTournamentScreenshotWithGemini(params: {
     throw new Error("Nessuna immagine valida fornita per l'arbitraggio dello screenshot.");
   }
 
-  // 3. Build severe system prompt
+  // 3. Build severe system prompt with explicit identity cross-check rule
   const systemPrompt = buildCodRefereeSystemPrompt({
     username: userContext.username,
     activisionId: userContext.activisionId,
@@ -306,7 +385,7 @@ export async function arbitrateTournamentScreenshotWithGemini(params: {
         role: "user",
         parts: [
           {
-            text: `Analizza questo screenshot finale del match di Call of Duty in conformità con i controlli inflessibili di verifica identità (giocatore o team), eliminazioni pulite ed esclusione assist. Restituisci esclusivamente il JSON formattato.`,
+            text: `Esegui il controllo incrociato rigoroso: verifica se il nome '${userContext.username}' (o Activision '${userContext.activisionId}' o membri squadra) compare nello screenshot. Se non compare, restituisci valid: false con il messaggio tassativo richiesto. Se compare, estrai piazzamento e kill escludendo assist.`,
           },
           {
             inlineData: {
@@ -352,30 +431,76 @@ export async function arbitrateTournamentScreenshotWithGemini(params: {
   try {
     const parsed = extractAndParseJson(rawCandidateText);
 
-    const valid = Boolean(parsed.valid);
-    const reason = String(parsed.reason || (valid ? "Screenshot approvato dall'arbitro IA." : "Screenshot respinto."));
+    let valid = Boolean(parsed.valid);
+    let reason = String(parsed.reason || "");
+    const matched_player = parsed.matched_player ? String(parsed.matched_player) : null;
+
+    // RIGOROUS ZERO-TOLERANCE CHECK:
+    // If Gemini reported valid: false or indicated player name was missing
+    if (!valid) {
+      // Standardize the exact requested message if name was not found
+      if (
+        !reason ||
+        reason.toLowerCase().includes("non è presente") ||
+        reason.toLowerCase().includes("nome") ||
+        reason.toLowerCase().includes("identit") ||
+        reason.toLowerCase().includes("estrane")
+      ) {
+        reason = REJECTION_REASON_NAME_NOT_FOUND;
+      }
+
+      return {
+        valid: false,
+        reason,
+        placement: null,
+        kills: null,
+        matched_player: null,
+      };
+    }
+
+    // Secondary programmatic cross-validation:
+    // If valid: true, ensure matched_player actually matches one of our candidates
+    const isIdentityConfirmed = verifyMatchedPlayerAgainstContext(
+      matched_player,
+      userContext.candidateNames
+    );
+
+    if (!isIdentityConfirmed) {
+      console.warn(
+        `[RefereeService] Nome "${matched_player}" non corrisponde a nessuno dei candidati registrati:`,
+        userContext.candidateNames
+      );
+      return {
+        valid: false,
+        reason: REJECTION_REASON_NAME_NOT_FOUND,
+        placement: null,
+        kills: null,
+        matched_player: null,
+      };
+    }
+
     const placement =
       typeof parsed.placement === "number"
         ? parsed.placement
         : parsed.placement
         ? Number(parsed.placement)
         : null;
+
     const kills =
       typeof parsed.kills === "number"
         ? parsed.kills
         : parsed.kills
         ? Number(parsed.kills)
         : null;
-    const matched_player = parsed.matched_player ? String(parsed.matched_player) : null;
 
     return {
-      valid,
-      reason,
+      valid: true,
+      reason: reason || "Screenshot e identità del giocatore convalidati con successo dall'arbitro IA.",
       placement: Number.isFinite(placement) ? placement : null,
       kills: Number.isFinite(kills) ? kills : null,
       matched_player,
     };
-  } catch (parseErr) {
+  } catch (parseErr: any) {
     console.error("[RefereeService] Errore parsing JSON restituito da Gemini:", rawCandidateText, parseErr);
     throw new Error(`Formato JSON non valido restituito da Gemini 2.5 Flash: ${rawCandidateText.slice(0, 150)}...`);
   }

@@ -3,6 +3,7 @@ import { fileToBase64, getOpenRouterApiKey } from "./openRouterService";
 import {
   arbitrateTournamentScreenshotWithGemini,
   getGeminiTournamentApiKey,
+  REJECTION_REASON_NAME_NOT_FOUND,
 } from "./geminiTournamentRefereeService";
 
 // Exact binding error messages requested
@@ -617,27 +618,17 @@ CONTROLLO VINCOLANTE:
     };
   }
 
-  const seed = (file.size % 90) / 100;
-  const simulatedKd = Number((1.25 + seed).toFixed(2));
-  let fallbackApproved = true;
-  let fallbackReason = `Voce esplicita "K/D" rilevata (${simulatedKd}) conforme alle regole del torneo.`;
-
-  if (minKd !== null && simulatedKd < minKd) {
-    fallbackApproved = false;
-    fallbackReason = `K/D rilevato di ${simulatedKd}, inferiore al minimo stabilito (${minKd}).`;
-  } else if (maxKd !== null && simulatedKd > maxKd) {
-    fallbackApproved = false;
-    fallbackReason = `K/D rilevato di ${simulatedKd}, superiore al massimo consentito (${maxKd}).`;
-  }
+  // STEP 5: Zero-Tolerance Check - Never guess or simulate KD data
+  await new Promise((r) => setTimeout(r, 400));
 
   return {
     is_authentic_game_screenshot: true,
-    valid_stats_image: true,
+    valid_stats_image: false,
     screen_type: "profile_kd",
-    kd_ratio: simulatedKd,
-    approved: fallbackApproved,
-    confidence: 93,
-    reason: fallbackReason,
+    kd_ratio: 0,
+    approved: false,
+    confidence: 0,
+    reason: REJECTION_REASON_NAME_NOT_FOUND,
   };
 }
 
@@ -730,7 +721,7 @@ export async function verifyMemberKdScreenshotWithAI(
   const finalApproved = isNameMatch && isKdOk;
   let finalReason = "";
   if (!isNameMatch) {
-    finalReason = `Discrepanza nome Activision: rilevato "${detectedTag}" diverso da "${cleanEntered}".`;
+    finalReason = REJECTION_REASON_NAME_NOT_FOUND;
   } else if (!isKdOk) {
     finalReason = kdReason;
   } else {
@@ -1048,69 +1039,9 @@ CONTROLLO VINCOLANTE SUL TIPO DI SCHERMATA:
     }
   }
 
-  // STEP 5: Safe Deterministic Simulation (never guesses without validation)
-  await new Promise((r) => setTimeout(r, 700));
-
-  // If user uploaded a KD profile screenshot in post-game, strictly reject
-  if (
-    (placementFile && isFilenameKdProfileScreen(placementFile.name)) ||
-    (killsFile && isFilenameKdProfileScreen(killsFile.name))
-  ) {
-    throw new Error(ERROR_KD_PROFILE_UPLOADED_FOR_POST_GAME);
-  }
-
-  const seed = targetFile.size % 10;
-  const simulatedPlacement = (seed % 3) + 1;
-
-  const names = registeredPlayerNames && registeredPlayerNames.length > 0
-    ? registeredPlayerNames
-    : ["Ghost_Killa", "Viper_CoD", "ShadowSniper"];
-
-  const simulatedPlayers: PlayerPostGameStats[] = names.map((name, idx) => {
-    const kills = 4 + ((seed + idx) % 4);
-    const rawElims = kills + 2 + (idx % 2);
-    return {
-      clan_tag: "",
-      player_name: name.split("#")[0],
-      kills,
-      raw_eliminations: rawElims,
-      assists_discarded: rawElims - kills,
-      damage: kills * 390 + 350,
-    };
-  });
-
-  const totalSimulatedKills = simulatedPlayers.reduce((acc, p) => acc + p.kills, 0);
-  const totalDiscardedAssists = simulatedPlayers.reduce((acc, p) => acc + (p.assists_discarded || 0), 0);
-  const calc = calculateTournamentScore(simulatedPlacement, totalSimulatedKills, scoringSettings);
-
-  const playerLines = simulatedPlayers.map((p) => {
-    return `• ${p.player_name}: ${p.kills} Uccisioni effettive [Scartati ${p.assists_discarded} assist da Eliminazioni]`;
-  });
-
-  const breakdownText = `👥 Dettaglio Squadra (Verifica Colonna "UCCISIONI"):\n${playerLines.join("\n")}\n⚔️ Totale Uccisioni Effettive: ${totalSimulatedKills}`;
-
-  return {
-    is_authentic_game_screenshot: true,
-    screen_type: "post_game",
-    placement: simulatedPlacement,
-    kills: totalSimulatedKills,
-    discarded_eliminations: totalDiscardedAssists,
-    players: simulatedPlayers,
-    player_breakdown_text: breakdownText,
-    damage: totalSimulatedKills * 380 + seed * 50,
-    confidence: 94,
-    placement_points: calc.placementPoints,
-    kill_points: calc.killPoints,
-    total_points: calc.totalPoints,
-    summary_message: calc.summaryMessage,
-    explanation: `⚠️ REGOLA RIGOROSA APPLICATA: IA Vision ha verificato la schermata dei Risultati di fine partita ed estratto UNICAMENTE la colonna "UCCISIONI" (${totalSimulatedKills} kills totali) e la posizione finale #${simulatedPlacement}. La colonna "Eliminazioni" (${totalDiscardedAssists} assist) è stata rigorosamente scartata.`,
-    scoring_mode: scoringMode,
-    strict_rules_applied: {
-      strictly_used_uccisioni: true,
-      discarded_eliminations_column: true,
-      registered_names_checked: true,
-    },
-  };
+  // STEP 5: Zero-Tolerance Rule - Never guess, simulate, or award fake kills/placement
+  // If the registered name was not verified or the screenshot is invalid, fail strictly.
+  throw new Error(REJECTION_REASON_NAME_NOT_FOUND);
 }
 
 export interface CommitPostGameScoreParams {
