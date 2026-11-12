@@ -228,11 +228,15 @@ CREATE TABLE IF NOT EXISTS public.direct_messages (
   sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   receiver_id UUID NOT NULL, -- Può essere user_id o clan_id
   content TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.direct_messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS idx_dm_sender ON public.direct_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_dm_receiver ON public.direct_messages(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_dm_is_read ON public.direct_messages(is_read);
 CREATE INDEX IF NOT EXISTS idx_dm_created_at ON public.direct_messages(created_at DESC);
 
 -- RLS Direct Messages
@@ -290,12 +294,16 @@ CREATE TABLE IF NOT EXISTS public.clan_direct_messages (
   receiver_is_clan BOOLEAN DEFAULT false,
   content TEXT NOT NULL,
   is_from_clan BOOLEAN DEFAULT false, -- True se inviato a nome del clan
+  is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+ALTER TABLE public.clan_direct_messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_clan_dm_clan ON public.clan_direct_messages(clan_id);
 CREATE INDEX IF NOT EXISTS idx_clan_dm_sender ON public.clan_direct_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_clan_dm_receiver ON public.clan_direct_messages(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_clan_dm_is_read ON public.clan_direct_messages(is_read);
 CREATE INDEX IF NOT EXISTS idx_clan_dm_created_at ON public.clan_direct_messages(created_at DESC);
 
 -- RLS Clan Direct Messages

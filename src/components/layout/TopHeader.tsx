@@ -14,6 +14,7 @@ export const TopHeader: React.FC = () => {
     userProfile,
     openAuthModal,
     unreadNotificationsCount,
+    unreadMessagesCount,
   } = useSquad();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -98,13 +99,18 @@ export const TopHeader: React.FC = () => {
             )}
           </button>
 
-          {/* Direct Messages Shortcut */}
+          {/* Direct Messages Shortcut with Unread Badge */}
           <button
             onClick={() => setActiveTab("messages")}
             title="Messaggi Diretti"
-            className="p-2 rounded-full bg-zinc-900/90 hover:bg-purple-950/70 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm"
+            className="p-2 rounded-full bg-zinc-900/90 hover:bg-purple-950/70 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative group"
           >
-            <Send className="w-4 h-4 rotate-12 text-zinc-400 hover:text-cyan-400 transition-colors" />
+            <Send className="w-4 h-4 rotate-12 text-zinc-400 group-hover:text-cyan-400 transition-colors" />
+            {unreadMessagesCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#0b0e17] shadow-[0_0_8px_rgba(244,63,94,0.6)]">
+                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+              </span>
+            )}
           </button>
 
           {/* User Avatar / Login Button */}

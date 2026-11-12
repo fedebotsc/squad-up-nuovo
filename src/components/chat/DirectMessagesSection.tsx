@@ -30,6 +30,7 @@ import {
   getStoredClanDirectMessages,
   storeClanDirectMessages,
   sendClanDirectMessage,
+  getLastReadTimestamp,
   ClanDirectMessage,
 } from "@/services/clanDirectChatService";
 
@@ -64,7 +65,17 @@ interface ConversationThread {
 }
 
 export const DirectMessagesSection: React.FC = () => {
-  const { currentUser, userProfile, openAuthModal, clanData, clanMembers } = useSquad();
+  const {
+    currentUser,
+    userProfile,
+    openAuthModal,
+    clanData,
+    clanMembers,
+    unreadPersonalCount,
+    unreadClanCount,
+    markConversationAsRead,
+    refreshUnreadMessagesCount,
+  } = useSquad();
 
   // Mode: "personal" (Personal 1-1 DMs) or "clan" (Clan Direct Messages Inbox)
   const [activeTabMode, setActiveTabMode] = useState<"personal" | "clan">("personal");
@@ -336,6 +347,7 @@ export const DirectMessagesSection: React.FC = () => {
   useEffect(() => {
     if (selectedPartner) {
       fetchMessages(selectedPartner);
+      markConversationAsRead(selectedPartner.id, selectedPartner.is_clan || activeTabMode === "clan");
 
       // Setup Realtime channels
       let dmChannel: any = null;
@@ -881,7 +893,7 @@ export const DirectMessagesSection: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 bg-[#0d101f] p-1 rounded-2xl border border-zinc-800">
               <button
                 onClick={() => setActiveTabMode("personal")}
-                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
                   activeTabMode === "personal"
                     ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md"
                     : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
@@ -889,11 +901,15 @@ export const DirectMessagesSection: React.FC = () => {
               >
                 <User className="w-3.5 h-3.5" />
                 <span>Direct Personali</span>
-                {personalThreads.length > 0 && (
+                {unreadPersonalCount > 0 ? (
+                  <span className="min-w-[18px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse border border-[#0d101f] shadow-sm">
+                    {unreadPersonalCount > 9 ? "9+" : unreadPersonalCount}
+                  </span>
+                ) : personalThreads.length > 0 ? (
                   <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 font-extrabold border border-purple-500/30">
                     {personalThreads.length}
                   </span>
-                )}
+                ) : null}
               </button>
 
               <button
@@ -913,9 +929,13 @@ export const DirectMessagesSection: React.FC = () => {
                 ) : (
                   <Lock className="w-3 h-3 text-zinc-500" />
                 )}
-                {clanThreads.length > 0 && (
+                {unreadClanCount > 0 ? (
+                  <span className="min-w-[18px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse border border-[#0d101f] shadow-sm">
+                    {unreadClanCount > 9 ? "9+" : unreadClanCount}
+                  </span>
+                ) : clanThreads.length > 0 ? (
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse absolute top-1.5 right-2" />
-                )}
+                ) : null}
               </button>
             </div>
 
@@ -1030,12 +1050,24 @@ export const DirectMessagesSection: React.FC = () => {
                   <span className="text-xs">Caricamento conversazioni...</span>
                 </div>
               ) : filteredThreads.length > 0 ? (
-                filteredThreads.map((thread) => (
-                  <div
-                    key={thread.partnerId}
-                    onClick={() => setSelectedPartner(thread.partner)}
-                    className="p-3 rounded-2xl bg-[#121628]/90 hover:bg-[#151a32] border border-purple-900/30 hover:border-purple-700/50 flex items-center justify-between gap-3 cursor-pointer transition-all shadow-md group"
-                  >
+                filteredThreads.map((thread) => {
+                  const isUnread =
+                    activeTabMode === "clan" && clanData
+                      ? new Date(thread.lastMessageAt).getTime() >
+                        getLastReadTimestamp(`clan_${clanData.id}_${thread.partnerId}`)
+                      : new Date(thread.lastMessageAt).getTime() >
+                        getLastReadTimestamp(`dm_${currentUser?.id}_${thread.partnerId}`);
+
+                  return (
+                    <div
+                      key={thread.partnerId}
+                      onClick={() => setSelectedPartner(thread.partner)}
+                      className={`p-3 rounded-2xl bg-[#121628]/90 hover:bg-[#151a32] border flex items-center justify-between gap-3 cursor-pointer transition-all shadow-md group ${
+                        isUnread
+                          ? "border-cyan-500/60 bg-[#161d36]/90 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                          : "border-purple-900/30 hover:border-purple-700/50"
+                      }`}
+                    >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative shrink-0">
                         <div
@@ -1085,13 +1117,15 @@ export const DirectMessagesSection: React.FC = () => {
                           )}
                         </div>
 
-                        <p className="text-[11px] text-zinc-400 truncate max-w-[190px] mt-0.5">
+                        <p className={`text-[11px] truncate max-w-[190px] mt-0.5 ${
+                          isUnread ? "text-white font-semibold" : "text-zinc-400"
+                        }`}>
                           {thread.lastMessage}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-0 flex flex-col items-end gap-1">
                       <span className="text-[10px] text-zinc-500 block">
                         {thread.lastMessageAt
                           ? new Date(thread.lastMessageAt).toLocaleTimeString([], {
@@ -1100,9 +1134,13 @@ export const DirectMessagesSection: React.FC = () => {
                             })
                           : ""}
                       </span>
+                      {isUnread && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e] animate-pulse" />
+                      )}
                     </div>
                   </div>
-                ))
+                );
+              })
               ) : (
                 <div className="bg-[#121628]/95 border border-purple-900/30 rounded-3xl p-8 text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-400 mx-auto">

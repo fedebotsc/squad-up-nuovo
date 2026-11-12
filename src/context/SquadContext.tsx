@@ -22,6 +22,13 @@ import {
   TENURE_REWARDS,
   calculateTenureMonths,
 } from "@/components/profile/tenureRewardsData";
+import {
+  canUserManageClanDirectChat,
+  getLastReadTimestamp,
+  markDirectMessagesAsRead,
+  markClanDirectMessagesAsRead,
+  calculateClanUnreadCount,
+} from "@/services/clanDirectChatService";
 
 export type NavTab = "home" | "tournaments" | "voice" | "messages" | "clan" | "shop" | "profile";
 export type TournamentSubTab = "active" | "match_room" | "leaderboard";
@@ -176,6 +183,13 @@ interface SquadContextType {
   unreadNotificationsCount: number;
   refreshNotificationsCount: () => Promise<void>;
 
+  // Unread Messages (Direct & Clan)
+  unreadMessagesCount: number;
+  unreadPersonalCount: number;
+  unreadClanCount: number;
+  refreshUnreadMessagesCount: () => Promise<void>;
+  markConversationAsRead: (partnerId: string, isClan?: boolean) => Promise<void>;
+
   // Universal Admin & Deletion
   isUniversalAdmin: boolean;
   deleteTournament: (tournamentId: string) => Promise<boolean>;
@@ -287,6 +301,140 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // non-blocking
     }
   }, []);
+
+  // Unread Messages state
+  const [unreadPersonalCount, setUnreadPersonalCount] = useState<number>(0);
+  const [unreadClanCount, setUnreadClanCount] = useState<number>(0);
+  const unreadMessagesCount = unreadPersonalCount + unreadClanCount;
+
+  const refreshUnreadMessagesCount = useCallback(async () => {
+    let uid = currentUser?.id;
+    if (!uid) {
+      const { data } = await supabase.auth.getUser();
+      uid = data?.user?.id;
+    }
+    if (!uid) {
+      setUnreadPersonalCount(0);
+      setUnreadClanCount(0);
+      return;
+    }
+
+    // 1. Calculate Personal Unread Messages
+    try {
+      const { data: dmData, error: dmErr } = await supabase
+        .from("direct_messages")
+        .select("id, sender_id, receiver_id, created_at, is_read")
+        .eq("receiver_id", uid)
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (!dmErr && dmData) {
+        let personalUnread = 0;
+        dmData.forEach((msg: any) => {
+          if (msg.is_read === false) {
+            personalUnread++;
+          } else if (msg.is_read === undefined || msg.is_read === null) {
+            const lastRead = getLastReadTimestamp(`dm_${uid}_${msg.sender_id}`);
+            const msgTime = new Date(msg.created_at).getTime();
+            if (msgTime > lastRead) {
+              personalUnread++;
+            }
+          }
+        });
+        setUnreadPersonalCount(personalUnread);
+      } else {
+        const { data: fallbackData } = await supabase
+          .from("direct_messages")
+          .select("id, sender_id, receiver_id, created_at")
+          .eq("receiver_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        if (fallbackData) {
+          let count = 0;
+          fallbackData.forEach((msg: any) => {
+            const lastRead = getLastReadTimestamp(`dm_${uid}_${msg.sender_id}`);
+            const msgTime = new Date(msg.created_at).getTime();
+            if (msgTime > lastRead) {
+              count++;
+            }
+          });
+          setUnreadPersonalCount(count);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Calculate Clan Unread Messages (if authorized)
+    if (clanData) {
+      const authCheck = canUserManageClanDirectChat(currentUser, clanData, clanMembers);
+      if (authCheck.authorized) {
+        const clanUnread = calculateClanUnreadCount(clanData.id);
+        setUnreadClanCount(clanUnread);
+      } else {
+        setUnreadClanCount(0);
+      }
+    } else {
+      setUnreadClanCount(0);
+    }
+  }, [currentUser, clanData, clanMembers]);
+
+  const markConversationAsRead = useCallback(
+    async (partnerId: string, isClan: boolean = false) => {
+      const uid = currentUser?.id;
+      if (!uid) return;
+
+      if (isClan && clanData) {
+        await markClanDirectMessagesAsRead(clanData.id, partnerId);
+        setUnreadClanCount((prev) => Math.max(0, prev - 1));
+      } else {
+        await markDirectMessagesAsRead(uid, partnerId);
+        setUnreadPersonalCount((prev) => Math.max(0, prev - 1));
+      }
+
+      refreshUnreadMessagesCount();
+    },
+    [currentUser, clanData, refreshUnreadMessagesCount]
+  );
+
+  // Subscribe to Realtime incoming DMs and Clan DMs
+  useEffect(() => {
+    refreshUnreadMessagesCount();
+
+    if (!currentUser) return;
+
+    const dmChannel = supabase
+      .channel(`unread_dm_sub_${currentUser.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "direct_messages",
+          filter: `receiver_id=eq.${currentUser.id}`,
+        },
+        () => {
+          refreshUnreadMessagesCount();
+        }
+      )
+      .subscribe();
+
+    let clanChannel: any = null;
+    if (clanData) {
+      clanChannel = supabase
+        .channel(`unread_clan_dm_sub_${clanData.id}`)
+        .on("broadcast", { event: "new_clan_dm" }, () => {
+          refreshUnreadMessagesCount();
+        })
+        .subscribe();
+    }
+
+    return () => {
+      supabase.removeChannel(dmChannel);
+      if (clanChannel) supabase.removeChannel(clanChannel);
+    };
+  }, [currentUser?.id, clanData?.id, refreshUnreadMessagesCount]);
 
   const agoraAppId = agoraVoiceService.getAppId();
   const isAgoraPlaceholder = agoraVoiceService.isAppIdPlaceholder();
@@ -2369,6 +2517,11 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         equipAvatarFrame,
         unreadNotificationsCount,
         refreshNotificationsCount,
+        unreadMessagesCount,
+        unreadPersonalCount,
+        unreadClanCount,
+        refreshUnreadMessagesCount,
+        markConversationAsRead,
         isUniversalAdmin: currentUser?.email?.toLowerCase() === "fedezdesimone@gmail.com",
         deleteTournament,
         deleteStory,

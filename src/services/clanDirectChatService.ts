@@ -245,6 +245,7 @@ export async function sendClanDirectMessage(params: {
       sender_id: params.senderId,
       receiver_id: params.receiverId,
       content: `[CLAN:${params.clanId}] ${params.content}`,
+      is_read: false,
     });
   } catch {
     // Ignore foreign key restrictions if receiver is clan ID
@@ -252,3 +253,106 @@ export async function sendClanDirectMessage(params: {
 
   return newMsg;
 }
+
+/**
+ * Returns the timestamp when the conversation with a given partner was last read
+ */
+export function getLastReadTimestamp(conversationKey: string): number {
+  try {
+    const raw = localStorage.getItem(`squadup_read_${conversationKey}`);
+    return raw ? parseInt(raw, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Updates the last read timestamp for a conversation
+ */
+export function setLastReadTimestamp(conversationKey: string, timestamp: number = Date.now()): void {
+  try {
+    localStorage.setItem(`squadup_read_${conversationKey}`, timestamp.toString());
+  } catch (e) {
+    console.warn("[ClanDirectChatService] Failed to set read timestamp", e);
+  }
+}
+
+/**
+ * Marks direct messages with an operator as read in Supabase and local cache
+ */
+export async function markDirectMessagesAsRead(currentUserId: string, partnerId: string): Promise<void> {
+  const convKey = `dm_${currentUserId}_${partnerId}`;
+  setLastReadTimestamp(convKey, Date.now());
+
+  // Try updating is_read column in Supabase direct_messages
+  try {
+    await supabase
+      .from("direct_messages")
+      .update({ is_read: true })
+      .eq("receiver_id", currentUserId)
+      .eq("sender_id", partnerId);
+  } catch {
+    // Column might not exist yet, local timestamp handles it
+  }
+}
+
+/**
+ * Marks clan direct messages from a partner as read
+ */
+export async function markClanDirectMessagesAsRead(clanId: string, partnerId: string): Promise<void> {
+  const convKey = `clan_${clanId}_${partnerId}`;
+  setLastReadTimestamp(convKey, Date.now());
+
+  // Also update stored local messages for the clan
+  try {
+    const clanMsgs = getStoredClanDirectMessages(clanId);
+    let modified = false;
+    clanMsgs.forEach((msg) => {
+      if (msg.clan_id === clanId && (msg.sender_id === partnerId || msg.receiver_id === partnerId)) {
+        (msg as any).is_read = true;
+        modified = true;
+      }
+    });
+    if (modified) {
+      storeClanDirectMessages(clanId, clanMsgs);
+    }
+  } catch {
+    // Ignore
+  }
+
+  // Also try Supabase clan_direct_messages if table exists
+  try {
+    await supabase
+      .from("clan_direct_messages")
+      .update({ is_read: true })
+      .eq("clan_id", clanId)
+      .eq("sender_id", partnerId);
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Calculates how many unread clan messages exist for a clan
+ */
+export function calculateClanUnreadCount(clanId: string): number {
+  try {
+    const clanMsgs = getStoredClanDirectMessages(clanId);
+    const incoming = clanMsgs.filter((m) => m.clan_id === clanId && !m.is_from_clan);
+
+    let unread = 0;
+    incoming.forEach((msg) => {
+      const partnerId = msg.sender_id;
+      const lastRead = getLastReadTimestamp(`clan_${clanId}_${partnerId}`);
+      const msgTime = new Date(msg.created_at).getTime();
+      if (msgTime > lastRead) {
+        unread++;
+      }
+    });
+
+    return unread;
+  } catch {
+    return 0;
+  }
+}
+

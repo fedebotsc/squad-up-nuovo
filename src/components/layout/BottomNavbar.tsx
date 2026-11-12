@@ -11,7 +11,7 @@ interface TabItem {
 }
 
 export const BottomNavbar: React.FC = () => {
-  const { activeTab, setActiveTab, activeVoiceRoomId, isMuted } = useSquad();
+  const { activeTab, setActiveTab, activeVoiceRoomId, isMuted, unreadClanCount } = useSquad();
 
   const tabs: TabItem[] = [
     {
@@ -35,6 +35,7 @@ export const BottomNavbar: React.FC = () => {
       id: "clan",
       label: "Clan",
       icon: Shield,
+      badge: unreadClanCount > 0 ? (unreadClanCount > 9 ? "9+" : `${unreadClanCount}`) : undefined,
     },
     {
       id: "shop",
