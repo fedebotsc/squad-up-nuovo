@@ -174,7 +174,7 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
               description: clanRow.description || "Clan competitivo attivo nei tornei ufficiali di SquadUP.",
               gameMode: clanRow.game_mode || "Warzone Competitivo",
               avatarUrl: clanRow.avatar_url,
-              bannerUrl: clanRow.banner_url,
+              bannerUrl: clanRow.clan_banner_url || clanRow.banner_url || null,
               clanFrameUrl: clanRow.clan_frame_url,
               tier: clanRow.tier || clanRow.subscription_tier || "base",
               isRecruiting: clanRow.is_recruiting ?? true,
@@ -273,25 +273,29 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
           </div>
         ) : clan ? (
           <div className="overflow-y-auto flex-1 pb-4">
-            {/* Clan Banner */}
-            <div className="relative h-28 sm:h-32 bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 overflow-hidden">
-              {clan.bannerUrl && (
+            {/* Clan Banner - Resized & Proportionate */}
+            <div className="relative w-full h-36 sm:h-44 md:h-48 bg-gradient-to-r from-cyan-950 via-indigo-950 to-purple-950 overflow-hidden shrink-0">
+              {clan.bannerUrl && (clan.bannerUrl.startsWith("http") || clan.bannerUrl.startsWith("/") || clan.bannerUrl.startsWith("data:")) ? (
                 <img
                   src={clan.bannerUrl}
                   alt="Banner Clan"
-                  className="w-full h-full object-cover opacity-80"
+                  className="w-full h-full object-cover object-center"
                 />
+              ) : clan.bannerUrl && clan.bannerUrl.includes("from-") ? (
+                <div className={`w-full h-full bg-gradient-to-r ${clan.bannerUrl}`} />
+              ) : (
+                <div className="w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/50 via-indigo-950 to-[#0e1224]" />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0e1224] via-transparent to-black/40" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0e1224] via-[#0e1224]/30 to-transparent pointer-events-none" />
             </div>
 
             {/* Emblem, Info & Actions */}
-            <div className="px-4 -mt-10 relative space-y-3">
+            <div className="px-4 -mt-8 sm:-mt-10 relative space-y-3">
               <div className="flex items-end justify-between gap-3">
                 {/* Clan Emblem */}
                 <div className="relative shrink-0">
                   <div
-                    className={`w-18 h-18 rounded-2xl overflow-hidden bg-gradient-to-tr from-purple-950 via-indigo-950 to-cyan-950 border-2 ${
+                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gradient-to-tr from-purple-950 via-indigo-950 to-cyan-950 border-2 ${
                       isElite
                         ? "border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
                         : isPro

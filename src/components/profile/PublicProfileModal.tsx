@@ -309,25 +309,29 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           </div>
         ) : profileData ? (
           <div className="overflow-y-auto flex-1 pb-4">
-            {/* Banner Section */}
-            <div className="relative h-28 sm:h-32 bg-gradient-to-r from-purple-900 via-indigo-900 to-black overflow-hidden">
-              {profileData.bannerUrl && (
+            {/* Banner Section - Resized & Properly Proportioned */}
+            <div className="relative w-full h-36 sm:h-44 md:h-48 bg-gradient-to-r from-purple-950 via-indigo-950 to-black overflow-hidden shrink-0">
+              {profileData.bannerUrl && (profileData.bannerUrl.startsWith("http") || profileData.bannerUrl.startsWith("/") || profileData.bannerUrl.startsWith("data:")) ? (
                 <img
                   src={profileData.bannerUrl}
                   alt="Banner"
-                  className="w-full h-full object-cover opacity-80"
+                  className="w-full h-full object-cover object-center"
                 />
+              ) : profileData.bannerUrl && profileData.bannerUrl.includes("from-") ? (
+                <div className={`w-full h-full bg-gradient-to-r ${profileData.bannerUrl}`} />
+              ) : (
+                <div className="w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-800/50 via-purple-950 to-[#0e1224]" />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0e1224] via-transparent to-black/40" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0e1224] via-[#0e1224]/30 to-transparent pointer-events-none" />
             </div>
 
             {/* Profile Avatar & Primary Details */}
-            <div className="px-4 -mt-10 relative space-y-3">
+            <div className="px-4 -mt-8 sm:-mt-10 relative space-y-3">
               <div className="flex items-end justify-between gap-3">
                 {/* Avatar with Frame */}
                 <div className="relative shrink-0">
                   <div
-                    className={`w-18 h-18 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
+                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
                       frameObj.borderClass
                     } ${frameObj.glowClass || ""} shadow-2xl ring-4 ring-[#0e1224]`}
                   >

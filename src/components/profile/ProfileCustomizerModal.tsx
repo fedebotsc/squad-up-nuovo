@@ -359,11 +359,15 @@ export const ProfileCustomizerModal: React.FC<ProfileCustomizerModalProps> = ({
 
               {userProfile.bannerUrl && (
                 <div className="w-full h-18 rounded-xl overflow-hidden border border-zinc-700 bg-black/60 relative">
-                  <img
-                    src={userProfile.bannerUrl}
-                    alt="Banner Attuale"
-                    className="w-full h-full object-cover"
-                  />
+                  {userProfile.bannerUrl.startsWith("http") || userProfile.bannerUrl.startsWith("/") || userProfile.bannerUrl.startsWith("data:") ? (
+                    <img
+                      src={userProfile.bannerUrl}
+                      alt="Banner Attuale"
+                      className="w-full h-full object-cover object-center"
+                    />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-r ${userProfile.bannerUrl}`} />
+                  )}
                   <span className="absolute bottom-1 right-1.5 text-[9px] bg-black/75 px-1.5 py-0.5 rounded text-zinc-300">
                     Attualmente Attivo
                   </span>

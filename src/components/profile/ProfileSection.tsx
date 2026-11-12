@@ -259,16 +259,18 @@ export const ProfileSection: React.FC = () => {
       <div className="relative rounded-3xl overflow-hidden border border-purple-500/50 bg-[#0d1022] shadow-2xl">
         {/* Profile Banner - Resized for optimal height and artwork display */}
         <div className="relative h-36 sm:h-44 w-full bg-gradient-to-r from-purple-900 to-indigo-950 overflow-hidden">
-          {userProfile.bannerUrl ? (
+          {userProfile.bannerUrl && (userProfile.bannerUrl.startsWith("http") || userProfile.bannerUrl.startsWith("/") || userProfile.bannerUrl.startsWith("data:")) ? (
             <img
               src={userProfile.bannerUrl}
               alt="Banner profilo"
-              className="w-full h-full object-cover opacity-90"
+              className="w-full h-full object-cover object-center opacity-90"
             />
+          ) : userProfile.bannerUrl && userProfile.bannerUrl.includes("from-") ? (
+            <div className={`w-full h-full bg-gradient-to-r ${userProfile.bannerUrl}`} />
           ) : (
             <div className="w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-800/40 via-purple-950 to-[#0d1022]" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1022] via-[#0d1022]/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1022] via-[#0d1022]/30 to-transparent pointer-events-none" />
 
           {/* Quick Customizer Icon button on Banner */}
           {currentUser && (
