@@ -15,6 +15,7 @@ import {
   Target,
   Award,
   ChevronRight,
+  MessageCircle,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,7 +70,30 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
     isFollowingClan,
     followClan,
     unfollowClan,
+    setActiveTab,
   } = useSquad();
+
+  const handleContactClan = () => {
+    if (!clan) return;
+    sessionStorage.setItem(
+      "squadup_target_chat",
+      JSON.stringify({
+        id: clan.id,
+        display_name: clan.name,
+        username: clan.tag,
+        avatar_url: clan.avatarUrl,
+        clan_tag: clan.tag,
+        is_clan: true,
+        tier: clan.tier,
+      })
+    );
+    onClose();
+    setActiveTab("messages");
+    toast({
+      title: "Chat Clan",
+      description: `Apertura chat diretta con il Clan [${clan.tag}] ${clan.name}...`,
+    });
+  };
 
   const [loading, setLoading] = useState(true);
   const [clan, setClan] = useState<ClanDetailData | null>(null);
@@ -292,7 +316,7 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
                   </div>
                 </div>
 
-                {/* Follow Clan Button */}
+                {/* Follow & Message Clan Buttons */}
                 <div className="flex items-center gap-2 mb-1">
                   <button
                     type="button"
@@ -317,6 +341,16 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
                         <span>Segui Clan</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleContactClan}
+                    className="p-2 rounded-xl bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 transition-colors cursor-pointer shadow-md flex items-center gap-1.5 px-3"
+                    title="Scrivi al Clan"
+                  >
+                    <MessageCircle className="w-4 h-4 text-cyan-300" />
+                    <span className="text-xs font-bold hidden sm:inline">Scrivi al Clan</span>
                   </button>
                 </div>
               </div>

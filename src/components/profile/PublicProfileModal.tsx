@@ -259,11 +259,24 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   };
 
   const handleSendMessage = () => {
+    if (profileData) {
+      sessionStorage.setItem(
+        "squadup_target_chat",
+        JSON.stringify({
+          id: profileData.id,
+          display_name: profileData.name,
+          username: profileData.tag.replace(/^@/, ""),
+          avatar_url: profileData.avatar,
+          clan_tag: profileData.clan?.tag,
+          is_clan: false,
+        })
+      );
+    }
     onClose();
     setActiveTab("messages");
     toast({
       title: "Messaggi Diretti",
-      description: `Avvia la chat con ${profileData?.name}.`,
+      description: `Avvio chat con ${profileData?.name}...`,
     });
   };
 

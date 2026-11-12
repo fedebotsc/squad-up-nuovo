@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Loader2,
   ExternalLink,
+  MessageCircle,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +47,7 @@ export const ExploreClansView: React.FC<ExploreClansViewProps> = () => {
     unfollowClan,
     openAuthModal,
     openClanDetail,
+    setActiveTab,
   } = useSquad();
 
   const [clans, setClans] = useState<ClanItem[]>([]);
@@ -285,30 +287,55 @@ export const ExploreClansView: React.FC<ExploreClansViewProps> = () => {
                     </div>
                   </div>
 
-                  {/* Follow Clan Button */}
-                  <button
-                    onClick={() => handleToggleFollow(clan.id)}
-                    disabled={isActionBusy}
-                    className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
-                      isFollowing
-                        ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700/80"
-                        : "bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-600/50 hover:text-white shadow-sm"
-                    }`}
-                  >
-                    {isActionBusy ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : isFollowing ? (
-                      <>
-                        <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Seguito</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-3.5 h-3.5 text-cyan-300" />
-                        <span>Segui</span>
-                      </>
-                    )}
-                  </button>
+                  {/* Clan Action Buttons */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sessionStorage.setItem(
+                          "squadup_target_chat",
+                          JSON.stringify({
+                            id: clan.id,
+                            display_name: clan.name,
+                            username: clan.tag,
+                            avatar_url: clan.avatar_url,
+                            clan_tag: clan.tag,
+                            is_clan: true,
+                            tier: clan.tier,
+                          })
+                        );
+                        setActiveTab("messages");
+                      }}
+                      className="p-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 hover:text-white hover:bg-cyan-900/60 transition-colors cursor-pointer"
+                      title="Scrivi al Clan"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleFollow(clan.id)}
+                      disabled={isActionBusy}
+                      className={`py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                        isFollowing
+                          ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700/80"
+                          : "bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-600/50 hover:text-white shadow-sm"
+                      }`}
+                    >
+                      {isActionBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isFollowing ? (
+                        <>
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Seguito</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-3.5 h-3.5 text-cyan-300" />
+                          <span>Segui</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Clan Bio/Description */}

@@ -14,6 +14,10 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { ClanData, ClanMember } from "@/data/mockData";
+import {
+  getClanRolePermissions,
+  setClanRolePermission,
+} from "@/services/clanDirectChatService";
 
 interface ClanRolesTabProps {
   clanData: ClanData;
@@ -30,6 +34,7 @@ interface CustomRole {
   color: string;
   can_publish: boolean;
   can_moderate: boolean;
+  can_manage_clan_chat?: boolean;
   created_at: string;
 }
 
@@ -62,6 +67,7 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
   const [roleColor, setRoleColor] = useState(PRESET_COLORS[0]);
   const [canPublish, setCanPublish] = useState(false);
   const [canModerate, setCanModerate] = useState(false);
+  const [canManageClanChat, setCanManageClanChat] = useState(false);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
 
   // Assigning role state
@@ -79,7 +85,12 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      setRoles(data || []);
+      const permsMap = getClanRolePermissions(clanData.id);
+      const enhancedRoles = (data || []).map((r: any) => ({
+        ...r,
+        can_manage_clan_chat: r.can_manage_clan_chat ?? permsMap[r.id]?.can_manage_clan_chat ?? false,
+      }));
+      setRoles(enhancedRoles);
     } catch (err: any) {
       console.error("[ClanRolesTab] Errore fetch ruoli:", err);
     } finally {
@@ -108,24 +119,56 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
 
     setIsCreatingRole(true);
     try {
-      const { error } = await supabase.from("clan_custom_roles").insert({
-        clan_id: clanData.id,
-        name: roleName.trim(),
-        color: roleColor,
-        can_publish: canPublish,
-        can_moderate: canModerate,
-      });
+      let createdRoleId: string | null = null;
+      // Try with can_manage_clan_chat column first
+      const { data: insertedData, error } = await supabase
+        .from("clan_custom_roles")
+        .insert({
+          clan_id: clanData.id,
+          name: roleName.trim(),
+          color: roleColor,
+          can_publish: canPublish,
+          can_moderate: canModerate,
+          can_manage_clan_chat: canManageClanChat,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        // Fallback without can_manage_clan_chat column if table schema is strict
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from("clan_custom_roles")
+          .insert({
+            clan_id: clanData.id,
+            name: roleName.trim(),
+            color: roleColor,
+            can_publish: canPublish,
+            can_moderate: canModerate,
+          })
+          .select()
+          .single();
+
+        if (fallbackErr) throw fallbackErr;
+        createdRoleId = fallbackData?.id || null;
+      } else {
+        createdRoleId = insertedData?.id || null;
+      }
+
+      if (createdRoleId) {
+        setClanRolePermission(clanData.id, createdRoleId, canManageClanChat);
+      }
 
       toast({
         title: "Ruolo Creato! ✨",
-        description: `Il ruolo "${roleName.trim()}" è ora disponibile per i membri del clan.`,
+        description: `Il ruolo "${roleName.trim()}" è ora disponibile per i membri del clan.${
+          canManageClanChat ? " (Include permessi Chat & Direct Clan)" : ""
+        }`,
       });
 
       setRoleName("");
       setCanPublish(false);
       setCanModerate(false);
+      setCanManageClanChat(false);
       setShowAddForm(false);
       await fetchRoles();
     } catch (err: any) {
@@ -138,6 +181,7 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
     } finally {
       setIsCreatingRole(false);
     }
+  };
   };
 
   const handleDeleteRole = async (roleId: string, roleTitle: string) => {
@@ -333,25 +377,58 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
               </div>
 
               {/* Permissions */}
-              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                <label className="flex items-center gap-1.5 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer">
+              <div className="space-y-1.5 pt-1 text-[11px]">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center gap-1.5 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-purple-500/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canPublish}
+                      onChange={(e) => setCanPublish(e.target.checked)}
+                      className="rounded text-purple-600 focus:ring-0"
+                    />
+                    <span>Pubblica Post</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer hover:border-purple-500/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={canModerate}
+                      onChange={(e) => setCanModerate(e.target.checked)}
+                      className="rounded text-purple-600 focus:ring-0"
+                    />
+                    <span>Modera Chat</span>
+                  </label>
+                </div>
+
+                <label className="flex items-start gap-2 p-2.5 rounded-xl bg-gradient-to-r from-purple-950/40 to-cyan-950/40 border border-cyan-500/40 text-cyan-200 cursor-pointer hover:border-cyan-400 transition-colors">
                   <input
                     type="checkbox"
-                    checked={canPublish}
-                    onChange={(e) => setCanPublish(e.target.checked)}
-                    className="rounded text-purple-600 focus:ring-0"
+                    checked={canManageClanChat}
+                    onChange={(e) => setCanManageClanChat(e.target.checked)}
+                    className="rounded text-cyan-500 focus:ring-0 mt-0.5"
                   />
-                  <span>Pubblica Post</span>
+                  <div>
+                    <span className="font-bold text-white block">💬 Gestione Chat & Direct Clan</span>
+                    <span className="text-[10px] text-zinc-400 block leading-tight">
+                      Autorizza a leggere e inviare risposte per conto del Clan nella sezione Direct Messaggi.
+                    </span>
+                  </div>
                 </label>
-                <label className="flex items-center gap-1.5 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={canModerate}
-                    onChange={(e) => setCanModerate(e.target.checked)}
-                    className="rounded text-purple-600 focus:ring-0"
-                  />
-                  <span>Modera Chat</span>
-                </label>
+              </div>
+
+              {/* Quick Template */}
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleName("Delegato Chat Clan");
+                    setRoleColor("#06B6D4");
+                    setCanManageClanChat(true);
+                    setCanModerate(true);
+                  }}
+                  className="text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  ⚡ Applica Template "Delegato Chat Clan"
+                </button>
               </div>
             </div>
 
@@ -385,10 +462,17 @@ export const ClanRolesTab: React.FC<ClanRolesTabProps> = ({
                   />
                   <div className="min-w-0">
                     <span className="text-xs font-bold text-white block truncate">{r.name}</span>
-                    <div className="flex items-center gap-1 text-[9px] text-zinc-400">
+                    <div className="flex items-center gap-1 text-[9px] text-zinc-400 flex-wrap">
+                      {r.can_manage_clan_chat && (
+                        <span className="text-cyan-400 font-semibold bg-cyan-950/60 px-1 rounded border border-cyan-500/30">
+                          Direct Clan ✓
+                        </span>
+                      )}
                       {r.can_publish && <span>Post ✓</span>}
                       {r.can_moderate && <span>Mod ✓</span>}
-                      {!r.can_publish && !r.can_moderate && <span>Membro Onorario</span>}
+                      {!r.can_publish && !r.can_moderate && !r.can_manage_clan_chat && (
+                        <span>Membro Onorario</span>
+                      )}
                     </div>
                   </div>
                 </div>
