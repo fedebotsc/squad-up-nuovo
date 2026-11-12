@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Dark Aether Metallic Gradients -->
+    <linearGradient id="daMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b3b44"/>
+      <stop offset="25%" stop-color="#18181f"/>
+      <stop offset="50%" stop-color="#2a2838"/>
+      <stop offset="75%" stop-color="#12101a"/>
+      <stop offset="100%" stop-color="#2e2c3b"/>
+    </linearGradient>
+    <linearGradient id="daPurpleGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="50%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="goldAmmo" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#ca8a04"/>
+      <stop offset="35%" stop-color="#fef08a"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#713f12"/>
+    </linearGradient>
+    <linearGradient id="steelTrim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#888c99"/>
+      <stop offset="50%" stop-color="#4a4d59"/>
+      <stop offset="100%" stop-color="#1a1c24"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="purpleAura" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="intenseGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Ambient Outer Energy Ring -->
+  <circle cx="250" cy="250" r="236" fill="none" stroke="rgba(168,85,247,0.3)" stroke-width="4" stroke-dasharray="16,8"/>
+  <circle cx="250" cy="250" r="230" fill="none" stroke="url(#daPurpleGlow)" stroke-width="3" filter="url(#purpleAura)" opacity="0.85"/>
+
+  <!-- Main Heavy Gunmetal Bezel -->
+  <path d="M 250 20 A 230 230 0 1 1 249.9 20 Z M 250 82 A 168 168 0 1 0 250.1 82 Z"
+        fill="url(#daMetal)" stroke="#1a1528" stroke-width="2"/>
+
+  <!-- Segmented Armored Rim Plates -->
+  <!-- Top Segment with Screws -->
+  <path d="M 170 32 Q 250 18 330 32 L 320 62 Q 250 50 180 62 Z" fill="#201c2b" stroke="url(#steelTrim)" stroke-width="2"/>
+  <circle cx="190" cy="47" r="4.5" fill="#0f0d14" stroke="#888c99" stroke-width="1.5"/>
+  <circle cx="310" cy="47" r="4.5" fill="#0f0d14" stroke="#888c99" stroke-width="1.5"/>
+
+  <!-- Stencil Text Top -->
+  <text x="250" y="44" font-family="'Impact', 'Arial Black', sans-serif" font-size="14" font-weight="900" fill="#f3e8ff" letter-spacing="4" text-anchor="middle">
+    CALL OF DUTY
+  </text>
+  <text x="250" y="56" font-family="'JetBrains Mono', monospace" font-size="8" font-weight="900" fill="#c084fc" letter-spacing="2" text-anchor="middle">
+    DARK AETHER // TAC-SPEC
+  </text>
+
+  <!-- Glowing LED Neon Conduits (Purple) -->
+  <g filter="url(#intenseGlow)">
+    <path d="M 120 75 Q 85 115 62 165" fill="none" stroke="#d946ef" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 380 75 Q 415 115 438 165" fill="none" stroke="#d946ef" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 45 220 Q 42 270 52 320" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 455 220 Q 458 270 448 320" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 90 380 Q 130 425 180 448" fill="none" stroke="#9333ea" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Left Armored Plate with Mil-Spec Serial -->
+  <path d="M 40 180 L 72 195 L 72 305 L 40 320 Z" fill="#1b1726" stroke="#4a425c" stroke-width="2"/>
+  <text x="-250" y="58" transform="rotate(-90)" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="900" fill="#d8b4fe" letter-spacing="3" text-anchor="middle">
+    SPEC-OPS // 9A-7740
+  </text>
+  <circle cx="56" cy="190" r="3" fill="#000" stroke="#888c99" stroke-width="1"/>
+  <circle cx="56" cy="310" r="3" fill="#000" stroke="#888c99" stroke-width="1"/>
+
+  <!-- Right Armored Plate -->
+  <path d="M 460 180 L 428 195 L 428 305 L 460 320 Z" fill="#1b1726" stroke="#4a425c" stroke-width="2"/>
+  <text x="250" y="-442" transform="rotate(90)" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="900" fill="#d8b4fe" letter-spacing="3" text-anchor="middle">
+    ZOMBIES // OUTBREAK
+  </text>
+  <circle cx="444" cy="190" r="3" fill="#000" stroke="#888c99" stroke-width="1"/>
+  <circle cx="444" cy="310" r="3" fill="#000" stroke="#888c99" stroke-width="1"/>
+
+  <!-- Bottom Crest Plate: Call of Duty Emblem -->
+  <path d="M 160 415 L 250 405 L 340 415 L 355 460 L 250 488 L 145 460 Z" fill="#140f21" stroke="url(#steelTrim)" stroke-width="3"/>
+  <path d="M 175 423 L 250 415 L 325 423 L 335 454 L 250 476 L 165 454 Z" fill="none" stroke="url(#daPurpleGlow)" stroke-width="1.5"/>
+
+  <!-- Bottom Cod Warzone Skull & III Glow -->
+  <text x="250" y="445" font-family="'Impact', 'Arial Black', sans-serif" font-size="22" font-weight="900" fill="#ffffff" letter-spacing="2" text-anchor="middle" filter="url(#purpleAura)">
+    WARZONE
+  </text>
+  <!-- Three Roman Numerals glowing purple -->
+  <rect x="236" y="454" width="6" height="14" rx="2" fill="#d946ef"/>
+  <rect x="247" y="454" width="6" height="14" rx="2" fill="#d946ef"/>
+  <rect x="258" y="454" width="6" height="14" rx="2" fill="#d946ef"/>
+
+  <!-- Hanging Dogtag with Chain (Bottom-Left) -->
+  <g transform="translate(68, 335) rotate(-18)">
+    <!-- Ball chain links -->
+    <circle cx="20" cy="10" r="2.5" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <circle cx="20" cy="18" r="2.5" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <circle cx="20" cy="26" r="2.5" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <circle cx="20" cy="34" r="2.5" fill="#cbd5e1" stroke="#475569" stroke-width="1"/>
+    <!-- Dogtag body -->
+    <rect x="4" y="38" width="46" height="74" rx="10" fill="#1e1b29" stroke="url(#steelTrim)" stroke-width="2.5"/>
+    <circle cx="27" cy="46" r="3.5" fill="#000" stroke="#64748b" stroke-width="1"/>
+    <!-- Ghost Skull Icon on dogtag -->
+    <path d="M 27 56 C 21 56 16 61 16 68 C 16 73 19 77 21 80 L 21 86 L 33 86 L 33 80 C 35 77 38 73 38 68 C 38 61 33 56 27 56 Z" fill="#d8b4fe"/>
+    <circle cx="22" cy="67" r="2" fill="#120e1f"/>
+    <circle cx="32" cy="67" r="2" fill="#120e1f"/>
+    <text x="27" y="96" font-family="'Impact', sans-serif" font-size="8" font-weight="900" fill="#c084fc" text-anchor="middle" letter-spacing="1">GHOST</text>
+    <text x="27" y="104" font-family="system-ui" font-size="7" font-weight="900" fill="#facc15" text-anchor="middle">★★★</text>
+  </g>
+
+  <!-- Golden Bullets in Tactical Band (Bottom-Right) -->
+  <g transform="translate(390, 340) rotate(22)">
+    <!-- Ammo 1 -->
+    <rect x="0" y="15" width="12" height="42" rx="2" fill="url(#goldAmmo)" stroke="#583101" stroke-width="1"/>
+    <polygon points="0,15 6,0 12,15" fill="#fde047" stroke="#713f12" stroke-width="1"/>
+    <rect x="-1" y="53" width="14" height="4" rx="1" fill="#854d0e"/>
+
+    <!-- Ammo 2 -->
+    <rect x="18" y="10" width="12" height="42" rx="2" fill="url(#goldAmmo)" stroke="#583101" stroke-width="1"/>
+    <polygon points="18,10 24,-5 30,10" fill="#fde047" stroke="#713f12" stroke-width="1"/>
+    <rect x="17" y="48" width="14" height="4" rx="1" fill="#854d0e"/>
+
+    <!-- Tactical Black Leather Retention Strap -->
+    <rect x="-4" y="26" width="38" height="15" rx="3" fill="#121016" stroke="#4a425c" stroke-width="1.5"/>
+    <circle cx="15" cy="33" r="2.5" fill="#71717a"/>
+  </g>
+
+  <!-- Inner Bezel Ring with Tech Screws -->
+  <circle cx="250" cy="250" r="172" fill="none" stroke="#2a2538" stroke-width="4"/>
+  <circle cx="250" cy="250" r="170" fill="none" stroke="rgba(168,85,247,0.4)" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="ghostBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020805"/>
+      <stop offset="35%" stop-color="#071b10"/>
+      <stop offset="70%" stop-color="#031109"/>
+      <stop offset="100%" stop-color="#010402"/>
+    </linearGradient>
+    <linearGradient id="nightVision" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="50%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#15803d"/>
+    </linearGradient>
+    <linearGradient id="goldRibbon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ca8a04"/>
+      <stop offset="50%" stop-color="#fef08a"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </linearGradient>
+    <!-- Scanline pattern -->
+    <pattern id="nvgScan" width="100" height="4" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="100" y2="0" stroke="rgba(34,197,94,0.08)" stroke-width="1.2"/>
+    </pattern>
+    <filter id="nvgGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1200" height="420" fill="url(#ghostBg)"/>
+  <rect width="1200" height="420" fill="url(#nvgScan)"/>
+
+  <!-- Verdansk Radar Outpost & Military Silhouettes -->
+  <g fill="#021208" opacity="0.8">
+    <!-- Radar Dish -->
+    <ellipse cx="140" cy="180" rx="70" ry="35" transform="rotate(-25 140 180)"/>
+    <rect x="135" y="180" width="10" height="110"/>
+    <polygon points="90,290 190,290 140,240"/>
+    <!-- Guard Towers -->
+    <rect x="230" y="160" width="30" height="130"/>
+    <polygon points="215,160 275,160 245,130"/>
+    <rect x="940" y="140" width="40" height="150"/>
+    <polygon points="920,140 1000,140 960,110"/>
+    <!-- Mountains -->
+    <polygon points="0,290 200,170 380,290"/>
+    <polygon points="800,290 980,180 1200,290"/>
+  </g>
+
+  <!-- Night-Vision Green Flares & Particles -->
+  <circle cx="280" cy="120" r="140" fill="rgba(34,197,94,0.12)" filter="url(#nvgGlow)"/>
+  <circle cx="920" cy="100" r="160" fill="rgba(34,197,94,0.15)" filter="url(#nvgGlow)"/>
+
+  <!-- Tactical HUD Grid Lines & Reticle Coordinates -->
+  <g stroke="rgba(74,222,128,0.25)" stroke-width="1">
+    <line x1="60" y1="50" x2="1140" y2="50"/>
+    <line x1="60" y1="360" x2="1140" y2="360"/>
+    <line x1="200" y1="40" x2="200" y2="60"/>
+    <line x1="600" y1="40" x2="600" y2="60"/>
+    <line x1="1000" y1="40" x2="1000" y2="60"/>
+    <!-- Targeting Crosshair in Center -->
+    <circle cx="600" cy="190" r="85" fill="none" stroke="rgba(34,197,94,0.3)" stroke-width="1.5" stroke-dasharray="10,6"/>
+    <line x1="600" y1="90" x2="600" y2="290" stroke="rgba(34,197,94,0.3)"/>
+    <line x1="500" y1="190" x2="700" y2="190" stroke="rgba(34,197,94,0.3)"/>
+  </g>
+
+  <!-- Left: Ghost Operator Silhouette with Skull Mask & Glowing Eyes -->
+  <g transform="translate(160, 110)">
+    <!-- Shoulders & Tactical Armor -->
+    <path d="M -80 230 L -50 140 L 0 110 L 50 140 L 80 230 Z" fill="#03160a" stroke="rgba(74,222,128,0.3)" stroke-width="2"/>
+    <!-- Skull Balaclava -->
+    <path d="M -30 110 C -30 65 30 65 30 110 C 30 135 25 155 0 160 C -25 155 -30 135 -30 110 Z" fill="#e2e8f0" stroke="#000" stroke-width="3"/>
+    <!-- Headset & Radio -->
+    <rect x="-38" y="85" width="10" height="30" rx="4" fill="#18181b"/>
+    <rect x="28" y="85" width="10" height="30" rx="4" fill="#18181b"/>
+    <path d="M 33 105 L 45 135 L 20 140" fill="none" stroke="#22c55e" stroke-width="2.5"/>
+    <!-- Skull Jaw & Teeth Engravings -->
+    <rect x="-14" y="138" width="5" height="12" fill="#020805"/>
+    <rect x="-6" y="138" width="5" height="14" fill="#020805"/>
+    <rect x="2" y="138" width="5" height="14" fill="#020805"/>
+    <rect x="10" y="138" width="5" height="12" fill="#020805"/>
+    <!-- Glowing Green NVG Eyes -->
+    <ellipse cx="-12" cy="104" rx="7" ry="5" fill="#22c55e" filter="url(#nvgGlow)"/>
+    <ellipse cx="12" cy="104" rx="7" ry="5" fill="#22c55e" filter="url(#nvgGlow)"/>
+    <circle cx="-12" cy="104" r="3" fill="#ffffff"/>
+    <circle cx="12" cy="104" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- Right: Tactical Assault Operator with NVG Quad-Monocular Goggles -->
+  <g transform="translate(1040, 110)">
+    <!-- Armor & Helmet -->
+    <path d="M -80 230 L -50 140 L 0 110 L 50 140 L 80 230 Z" fill="#03160a" stroke="rgba(74,222,128,0.3)" stroke-width="2"/>
+    <ellipse cx="0" cy="100" rx="35" ry="32" fill="#152618"/>
+    <!-- GPNVG-18 Quad NVG Tubes Glowing Green -->
+    <g filter="url(#nvgGlow)">
+      <circle cx="-24" cy="98" r="7" fill="#4ade80" stroke="#000" stroke-width="2"/>
+      <circle cx="-8" cy="98" r="7" fill="#4ade80" stroke="#000" stroke-width="2"/>
+      <circle cx="8" cy="98" r="7" fill="#4ade80" stroke="#000" stroke-width="2"/>
+      <circle cx="24" cy="98" r="7" fill="#4ade80" stroke="#000" stroke-width="2"/>
+    </g>
+    <!-- Tactical Biohazard Patch -->
+    <circle cx="50" cy="170" r="14" fill="#eab308"/>
+    <text x="50" y="174" font-family="'Impact'" font-size="12" fill="#000" text-anchor="middle">☢</text>
+  </g>
+
+  <!-- Helicopter Silhouette in Sky -->
+  <g transform="translate(740, 75) scale(0.65)">
+    <!-- Rotor Blade -->
+    <line x1="-120" y1="0" x2="120" y2="0" stroke="#4ade80" stroke-width="3" opacity="0.6"/>
+    <!-- Fuselage -->
+    <ellipse cx="0" cy="20" rx="55" ry="20" fill="#020f06"/>
+    <!-- Tail -->
+    <path d="M 50 20 L 140 10 L 140 -5 L 120 18 Z" fill="#020f06"/>
+    <line x1="140" y1="-15" x2="140" y2="25" stroke="#4ade80" stroke-width="2"/>
+  </g>
+
+  <!-- Center Big Bold Title: GHOST RECON // VERDANSK PROTOCOL -->
+  <g transform="translate(600, 185)">
+    <!-- Top COD Warzone Watermark -->
+    <text x="0" y="-70" font-family="'Impact', 'Arial Black', sans-serif" font-size="28" font-weight="900" fill="#f8fafc" letter-spacing="6" text-anchor="middle" opacity="0.9">
+      CALL OF DUTY: WARZONE
+    </text>
+    <!-- Main Big Title -->
+    <text x="0" y="-10" font-family="'Impact', 'Arial Black', sans-serif" font-size="64" font-weight="900" fill="#ffffff" letter-spacing="3" text-anchor="middle" filter="url(#nvgGlow)">
+      GHOST RECON
+    </text>
+    <text x="0" y="38" font-family="'Impact', 'Arial Black', sans-serif" font-size="34" font-weight="900" fill="#4ade80" letter-spacing="6" text-anchor="middle">
+      VERDANSK SHADOWS
+    </text>
+    <text x="0" y="65" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="900" fill="#86efac" letter-spacing="4" text-anchor="middle">
+      // NIGHT INFILTRATION // CLASSIFIED SPEC-OPS //
+    </text>
+  </g>
+
+  <!-- Bottom Tactical Mil-Spec HUD Ribbon -->
+  <g transform="translate(0, 370)">
+    <!-- Ribbon background plate -->
+    <polygon points="60,0 1140,0 1110,40 90,40" fill="#051c0d" stroke="url(#goldRibbon)" stroke-width="2"/>
+    <!-- Yellow warning chevron left -->
+    <polygon points="75,10 95,10 85,30 65,30" fill="#eab308"/>
+    <polygon points="98,10 118,10 108,30 88,30" fill="#eab308"/>
+    <text x="135" y="26" font-family="'Impact', sans-serif" font-size="16" font-weight="900" fill="#facc15" letter-spacing="2">
+      CALL OF DUTY
+    </text>
+    <!-- Center Slogan -->
+    <text x="600" y="25" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="900" fill="#f8fafc" letter-spacing="6" text-anchor="middle">
+      SURVIVE  •  LOOT  •  WIN
+    </text>
+    <!-- Right COD Badge -->
+    <text x="1035" y="26" font-family="'Impact', sans-serif" font-size="16" font-weight="900" fill="#4ade80" letter-spacing="2">
+      WARZONE
+    </text>
+    <!-- Yellow chevron right -->
+    <polygon points="1075,10 1095,10 1085,30 1065,30" fill="#eab308"/>
+    <polygon points="1098,10 1118,10 1108,30 1088,30" fill="#eab308"/>
+  </g>
+</svg>

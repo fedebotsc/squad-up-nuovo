@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Heavy Gold / Hazard Gradients -->
+    <linearGradient id="nukeGoldMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#422006"/>
+      <stop offset="25%" stop-color="#713f12"/>
+      <stop offset="50%" stop-color="#1c1917"/>
+      <stop offset="75%" stop-color="#854d0e"/>
+      <stop offset="100%" stop-color="#292524"/>
+    </linearGradient>
+    <linearGradient id="atomicGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#eab308"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <linearGradient id="goldPlate" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#ca8a04"/>
+      <stop offset="35%" stop-color="#fef08a"/>
+      <stop offset="70%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#713f12"/>
+    </linearGradient>
+    <pattern id="hazardStripe" width="20" height="20" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+      <rect width="10" height="20" fill="#eab308"/>
+      <rect x="10" width="10" height="20" fill="#18181b"/>
+    </pattern>
+    <filter id="nukeAura" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Pulsing Atomic Radiation Perimeter -->
+  <circle cx="250" cy="250" r="236" fill="none" stroke="rgba(234,179,8,0.3)" stroke-width="4" stroke-dasharray="14,8"/>
+  <circle cx="250" cy="250" r="230" fill="none" stroke="url(#atomicGlow)" stroke-width="3" filter="url(#nukeAura)" opacity="0.9"/>
+
+  <!-- Main Heavy Gunmetal & Gold Frame Body -->
+  <path d="M 250 20 A 230 230 0 1 1 249.9 20 Z M 250 82 A 168 168 0 1 0 250.1 82 Z"
+        fill="url(#nukeGoldMetal)" stroke="#09090b" stroke-width="2"/>
+
+  <!-- Top Segment: Tactical Nuke Stencil & Rivets -->
+  <path d="M 170 32 Q 250 18 330 32 L 320 62 Q 250 50 180 62 Z" fill="#27272a" stroke="url(#goldPlate)" stroke-width="2"/>
+  <circle cx="190" cy="47" r="4.5" fill="#09090b" stroke="#eab308" stroke-width="1.5"/>
+  <circle cx="310" cy="47" r="4.5" fill="#09090b" stroke="#eab308" stroke-width="1.5"/>
+
+  <text x="250" y="44" font-family="'Impact', 'Arial Black', sans-serif" font-size="14" font-weight="900" fill="#fef08a" letter-spacing="3" text-anchor="middle">
+    TACTICAL NUKE
+  </text>
+  <text x="250" y="56" font-family="'JetBrains Mono', monospace" font-size="8" font-weight="900" fill="#fb923c" letter-spacing="2" text-anchor="middle">
+    25 KILLSTREAK // HAZARD
+  </text>
+
+  <!-- Hazard Warning Stripes along upper arches -->
+  <path d="M 120 72 Q 90 110 68 158 L 84 165 Q 104 122 132 88 Z" fill="url(#hazardStripe)" stroke="#09090b" stroke-width="1.5"/>
+  <path d="M 380 72 Q 410 110 432 158 L 416 165 Q 396 122 368 88 Z" fill="url(#hazardStripe)" stroke="#09090b" stroke-width="1.5"/>
+
+  <!-- Glowing Amber/Yellow LED Slots -->
+  <g filter="url(#nukeAura)">
+    <rect x="42" y="210" width="8" height="40" rx="4" fill="#facc15"/>
+    <rect x="450" y="210" width="8" height="40" rx="4" fill="#facc15"/>
+    <rect x="75" y="340" width="30" height="8" rx="4" transform="rotate(-40 75 340)" fill="#f97316"/>
+    <rect x="395" y="360" width="30" height="8" rx="4" transform="rotate(40 395 360)" fill="#f97316"/>
+  </g>
+
+  <!-- Left Stencil Plate -->
+  <path d="M 40 180 L 72 195 L 72 305 L 40 320 Z" fill="#18181b" stroke="#713f12" stroke-width="2"/>
+  <text x="-250" y="58" transform="rotate(-90)" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="900" fill="#fef08a" letter-spacing="3" text-anchor="middle">
+    DEFCON 1 // ATOMIC
+  </text>
+
+  <!-- Right Stencil Plate -->
+  <path d="M 460 180 L 428 195 L 428 305 L 460 320 Z" fill="#18181b" stroke="#713f12" stroke-width="2"/>
+  <text x="250" y="-442" transform="rotate(90)" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="900" fill="#fef08a" letter-spacing="3" text-anchor="middle">
+    CALL OF DUTY // WARZONE
+  </text>
+
+  <!-- Bottom Heavy Nuclear Plate with Atomic Symbol -->
+  <path d="M 160 415 L 250 405 L 340 415 L 355 460 L 250 488 L 145 460 Z" fill="#1c1917" stroke="url(#goldPlate)" stroke-width="3"/>
+
+  <!-- Golden Atomic Symbol in Bottom Center -->
+  <g transform="translate(250, 448)">
+    <circle cx="0" cy="0" r="7" fill="#fde047" filter="url(#nukeAura)"/>
+    <!-- 3 Radiation Trefoil blades -->
+    <path d="M 0 0 L -8 -18 A 20 20 0 0 1 8 -18 Z" fill="#facc15"/>
+    <path d="M 0 0 L 19 2 A 20 20 0 0 1 12 16 Z" fill="#facc15"/>
+    <path d="M 0 0 L -12 16 A 20 20 0 0 1 -19 2 Z" fill="#facc15"/>
+    <circle cx="0" cy="0" r="4" fill="#09090b"/>
+  </g>
+  <text x="250" y="480" font-family="'Impact', sans-serif" font-size="11" font-weight="900" fill="#fef08a" letter-spacing="2" text-anchor="middle">
+    NUCLEAR STRIKE
+  </text>
+
+  <!-- Hanging Biohazard Dogtag (Bottom-Left) -->
+  <g transform="translate(68, 335) rotate(-15)">
+    <circle cx="20" cy="10" r="2.5" fill="#ca8a04"/>
+    <circle cx="20" cy="18" r="2.5" fill="#ca8a04"/>
+    <circle cx="20" cy="26" r="2.5" fill="#ca8a04"/>
+    <rect x="4" y="32" width="46" height="74" rx="10" fill="#1c1917" stroke="url(#goldPlate)" stroke-width="2.5"/>
+    <!-- Radiation skull inside -->
+    <circle cx="27" cy="40" r="3.5" fill="#09090b" stroke="#eab308" stroke-width="1"/>
+    <text x="27" y="65" font-family="'Impact', sans-serif" font-size="20" font-weight="900" fill="#fde047" text-anchor="middle">☢</text>
+    <text x="27" y="85" font-family="'Impact', sans-serif" font-size="8" font-weight="900" fill="#ffffff" text-anchor="middle">WARZONE</text>
+    <text x="27" y="96" font-family="system-ui" font-size="7" font-weight="900" fill="#eab308" text-anchor="middle">★★★</text>
+  </g>
+
+  <!-- Golden 50-Cal Bullets (Bottom-Right) -->
+  <g transform="translate(390, 340) rotate(22)">
+    <rect x="0" y="15" width="13" height="44" rx="2" fill="url(#goldPlate)" stroke="#713f12" stroke-width="1"/>
+    <polygon points="0,15 6.5,-2 13,15" fill="#fef08a" stroke="#713f12" stroke-width="1"/>
+    <rect x="20" y="10" width="13" height="44" rx="2" fill="url(#goldPlate)" stroke="#713f12" stroke-width="1"/>
+    <polygon points="20,10 26.5,-7 33,10" fill="#fef08a" stroke="#713f12" stroke-width="1"/>
+    <rect x="-4" y="26" width="42" height="16" rx="3" fill="#09090b" stroke="#ca8a04" stroke-width="1.5"/>
+    <circle cx="17" cy="34" r="2.5" fill="#eab308"/>
+  </g>
+
+  <!-- Inner Bezel Ring -->
+  <circle cx="250" cy="250" r="172" fill="none" stroke="#27272a" stroke-width="4"/>
+  <circle cx="250" cy="250" r="170" fill="none" stroke="rgba(234,179,8,0.5)" stroke-width="1.5"/>
+</svg>
