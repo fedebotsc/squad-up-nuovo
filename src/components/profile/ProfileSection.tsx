@@ -24,6 +24,10 @@ import {
   Award,
   ShoppingBag,
   UserCog,
+  Save,
+  Loader2,
+  CheckCircle2,
+  Edit3,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,9 +54,84 @@ export const ProfileSection: React.FC = () => {
     followedClanIds,
     setActiveTab: setSquadNavTab,
     openClanDetail,
+    refreshUserData,
   } = useSquad();
 
   const [followersCount, setFollowersCount] = useState<number>(0);
+
+  // Inline Profile Editing State (Nome Profilo & ID App / Activision ID)
+  const [profileNameInput, setProfileNameInput] = useState(userProfile.name || "");
+  const [activisionIdInput, setActivisionIdInput] = useState(
+    userProfile.activisionName || userProfile.activisionId || ""
+  );
+  const [isSavingInlineProfile, setIsSavingInlineProfile] = useState(false);
+
+  useEffect(() => {
+    setProfileNameInput(userProfile.name || "");
+    setActivisionIdInput(userProfile.activisionName || userProfile.activisionId || "");
+  }, [userProfile.name, userProfile.activisionName, userProfile.activisionId]);
+
+  const handleSaveInlineProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) {
+      openAuthModal("signup");
+      return;
+    }
+
+    const cleanName = profileNameInput.trim();
+    const cleanActId = activisionIdInput.trim();
+
+    if (!cleanName || cleanName.length < 3) {
+      toast({
+        title: "Nome non valido",
+        description: "Il Nome Profilo deve contenere almeno 3 caratteri.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingInlineProfile(true);
+    try {
+      let actName = cleanActId;
+      let actTag = "";
+      if (cleanActId.includes("#")) {
+        const parts = cleanActId.split("#");
+        actName = parts[0];
+        actTag = parts.slice(1).join("#");
+      }
+
+      const cleanUsername = cleanName.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({
+          display_name: cleanName,
+          username: cleanUsername,
+          activision_id: cleanActId || null,
+          activision_name: actName || "",
+          activision_tag: actTag || "",
+        })
+        .eq("id", currentUser.id);
+
+      if (updateErr) throw updateErr;
+
+      await refreshUserData();
+
+      toast({
+        title: "Profilo Salvato in Tempo Reale! ✅",
+        description: `Nome Profilo: ${cleanName} ${cleanActId ? `• Activision ID: ${cleanActId}` : ""}`,
+      });
+    } catch (err: any) {
+      console.error("[ProfileSection] Errore salvataggio profilo:", err);
+      toast({
+        title: "Errore salvataggio",
+        description: err.message || "Impossibile aggiornare il profilo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingInlineProfile(false);
+    }
+  };
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -340,6 +419,87 @@ export const ProfileSection: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* SEZIONE MODIFICA PROFILO IN TEMPO REALE (NOME PROFILO & ID APP / ACTIVISION ID) */}
+      {currentUser && (
+        <div className="bg-gradient-to-br from-[#12162c] via-[#0d1124] to-[#141026] border border-cyan-500/40 rounded-3xl p-4 shadow-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                <UserCog className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5">
+                  Modifica Profilo (ID App &amp; Nome)
+                </h3>
+                <p className="text-[10px] text-zinc-400">
+                  Aggiorna in tempo reale il tuo nome visibile e l&apos;Activision ID
+                </p>
+              </div>
+            </div>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 font-bold">
+              TEMPO REALE
+            </span>
+          </div>
+
+          <form onSubmit={handleSaveInlineProfile} className="space-y-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Campo Nome Profilo */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Nome Profilo (App ID)</span>
+                </label>
+                <input
+                  type="text"
+                  value={profileNameInput}
+                  onChange={(e) => setProfileNameInput(e.target.value)}
+                  placeholder="Il tuo nome su SquadUP..."
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-900/90 border border-purple-900/50 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all font-semibold"
+                />
+              </div>
+
+              {/* Campo ID App / Activision ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5">
+                  <Gamepad2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>ID App / Activision ID</span>
+                </label>
+                <input
+                  type="text"
+                  value={activisionIdInput}
+                  onChange={(e) => setActivisionIdInput(e.target.value)}
+                  placeholder="Es. Ghost_COD#9876543"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-900/90 border border-purple-900/50 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-zinc-500 italic">
+                I cambiamenti si rifletteranno subito su profilo, feed e lobby.
+              </span>
+              <button
+                type="submit"
+                disabled={isSavingInlineProfile || !profileNameInput.trim()}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all cursor-pointer"
+              >
+                {isSavingInlineProfile ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Salvataggio...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Salva Modifiche</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Universal Admin Card for fedezdesimone@gmail.com */}
       {isUniversalAdmin && (

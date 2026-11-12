@@ -357,8 +357,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           startsAt: searched.starts_at || "Stasera 21:00",
           mode: searched.game_mode || "Warzone Resurgence",
           banner: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&auto=format&fit=crop&q=80",
-          rules: "Kill Race e Bracket ufficiale",
-          participants: [],
+          description: "Kill Race e Bracket ufficiale",
         });
       }
     }

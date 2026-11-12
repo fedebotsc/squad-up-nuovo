@@ -237,30 +237,44 @@ export const PlayerReviewsModal: React.FC<PlayerReviewsModalProps> = ({
         <div className="my-3 rounded-2xl bg-gradient-to-br from-[#13172e] to-[#0c0f1c] border border-purple-500/30 p-3.5 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
-              {summary.reputation_badge || "Operatore Verificato"}
+              {summary.reputation_badge || "Operatore"}
             </span>
             <div className="flex items-center gap-1 text-xs font-black text-emerald-400">
-              <ThumbsUp className="w-3.5 h-3.5" />
-              <span>{summary.positive_percentage}% Positivi</span>
+              {summary.positive_percentage !== null ? (
+                <>
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  <span>{summary.positive_percentage}% Positivi</span>
+                </>
+              ) : (
+                <span className="text-zinc-500 text-[10px]">In attesa di voti</span>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2 text-center pt-1 border-t border-zinc-800/80 text-[10px]">
             <div>
               <span className="text-zinc-500 block">Mira</span>
-              <span className="font-extrabold text-white text-xs">{summary.skill_avg}/100</span>
+              <span className="font-extrabold text-white text-xs">
+                {summary.skill_avg !== null ? `${summary.skill_avg}/100` : "—"}
+              </span>
             </div>
             <div>
               <span className="text-zinc-500 block">Comms</span>
-              <span className="font-extrabold text-cyan-300 text-xs">{summary.communication_avg}/100</span>
+              <span className="font-extrabold text-cyan-300 text-xs">
+                {summary.communication_avg !== null ? `${summary.communication_avg}/100` : "—"}
+              </span>
             </div>
             <div>
               <span className="text-zinc-500 block">Team</span>
-              <span className="font-extrabold text-purple-300 text-xs">{summary.teamplay_avg}/100</span>
+              <span className="font-extrabold text-purple-300 text-xs">
+                {summary.teamplay_avg !== null ? `${summary.teamplay_avg}/100` : "—"}
+              </span>
             </div>
             <div>
               <span className="text-zinc-500 block">Fair Play</span>
-              <span className="font-extrabold text-emerald-300 text-xs">{summary.fair_play_avg}/100</span>
+              <span className="font-extrabold text-emerald-300 text-xs">
+                {summary.fair_play_avg !== null ? `${summary.fair_play_avg}/100` : "—"}
+              </span>
             </div>
           </div>
         </div>
@@ -276,7 +290,13 @@ export const PlayerReviewsModal: React.FC<PlayerReviewsModalProps> = ({
 
                 {!isSelf && (
                   <button
-                    onClick={() => setShowReviewForm(true)}
+                    onClick={() => {
+                      if (!hasProVoteAccess) {
+                        setShowPromoModal(true);
+                        return;
+                      }
+                      setShowReviewForm(true);
+                    }}
                     className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <Star className="w-3 h-3 text-amber-300 fill-amber-300" />
@@ -482,6 +502,15 @@ export const PlayerReviewsModal: React.FC<PlayerReviewsModalProps> = ({
             </form>
           )}
         </div>
+
+        {/* Pro Plus Promo Modal */}
+        <ProPlusPromoModal
+          isOpen={showPromoModal}
+          onClose={() => setShowPromoModal(false)}
+          onOpenSubscriptionModal={onOpenSubscriptionModal}
+          title="Vota con Player Pro o Clan Pro"
+          description="Rilasciare recensioni e badge di reputazione a giocatori o clan è riservato agli utenti in possesso di un abbonamento Player Pro o Clan Pro/Elite."
+        />
       </div>
     </div>
   );
