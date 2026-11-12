@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Bell,
@@ -238,7 +239,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
     return `${days}g fa`;
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 shadow-[0_0_35px_rgba(139,92,246,0.25)] overflow-hidden max-h-[85vh] flex flex-col mt-12 sm:mt-16">
         {/* Subtle Top Ambient Glow */}
@@ -435,6 +436,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

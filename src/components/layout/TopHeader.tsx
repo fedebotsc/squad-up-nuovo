@@ -139,34 +139,30 @@ export const TopHeader: React.FC = () => {
       </div>
 
       {/* Sleek Aligned & Responsive Global Search Bar */}
-      <div className="w-full max-w-5xl mx-auto px-3.5 sm:px-6 pb-3 pt-0.5">
+      <div className="w-full max-w-5xl mx-auto px-3.5 sm:px-6 pb-3 pt-0.5 relative">
         <form onSubmit={handleSearchSubmit} className="w-full flex items-center gap-2">
           {/* Search Input Container */}
           <div
-            onClick={() => setIsSearchOpen(true)}
-            className="relative flex-1 flex items-center min-w-0 rounded-xl bg-zinc-900/95 border border-purple-900/50 hover:border-cyan-500/50 focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400/40 text-xs shadow-inner transition-all group cursor-pointer"
+            className="relative flex-1 flex items-center min-w-0 rounded-xl bg-zinc-900/95 border border-purple-900/50 hover:border-cyan-500/50 focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400/40 text-xs shadow-inner transition-all group"
           >
             <Search className="w-4 h-4 text-cyan-400 ml-3 shrink-0 group-hover:scale-110 transition-transform" />
             <input
               type="text"
               value={headerQuery}
-              onChange={(e) => setHeaderQuery(e.target.value)}
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsSearchOpen(true);
+              onChange={(e) => {
+                setHeaderQuery(e.target.value);
+                if (!isSearchOpen) setIsSearchOpen(true);
               }}
+              onFocus={() => setIsSearchOpen(true)}
               placeholder="Cerca giocatori, tag clan [#TAG], tornei..."
-              className="w-full bg-transparent py-2 sm:py-2.5 px-2.5 text-xs text-white placeholder-zinc-400 focus:outline-none cursor-pointer"
-              readOnly
+              className="w-full bg-transparent py-2 sm:py-2.5 px-2.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
             />
             {headerQuery && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHeaderQuery("");
-                }}
-                className="p-1.5 mr-1 text-zinc-400 hover:text-white"
+                onClick={() => setHeaderQuery("")}
+                className="p-1.5 mr-1 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                title="Cancella ricerca"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -175,22 +171,32 @@ export const TopHeader: React.FC = () => {
 
           {/* Perfectly Aligned Search Action Button */}
           <button
-            type="submit"
-            onClick={() => setIsSearchOpen(true)}
+            type="button"
+            onClick={() => setIsSearchOpen((prev) => !prev)}
             className="shrink-0 h-9 sm:h-10 px-3.5 sm:px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-[0_0_12px_rgba(139,92,246,0.35)] transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
           >
-            <Search className="w-3.5 h-3.5 shrink-0" />
-            <span>Cerca</span>
+            {isSearchOpen ? (
+              <>
+                <X className="w-3.5 h-3.5 shrink-0" />
+                <span>Chiudi</span>
+              </>
+            ) : (
+              <>
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span>Cerca</span>
+              </>
+            )}
           </button>
         </form>
-      </div>
 
-      {/* Global Search Modal (Persone, Clan, Tornei) */}
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        initialQuery={headerQuery}
-      />
+        {/* Global Search Attached Dropdown View (Ancorato direttamente sotto la barra di ricerca) */}
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          searchQuery={headerQuery}
+          setSearchQuery={setHeaderQuery}
+        />
+      </div>
 
       {/* Notifications Drawer (Supabase notifications) */}
       <NotificationsDrawer

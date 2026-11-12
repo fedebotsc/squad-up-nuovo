@@ -14,12 +14,14 @@ import {
   Gamepad2,
   Coins,
   ChevronRight,
+  Flame,
 } from "lucide-react";
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialQuery?: string;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
 }
 
 type SearchCategory = "all" | "players" | "clans" | "tournaments";
@@ -30,7 +32,6 @@ interface SearchedPlayer {
   username?: string;
   tag: string;
   avatar_url?: string;
-  level: number;
   rank: string;
   activision_name?: string;
   subscription_tier?: string;
@@ -62,7 +63,8 @@ interface SearchedTournament {
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   isOpen,
   onClose,
-  initialQuery = "",
+  searchQuery,
+  setSearchQuery,
 }) => {
   const {
     currentUser,
@@ -81,17 +83,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     openClanDetail,
   } = useSquad();
 
-  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeCategory, setActiveCategory] = useState<SearchCategory>("all");
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      if (initialQuery) {
-        setSearchQuery(initialQuery);
-      }
-    }
-  }, [isOpen, initialQuery]);
 
   const [players, setPlayers] = useState<SearchedPlayer[]>([]);
   const [clans, setClans] = useState<SearchedClan[]>([]);
@@ -131,7 +124,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             username: p.username || "",
             tag: p.username ? `@${p.username}` : (p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ"),
             avatar_url: p.avatar_url,
-            level: p.subscription_tier === "pro" ? 50 : 15,
             rank: p.subscription_tier === "pro" ? "Pro Player" : "Competitor",
             activision_name: p.activision_id,
             subscription_tier: p.subscription_tier,
@@ -161,7 +153,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         );
       }
 
-      // 3. Suggested Tournaments (From DB or local state)
+      // 3. Suggested Tournaments
       const { data: tData } = await supabase
         .from("tournaments")
         .select("id, name, game_mode, type, status, entry_fee_sc, prize_description, starts_at")
@@ -204,7 +196,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const runSearch = async (term: string) => {
     setIsLoading(true);
     try {
-      // Clean query: remove leading @, #, or brackets
       const cleanTerm = term.trim().replace(/^[@#\[\]]/g, "").replace(/[\[\]]/g, "");
       const sanitized = `%${cleanTerm}%`;
       const rawSanitized = `%${term.trim()}%`;
@@ -225,7 +216,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             username: p.username || "",
             tag: p.username ? `@${p.username}` : (p.activision_id ? `#${p.activision_id.split("#")[1] || "COD"}` : "#SQ"),
             avatar_url: p.avatar_url,
-            level: p.subscription_tier === "pro" ? 50 : 12,
             rank: p.subscription_tier === "pro" ? "Pro Player" : "Competitor",
             activision_name: p.activision_id,
             subscription_tier: p.subscription_tier,
@@ -248,12 +238,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         ) {
           foundPlayers.unshift({
             id: currentUser.id,
-            name: userProfile?.name || cDisplayName || "Il Tuo Profilo",
-            username: cUsername || undefined,
-            tag: cUsername ? `@${cUsername}` : "#SQ",
+            name: userProfile?.name || "Tu",
+            username: userProfile?.activisionName?.split("#")[0] || "tu",
+            tag: userProfile?.activisionName ? `#${userProfile.activisionName.split("#")[1] || "COD"}` : "#TU",
             avatar_url: userProfile?.avatar || "",
-            level: userProfile?.level || 15,
-            rank: userProfile?.rank || "Competitor",
+            rank: userProfile?.subscriptionTier === "pro" ? "Pro Player" : "Competitor",
             activision_name: userProfile?.activisionName,
             subscription_tier: userProfile?.subscriptionTier,
             bio: userProfile?.bio,
@@ -263,44 +252,41 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       setPlayers(foundPlayers);
 
       // 2. Search Clans
+      let foundClans: SearchedClan[] = [];
       try {
-        const { data: cData } = await supabase
+        const { data: cData, error: cError } = await supabase
           .from("clans")
           .select("id, name, tag, game_mode, avatar_url, tier, description")
-          .or(`name.ilike.${sanitized},tag.ilike.${sanitized},description.ilike.${sanitized}`)
+          .or(`name.ilike.${sanitized},tag.ilike.${sanitized},tag.ilike.${rawSanitized}`)
           .limit(10);
 
-        if (cData) {
-          setClans(
-            cData.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              tag: c.tag,
-              game_mode: c.game_mode || "Warzone",
-              avatar_url: c.avatar_url,
-              tier: c.tier || "base",
-              members_count: 8,
-              description: c.description,
-            }))
-          );
-        } else {
-          setClans([]);
+        if (!cError && cData) {
+          foundClans = cData.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            tag: c.tag,
+            game_mode: c.game_mode || "Warzone",
+            avatar_url: c.avatar_url,
+            tier: c.tier || "base",
+            members_count: 8,
+            description: c.description,
+          }));
         }
       } catch (err) {
         console.warn("[GlobalSearch] Errore clans:", err);
-        setClans([]);
       }
+      setClans(foundClans);
 
-      // 3. Search Tournaments (Supabase + Local fallback)
+      // 3. Search Tournaments
       let foundTournaments: SearchedTournament[] = [];
       try {
-        const { data: tData } = await supabase
+        const { data: tData, error: tError } = await supabase
           .from("tournaments")
           .select("id, name, game_mode, type, status, entry_fee_sc, prize_description, starts_at")
-          .or(`name.ilike.${sanitized},game_mode.ilike.${sanitized},prize_description.ilike.${sanitized}`)
+          .or(`name.ilike.${sanitized},game_mode.ilike.${sanitized}`)
           .limit(10);
 
-        if (tData && tData.length > 0) {
+        if (!tError && tData) {
           foundTournaments = tData.map((t: any) => ({
             id: t.id,
             name: t.name,
@@ -395,108 +381,88 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const totalResults = players.length + clans.length + tournamentResults.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="bg-[#0f1322] border border-purple-900/50 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-6 flex flex-col max-h-[90vh]">
-        {/* Header & Search Bar */}
-        <div className="p-4 border-b border-purple-900/30 bg-[#121628]/95 space-y-3 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-                <Search className="w-4 h-4 text-cyan-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-white">Ricerca Globale SquadUP</h3>
-                <p className="text-[10px] text-zinc-400">
-                  Trova giocatori, tag clan o tornei competitivi
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+    <>
+      {/* Semi-transparent backdrop to close when clicking outside */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity"
+        onClick={onClose}
+      />
 
-          {/* Search Input Bar */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-cyan-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca nome giocatore, tag clan [#TAG], o torneo..."
-              autoFocus
-              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-zinc-900/90 border border-purple-900/50 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all shadow-inner"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
+      {/* Seamless Attached Dropdown Panel anchored right under the search bar */}
+      <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#0e1224] border border-cyan-500/50 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col max-h-[75vh] animate-in fade-in slide-in-from-top-2 duration-150">
+        {/* Dropdown Control Header */}
+        <div className="p-3 border-b border-purple-900/30 bg-[#12162a]/95 flex items-center justify-between gap-2 shrink-0">
           {/* Categories Pill Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs flex-1">
             <button
+              type="button"
               onClick={() => setActiveCategory("all")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all shrink-0 cursor-pointer ${
                 activeCategory === "all"
                   ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
               }`}
             >
               Tutti ({totalResults})
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory("players")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
                 activeCategory === "players"
                   ? "bg-purple-600 text-white shadow-sm"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3 h-3 text-cyan-400" />
               <span>Giocatori ({players.length})</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory("clans")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
                 activeCategory === "clans"
                   ? "bg-purple-600 text-white shadow-sm"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
               }`}
             >
-              <Shield className="w-3.5 h-3.5" />
+              <Shield className="w-3 h-3 text-cyan-400" />
               <span>Clan ({clans.length})</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory("tournaments")}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
                 activeCategory === "tournaments"
                   ? "bg-purple-600 text-white shadow-sm"
-                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                  : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
               }`}
             >
-              <Trophy className="w-3.5 h-3.5" />
+              <Trophy className="w-3 h-3 text-amber-400" />
               <span>Tornei ({tournamentResults.length})</span>
             </button>
           </div>
+
+          {/* Close X Button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
+            title="Chiudi ricerca"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Results Body */}
-        <div className="p-4 overflow-y-auto space-y-4 flex-1">
+        <div className="p-3 overflow-y-auto space-y-3 flex-1 scrollbar-thin scrollbar-thumb-zinc-700">
           {isLoading ? (
-            <div className="py-12 text-center space-y-2">
-              <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="py-10 text-center space-y-2">
+              <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-xs text-zinc-400">Ricerca in corso su SquadUP...</p>
             </div>
           ) : totalResults === 0 ? (
-            <div className="py-12 text-center space-y-2">
+            <div className="py-10 text-center space-y-2">
               <Search className="w-8 h-8 text-zinc-600 mx-auto" />
               <h4 className="text-xs font-bold text-zinc-300">Nessun risultato trovato</h4>
               <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
@@ -507,15 +473,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             <>
               {/* PLAYERS SECTION */}
               {(activeCategory === "all" || activeCategory === "players") && players.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-extrabold text-zinc-400 uppercase tracking-wider px-1">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider px-1">
                     <span className="flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-purple-400" />
                       Giocatori ({players.length})
                     </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {players.map((p) => {
                       const following = isFollowingUser(p.id);
                       const isSelf = currentUser?.id === p.id;
@@ -524,18 +490,18 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         <div
                           key={p.id}
                           onClick={() => handleSelectPlayer(p.id)}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
+                          className="p-2.5 rounded-xl bg-zinc-900/70 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-2.5 shadow-sm cursor-pointer group"
                         >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <div className="relative shrink-0">
                               {p.avatar_url ? (
                                 <img
                                   src={p.avatar_url}
                                   alt={p.name}
-                                  className="w-10 h-10 rounded-xl object-cover border border-purple-500/40"
+                                  className="w-9 h-9 rounded-xl object-cover border border-purple-500/40"
                                 />
                               ) : (
-                                <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-sm">
+                                <div className="w-9 h-9 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs">
                                   {p.name.slice(0, 2).toUpperCase()}
                                 </div>
                               )}
@@ -547,7 +513,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   {p.name}
                                 </h4>
                                 {p.username && (
-                                  <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/60 px-1 rounded border border-cyan-800/40">
+                                  <span className="text-[10px] font-mono text-cyan-400 font-bold bg-cyan-950/60 px-1 rounded border border-cyan-800/40">
                                     @{p.username}
                                   </span>
                                 )}
@@ -558,7 +524,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                              <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5">
                                 <span className="text-cyan-400">{p.rank}</span>
                                 {p.tag && p.tag !== `@${p.username}` && (
                                   <>
@@ -568,7 +534,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 )}
                               </div>
                               {p.activision_name && (
-                                <div className="flex items-center gap-1 text-[10px] text-cyan-300 mt-0.5">
+                                <div className="flex items-center gap-1 text-[10px] text-zinc-400">
                                   <Gamepad2 className="w-3 h-3 text-cyan-400 shrink-0" />
                                   <span className="truncate max-w-[150px]">{p.activision_name}</span>
                                 </div>
@@ -579,6 +545,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           {/* Follow Button */}
                           {!isSelf && (
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (following) {
@@ -587,20 +554,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   followUser(p.id);
                                 }
                               }}
-                              className={`py-1.5 px-3 rounded-xl font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                              className={`py-1 px-2.5 rounded-lg font-bold text-[11px] shrink-0 flex items-center gap-1 transition-all cursor-pointer ${
                                 following
                                   ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40"
-                                  : "bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]"
+                                  : "bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]"
                               }`}
                             >
                               {following ? (
                                 <>
-                                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                  <UserCheck className="w-3 h-3 text-emerald-400" />
                                   <span>Seguito</span>
                                 </>
                               ) : (
                                 <>
-                                  <UserPlus className="w-3.5 h-3.5" />
+                                  <UserPlus className="w-3 h-3" />
                                   <span>Segui</span>
                                 </>
                               )}
@@ -615,15 +582,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
               {/* CLANS SECTION */}
               {(activeCategory === "all" || activeCategory === "clans") && clans.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-extrabold text-zinc-400 uppercase tracking-wider px-1">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider px-1">
                     <span className="flex items-center gap-1.5">
                       <Shield className="w-3.5 h-3.5 text-cyan-400" />
                       Clan Competitivi ({clans.length})
                     </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {clans.map((clan) => {
                       const following = isFollowingClan(clan.id);
 
@@ -631,10 +598,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         <div
                           key={clan.id}
                           onClick={() => handleSelectClan(clan.id)}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
+                          className="p-2.5 rounded-xl bg-zinc-900/70 border border-purple-900/30 hover:border-cyan-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-2.5 shadow-sm cursor-pointer group"
                         >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs shrink-0 group-hover:scale-105 transition-transform">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl bg-purple-950/80 border border-purple-600/40 flex items-center justify-center text-purple-300 font-extrabold text-xs shrink-0 group-hover:scale-105 transition-transform">
                               [{clan.tag}]
                             </div>
 
@@ -659,7 +626,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[11px] text-zinc-400 block truncate">
+                              <span className="text-[10px] text-zinc-400 block truncate mt-0.5">
                                 {clan.game_mode} • {clan.description || "Clan competitivo SquadUP"}
                               </span>
                             </div>
@@ -667,6 +634,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                           {/* Follow Clan Button */}
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               if (following) {
@@ -675,20 +643,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 followClan(clan.id);
                               }
                             }}
-                            className={`py-1.5 px-3 rounded-xl font-bold text-xs shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                            className={`py-1 px-2.5 rounded-lg font-bold text-[11px] shrink-0 flex items-center gap-1 transition-all cursor-pointer ${
                               following
                                 ? "bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40"
-                                : "bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.4)]"
+                                : "bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_8px_rgba(6,182,212,0.4)]"
                             }`}
                           >
                             {following ? (
                               <>
-                                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                                <Shield className="w-3 h-3 text-emerald-400" />
                                 <span>Seguito</span>
                               </>
                             ) : (
                               <>
-                                <Shield className="w-3.5 h-3.5" />
+                                <Shield className="w-3 h-3" />
                                 <span>Segui</span>
                               </>
                             )}
@@ -703,24 +671,24 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               {/* TOURNAMENTS SECTION */}
               {(activeCategory === "all" || activeCategory === "tournaments") &&
                 tournamentResults.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-extrabold text-zinc-400 uppercase tracking-wider px-1">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider px-1">
                       <span className="flex items-center gap-1.5">
                         <Trophy className="w-3.5 h-3.5 text-amber-400" />
                         Tornei Competitivi ({tournamentResults.length})
                       </span>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {tournamentResults.map((t) => (
                         <div
                           key={t.id}
                           onClick={() => handleSelectTournament(t.id)}
-                          className="p-3 rounded-2xl bg-zinc-900/60 border border-purple-900/30 hover:border-amber-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-3 shadow-sm cursor-pointer group"
+                          className="p-2.5 rounded-xl bg-zinc-900/70 border border-purple-900/30 hover:border-amber-500/50 hover:bg-[#141930] transition-all flex items-center justify-between gap-2.5 shadow-sm cursor-pointer group"
                         >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
-                              <Trophy className="w-5 h-5" />
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                              <Trophy className="w-4 h-4" />
                             </div>
 
                             <div className="min-w-0">
@@ -728,24 +696,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 {t.name}
                               </h4>
                               <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
-                                <span className="text-cyan-400 font-semibold">{t.game_mode}</span>
+                                <span className="text-amber-400 font-semibold">{t.game_mode}</span>
                                 <span>•</span>
-                                <span className="flex items-center gap-1 text-amber-300 font-bold">
-                                  <Coins className="w-3 h-3" />
+                                <span className="text-purple-300">{t.type}</span>
+                                <span>•</span>
+                                <span className="font-bold text-emerald-400">
                                   {t.entry_fee_sc > 0 ? `${t.entry_fee_sc} SC` : "Gratuito"}
                                 </span>
                               </div>
-                              {t.prize_description && (
-                                <p className="text-[10px] text-zinc-400 truncate max-w-[200px] mt-0.5">
-                                  Montepremi: {t.prize_description}
-                                </p>
-                              )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1 text-xs font-bold text-cyan-400 shrink-0 group-hover:text-amber-300 transition-colors">
-                            <span>Apri Torneo</span>
-                            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          <div className="flex items-center gap-1 shrink-0 text-cyan-400 text-xs font-bold group-hover:translate-x-0.5 transition-transform">
+                            <span>Vedi</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
                           </div>
                         </div>
                       ))}
@@ -756,6 +720,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 };
