@@ -293,10 +293,29 @@ export const ClanDetailModal: React.FC<ClanDetailModalProps> = ({
             <div className="px-4 -mt-8 sm:-mt-10 relative space-y-3">
               <div className="flex items-end justify-between gap-3">
                 {/* Clan Emblem */}
-                <div className="relative shrink-0">
+                <div className="relative shrink-0 w-16 h-16 sm:w-20 sm:h-20">
+                  {clan.clanFrameUrl && (
+                    clan.clanFrameUrl.startsWith("#") ? (
+                      <div
+                        className="absolute -inset-1.5 rounded-2xl pointer-events-none z-10 border-2"
+                        style={{
+                          borderColor: clan.clanFrameUrl,
+                          boxShadow: `0 0 12px ${clan.clanFrameUrl}90`,
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={clan.clanFrameUrl}
+                        alt="Cornice Clan"
+                        className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.7)]"
+                      />
+                    )
+                  )}
                   <div
-                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gradient-to-tr from-purple-950 via-indigo-950 to-cyan-950 border-2 ${
-                      isElite
+                    className={`w-full h-full rounded-2xl overflow-hidden bg-gradient-to-tr from-purple-950 via-indigo-950 to-cyan-950 border-2 ${
+                      clan.clanFrameUrl && !clan.clanFrameUrl.startsWith("#")
+                        ? "border-transparent"
+                        : isElite
                         ? "border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
                         : isPro
                         ? "border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.4)]"

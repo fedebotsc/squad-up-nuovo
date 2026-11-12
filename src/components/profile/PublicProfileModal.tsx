@@ -280,7 +280,16 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
     });
   };
 
+  const customFrameUrl =
+    profileData?.activeFrame &&
+    (profileData.activeFrame.startsWith("http") ||
+      profileData.activeFrame.startsWith("/") ||
+      profileData.activeFrame.startsWith("data:"))
+      ? profileData.activeFrame
+      : null;
+
   const frameObj = AVATAR_FRAMES.find((f) => f.id === profileData?.activeFrame) || AVATAR_FRAMES[0];
+  const effectiveFrameOverlay = customFrameUrl || frameObj?.frameUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
@@ -329,11 +338,18 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
             <div className="px-4 -mt-8 sm:-mt-10 relative space-y-3">
               <div className="flex items-end justify-between gap-3">
                 {/* Avatar with Frame */}
-                <div className="relative shrink-0">
+                <div className="relative shrink-0 w-16 h-16 sm:w-20 sm:h-20">
+                  {effectiveFrameOverlay && (
+                    <img
+                      src={effectiveFrameOverlay}
+                      alt="Cornice Avatar"
+                      className="absolute -inset-3 w-[calc(100%+24px)] h-[calc(100%+24px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_12px_rgba(168,85,247,0.7)]"
+                    />
+                  )}
                   <div
-                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
-                      frameObj.borderClass
-                    } ${frameObj.glowClass || ""} shadow-2xl ring-4 ring-[#0e1224]`}
+                    className={`w-full h-full rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
+                      effectiveFrameOverlay ? "border-transparent" : frameObj.borderClass
+                    } ${effectiveFrameOverlay ? "" : (frameObj.glowClass || "")} shadow-2xl ring-4 ring-[#0e1224]`}
                   >
                     {profileData.avatarUrl ? (
                       <img

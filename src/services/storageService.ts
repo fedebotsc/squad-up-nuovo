@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type UploadTarget =
   | "avatar"
   | "banner"
+  | "frame"
   | "clan-logo"
   | "clan-banner"
   | "clan-frame"
@@ -67,6 +68,9 @@ export async function uploadMediaFile(
   } else if (target === "banner") {
     bucketsToTry = ["banners", "social-media", "avatars"];
     filename = `banner_${timestamp}.${ext}`;
+  } else if (target === "frame") {
+    bucketsToTry = ["avatars", "social-media", "banners", "clan-media"];
+    filename = `frame_${timestamp}.${ext}`;
   } else if (target === "clan-logo") {
     bucketsToTry = ["clan-media", "avatars", "social-media"];
     filename = `clan_logo_${extraId || "clan"}_${timestamp}.${ext}`;

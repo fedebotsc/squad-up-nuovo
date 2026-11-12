@@ -684,21 +684,31 @@ export const HomeSection: React.FC = () => {
                     >
                       <div className="relative shrink-0">
                         {post.clan.clanFrameUrl && (
-                          <div
-                            className="absolute -inset-1 rounded-xl pointer-events-none z-10 border-2"
-                            style={{
-                              borderColor:
-                                post.clan.tier === "elite"
-                                  ? "#F59E0B"
-                                  : post.clan.tier === "pro"
-                                  ? "#A855F7"
-                                  : "#06B6D4",
-                              boxShadow:
-                                post.clan.tier === "elite"
-                                  ? "0 0 10px rgba(245,158,11,0.5)"
-                                  : "0 0 8px rgba(6,182,212,0.4)",
-                            }}
-                          />
+                          post.clan.clanFrameUrl.startsWith("http") || post.clan.clanFrameUrl.startsWith("/") || post.clan.clanFrameUrl.startsWith("data:") ? (
+                            <img
+                              src={post.clan.clanFrameUrl}
+                              alt="Cornice Clan"
+                              className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]"
+                            />
+                          ) : (
+                            <div
+                              className="absolute -inset-1 rounded-xl pointer-events-none z-10 border-2"
+                              style={{
+                                borderColor:
+                                  post.clan.clanFrameUrl.startsWith("#")
+                                    ? post.clan.clanFrameUrl
+                                    : post.clan.tier === "elite"
+                                    ? "#F59E0B"
+                                    : post.clan.tier === "pro"
+                                    ? "#A855F7"
+                                    : "#06B6D4",
+                                boxShadow:
+                                  post.clan.tier === "elite"
+                                    ? "0 0 10px rgba(245,158,11,0.5)"
+                                    : "0 0 8px rgba(6,182,212,0.4)",
+                              }}
+                            />
+                          )
                         )}
                         {post.clan.avatarUrl ? (
                           <img
@@ -752,17 +762,27 @@ export const HomeSection: React.FC = () => {
                       className="flex items-center gap-2.5 min-w-0 cursor-pointer group/author"
                       title="Visualizza profilo giocatore"
                     >
-                      {post.author.avatar ? (
-                        <img
-                          src={post.author.avatar}
-                          alt={post.author.name}
-                          className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shrink-0 group-hover/author:border-cyan-400 transition-colors"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs shrink-0 group-hover/author:border-cyan-400 transition-colors">
-                          {post.author.name.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
+                      <div className="relative shrink-0 w-10 h-10">
+                        {((post.author as any)?.activeFrame || (post.author as any)?.avatarFrame) &&
+                          String((post.author as any)?.activeFrame || (post.author as any)?.avatarFrame).startsWith("http") && (
+                            <img
+                              src={(post.author as any)?.activeFrame || (post.author as any)?.avatarFrame}
+                              alt="Cornice"
+                              className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_8px_rgba(168,85,247,0.7)]"
+                            />
+                          )}
+                        {post.author.avatar ? (
+                          <img
+                            src={post.author.avatar}
+                            alt={post.author.name}
+                            className="w-full h-full rounded-xl object-cover border border-purple-500/40 group-hover/author:border-cyan-400 transition-colors"
+                          />
+                        ) : (
+                          <div className="w-full h-full rounded-xl bg-purple-950 flex items-center justify-center border border-purple-700/40 text-purple-300 font-bold text-xs group-hover/author:border-cyan-400 transition-colors">
+                            {post.author.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">

@@ -21,10 +21,21 @@ export const TopHeader: React.FC = () => {
   const [headerQuery, setHeaderQuery] = useState("");
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  const frameBorder =
-    (Array.isArray(AVATAR_FRAMES) &&
-      AVATAR_FRAMES.find((f) => f.id === userProfile?.avatarFrame)?.borderClass) ||
-    "border-purple-500/60";
+  const customFrameUrl =
+    userProfile?.avatarFrame &&
+    (userProfile.avatarFrame.startsWith("http") ||
+      userProfile.avatarFrame.startsWith("/") ||
+      userProfile.avatarFrame.startsWith("data:"))
+      ? userProfile.avatarFrame
+      : null;
+
+  const frameObj =
+    Array.isArray(AVATAR_FRAMES)
+      ? AVATAR_FRAMES.find((f) => f.id === userProfile?.avatarFrame)
+      : null;
+
+  const frameBorder = frameObj?.borderClass || "border-purple-500/60";
+  const effectiveHeaderFrame = customFrameUrl || frameObj?.frameUrl;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,19 +129,32 @@ export const TopHeader: React.FC = () => {
             <button
               onClick={() => setActiveTab("profile")}
               title={userProfile.name}
-              className={`w-8 h-8 rounded-full overflow-hidden border-2 ${frameBorder} bg-purple-950 flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform`}
+              className="relative w-8 h-8 rounded-full flex items-center justify-center text-purple-300 cursor-pointer shadow-sm hover:scale-105 transition-transform"
             >
-              {userProfile.avatar ? (
+              {effectiveHeaderFrame && (
                 <img
-                  src={userProfile.avatar}
-                  alt={userProfile.name}
-                  className="w-full h-full object-cover"
+                  src={effectiveHeaderFrame}
+                  alt="Cornice"
+                  className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_6px_rgba(168,85,247,0.8)]"
                 />
-              ) : (
-                <span className="text-[11px] font-bold">
-                  {userProfile.name.slice(0, 2).toUpperCase()}
-                </span>
               )}
+              <div
+                className={`w-full h-full rounded-full overflow-hidden border-2 ${
+                  effectiveHeaderFrame ? "border-transparent" : frameBorder
+                } bg-purple-950 flex items-center justify-center`}
+              >
+                {userProfile.avatar ? (
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[11px] font-bold">
+                    {userProfile.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
             </button>
           ) : (
             <button

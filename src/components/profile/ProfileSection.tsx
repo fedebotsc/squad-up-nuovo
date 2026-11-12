@@ -214,10 +214,20 @@ export const ProfileSection: React.FC = () => {
   };
 
   const isPro = userProfile.subscriptionTier === "pro";
+  const customFrameUrl =
+    userProfile.avatarFrame &&
+    (userProfile.avatarFrame.startsWith("http") ||
+      userProfile.avatarFrame.startsWith("/") ||
+      userProfile.avatarFrame.startsWith("data:"))
+      ? userProfile.avatarFrame
+      : null;
+
   const frameObj =
     (Array.isArray(AVATAR_FRAMES) &&
       AVATAR_FRAMES.find((f) => f.id === userProfile.avatarFrame)) ||
     AVATAR_FRAMES?.[0] || { borderClass: "border-purple-500", glowClass: "" };
+
+  const effectiveFrameOverlay = customFrameUrl || frameObj?.frameUrl;
 
   return (
     <div className="pb-24 pt-2 w-full max-w-4xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
@@ -290,11 +300,18 @@ export const ProfileSection: React.FC = () => {
           <div className="flex items-end justify-between gap-3">
             <div className="flex items-end gap-3 min-w-0">
               {/* Avatar with Custom Frame & Glow */}
-              <div className="relative shrink-0">
+              <div className="relative shrink-0 w-14 h-14 sm:w-16 sm:h-16">
+                {effectiveFrameOverlay && (
+                  <img
+                    src={effectiveFrameOverlay}
+                    alt="Cornice Avatar"
+                    className="absolute -inset-2.5 w-[calc(100%+20px)] h-[calc(100%+20px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_12px_rgba(168,85,247,0.7)]"
+                  />
+                )}
                 <div
-                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
-                    frameObj.borderClass
-                  } ${frameObj.glowClass || ""} shadow-xl ring-2 ring-[#0d1022]`}
+                  className={`w-full h-full rounded-2xl overflow-hidden bg-purple-950/90 border-2 ${
+                    effectiveFrameOverlay ? "border-transparent" : frameObj.borderClass
+                  } ${effectiveFrameOverlay ? "" : (frameObj.glowClass || "")} shadow-xl ring-2 ring-[#0d1022]`}
                 >
                   {userProfile.avatar ? (
                     <img

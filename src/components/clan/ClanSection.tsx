@@ -280,13 +280,21 @@ export const ClanSection: React.FC = () => {
             <div className="relative shrink-0">
               {/* Equipped Clan Frame around Logo */}
               {clanData.clanFrameUrl && (
-                <div
-                  className="absolute -inset-1.5 rounded-2xl pointer-events-none z-10 border-2"
-                  style={{
-                    borderColor: clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4",
-                    boxShadow: `0 0 12px ${clanData.clanFrameUrl.startsWith("#") ? clanData.clanFrameUrl : "#06B6D4"}90`,
-                  }}
-                />
+                clanData.clanFrameUrl.startsWith("#") ? (
+                  <div
+                    className="absolute -inset-1.5 rounded-2xl pointer-events-none z-10 border-2"
+                    style={{
+                      borderColor: clanData.clanFrameUrl,
+                      boxShadow: `0 0 12px ${clanData.clanFrameUrl}90`,
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={clanData.clanFrameUrl}
+                    alt="Cornice Clan"
+                    className="absolute -inset-2.5 w-[calc(100%+20px)] h-[calc(100%+20px)] max-w-none pointer-events-none z-10 object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.7)]"
+                  />
+                )
               )}
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 p-0.5 shadow-[0_0_15px_rgba(139,92,246,0.5)]">
                 <div className="w-full h-full bg-[#0d1120] rounded-[14px] flex items-center justify-center overflow-hidden">
