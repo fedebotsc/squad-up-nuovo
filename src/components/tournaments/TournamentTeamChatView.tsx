@@ -30,6 +30,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useSquad } from "@/context/SquadContext";
 import { toast } from "@/components/ui/use-toast";
+import { moderateContentWithGemini } from "@/services/geminiModerationService";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 import {
   uploadTournamentProof,
   verifyKDProofWithAI,
@@ -101,6 +103,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
   const [messages, setMessages] = useState<any[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [chatModerationError, setChatModerationError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // KD AI verification state
@@ -166,24 +169,54 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     };
   }, [chat.id]);
 
-  // Send standard chat message
+  // Send standard chat message with Gemini 2.5 Flash pre-moderation
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageInput.trim() || !currentUser) return;
 
     const content = messageInput.trim();
-    setMessageInput("");
     setIsSending(true);
+    setChatModerationError(null);
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text: content,
+      contextType: "chat",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[TournamentTeamChat] Bloccato da Gemini 2.5 Flash:", moderation.reason);
+      setChatModerationError(moderation.reason);
+      setIsSending(false);
+      toast({
+        title: "Messaggio Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMessageInput("");
 
     try {
-      const { error } = await supabase.from("tournament_chat_messages").insert({
+      const insertPayload: any = {
         chat_id: chat.id,
         sender_id: currentUser.id,
         message_type: "text",
         content,
-      });
+        moderation_status: "approved",
+      };
+
+      let { error } = await supabase.from("tournament_chat_messages").insert(insertPayload);
+
+      if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+        delete insertPayload.moderation_status;
+        const retry = await supabase.from("tournament_chat_messages").insert(insertPayload);
+        error = retry.error;
+      }
 
       if (error) throw error;
+      setChatModerationError(null);
       loadMessages();
     } catch (err: any) {
       toast({
@@ -1086,6 +1119,17 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Banner Blocco Moderazione IA */}
+      {chatModerationError && (
+        <div className="pt-2">
+          <ModerationErrorBanner
+            reason={chatModerationError}
+            compact
+            onDismiss={() => setChatModerationError(null)}
+          />
+        </div>
+      )}
 
       {/* INPUT FORM */}
       <form onSubmit={handleSendMessage} className="pt-2 flex items-center gap-2 shrink-0">

@@ -3,6 +3,8 @@ import { MessageSquare, Send, Loader2, User, Shield, Sparkles } from "lucide-rea
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { ClanMember } from "@/data/mockData";
+import { moderateContentWithGemini } from "@/services/geminiModerationService";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 
 interface ClanChatTabProps {
   clanId: string;
@@ -35,6 +37,7 @@ export const ClanChatTab: React.FC<ClanChatTabProps> = ({
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [moderationError, setModerationError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Map user ID to member custom role if available
@@ -153,16 +156,46 @@ export const ClanChatTab: React.FC<ClanChatTabProps> = ({
     if (!trimmed) return;
 
     setIsSending(true);
+    setModerationError(null);
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text: trimmed,
+      contextType: "chat",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[ClanChatTab] Messaggio bloccato da Gemini 2.5 Flash:", moderation.reason);
+      setModerationError(moderation.reason);
+      toast({
+        title: "Messaggio Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      setIsSending(false);
+      return;
+    }
+
     try {
-      const { error } = await supabase.from("clan_messages").insert({
+      const insertPayload: any = {
         clan_id: clanId,
         author_id: currentUser.id,
         body: trimmed,
         media_type: "none",
-      });
+        moderation_status: "approved",
+      };
+
+      let { error } = await supabase.from("clan_messages").insert(insertPayload);
+
+      if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+        delete insertPayload.moderation_status;
+        const retry = await supabase.from("clan_messages").insert(insertPayload);
+        error = retry.error;
+      }
 
       if (error) throw error;
       setInputText("");
+      setModerationError(null);
     } catch (err: any) {
       console.error("[ClanChatTab] Errore invio messaggio:", err);
       toast({
@@ -284,6 +317,17 @@ export const ClanChatTab: React.FC<ClanChatTabProps> = ({
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Banner Blocco Moderazione IA */}
+      {moderationError && (
+        <div className="px-3 pt-2">
+          <ModerationErrorBanner
+            reason={moderationError}
+            compact
+            onDismiss={() => setModerationError(null)}
+          />
+        </div>
+      )}
 
       {/* Message Input Form */}
       <form onSubmit={handleSendMessage} className="p-2.5 bg-[#151a32] border-t border-purple-900/40 flex items-center gap-2">

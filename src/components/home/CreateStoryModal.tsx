@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { toast } from "@/components/ui/use-toast";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 
 interface CreateStoryModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedGradient, setSelectedGradient] = useState(BACKGROUND_GRADIENTS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [moderationError, setModerationError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,17 +94,21 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
     }
 
     setIsSubmitting(true);
+    setModerationError(null);
     try {
-      const success = await createStory({
+      const res = await createStory({
         file: selectedFile || undefined,
         text: mode === "photo" ? "" : textContent.trim(),
         bgGradient: mode === "text" ? selectedGradient.class : undefined,
       });
 
-      if (success) {
+      if (res.success) {
         handleResetFile();
         setTextContent("");
+        setModerationError(null);
         onClose();
+      } else if (res.reason) {
+        setModerationError(res.reason);
       }
     } finally {
       setIsSubmitting(false);
@@ -175,6 +181,14 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({ isOpen, onCl
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto flex-1">
+          {/* Banner Errore Moderazione IA Gemini */}
+          {moderationError && (
+            <ModerationErrorBanner
+              reason={moderationError}
+              onDismiss={() => setModerationError(null)}
+            />
+          )}
+
           {/* File Picker input hidden */}
           <input
             type="file"

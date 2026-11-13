@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/use-toast";
 import { agoraVoiceService } from "@/services/agoraService";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadMediaFile } from "@/services/storageService";
+import { moderateContentWithGemini } from "@/services/geminiModerationService";
 
 import {
   TENURE_REWARDS,
@@ -106,12 +107,17 @@ interface SquadContextType {
   activeStory: Story | null;
   setActiveStory: (story: Story | null) => void;
   toggleLikePost: (postId: string) => void;
-  createPost: (content: string, game: string, imageFile?: File, asClan?: boolean) => Promise<boolean>;
+  createPost: (
+    content: string,
+    game: string,
+    imageFile?: File,
+    asClan?: boolean
+  ) => Promise<{ success: boolean; reason?: string }>;
   deletePost: (postId: string) => Promise<boolean>;
   createStory: (
     fileOrParams: File | { file?: File; text?: string; bgGradient?: string },
     caption?: string
-  ) => Promise<boolean>;
+  ) => Promise<{ success: boolean; reason?: string }>;
 
   // Public Profile & Clan Detail Navigation
   selectedPublicUserId: string | null;
@@ -1058,13 +1064,13 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  // Create post on Supabase `posts` table
+  // Create post on Supabase `posts` table with strict Gemini 2.5 Flash pre-moderation
   const createPost = async (
     content: string,
     game: string,
     imageFile?: File,
     asClan?: boolean
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; reason?: string }> => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
 
@@ -1074,12 +1080,30 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         title: "Accesso Richiesto",
         description: "Devi registrarti o accedere per pubblicare un post.",
       });
-      return false;
+      return { success: false, reason: "Accesso richiesto." };
+    }
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GOOGLE GEMINI 2.5 FLASH
+    // Analizza testo e immagine PRIMA di qualsiasi operazione di upload o salvataggio su Supabase
+    const moderation = await moderateContentWithGemini({
+      text: content.trim(),
+      imageFile,
+      contextType: "post",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[SquadContext] Post bloccato da Gemini 2.5 Flash:", moderation.reason);
+      toast({
+        title: "Post Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return { success: false, reason: moderation.reason };
     }
 
     let mediaUrl: string | undefined = undefined;
 
-    // Upload image to Supabase storage with robust bucket fallback
+    // 2. Solo dopo approvazione IA carichiamo l'immagine nel bucket Supabase
     if (imageFile) {
       try {
         const uploadRes = await uploadMediaFile(imageFile, "post-media", user.id);
@@ -1092,15 +1116,19 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const isPublishingAsClan = Boolean(asClan && clanData?.id);
 
-      const { data: insertedPost, error } = await supabase
+      // 3. Salvataggio su Supabase con moderation_status: 'approved'
+      const insertPayload: any = {
+        user_id: user.id,
+        content: content.trim(),
+        media_url: mediaUrl || null,
+        clan_id: isPublishingAsClan ? clanData?.id : null,
+        posted_as_clan: isPublishingAsClan,
+        moderation_status: "approved",
+      };
+
+      let { data: insertedPost, error } = await supabase
         .from("posts")
-        .insert({
-          user_id: user.id,
-          content: content.trim(),
-          media_url: mediaUrl || null,
-          clan_id: isPublishingAsClan ? clanData?.id : null,
-          posted_as_clan: isPublishingAsClan,
-        })
+        .insert(insertPayload)
         .select(`
           id,
           user_id,
@@ -1128,6 +1156,44 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           )
         `)
         .single();
+
+      // Fallback resiliente nel caso in cui la colonna moderation_status non sia ancora presente nel DB
+      if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+        console.warn("[SquadContext] Colonna moderation_status assente su posts, riprovo senza:", error.message);
+        delete insertPayload.moderation_status;
+        const retry = await supabase
+          .from("posts")
+          .insert(insertPayload)
+          .select(`
+            id,
+            user_id,
+            content,
+            media_url,
+            created_at,
+            clan_id,
+            posted_as_clan,
+            clans:clan_id (
+              id,
+              name,
+              tag,
+              avatar_url,
+              banner_url,
+              clan_frame_url,
+              tier
+            ),
+            profiles:user_id (
+              id,
+              username,
+              display_name,
+              avatar_url,
+              activision_id,
+              subscription_tier
+            )
+          `)
+          .single();
+        insertedPost = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         throw error;
@@ -1176,12 +1242,12 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toast({
           title: isPublishingAsClan ? "Post Clan Pubblicato! 🛡️" : "Post pubblicato! 🚀",
           description: isPublishingAsClan
-            ? `Pubblicato con successo a nome del clan [${clanData?.tag}] ${clanData?.name}.`
-            : "Il post è ora visibile a tutta la community.",
+            ? `Pubblicato con successo a nome del clan [${clanData?.tag}] ${clanData?.name} (moderazione approvata).`
+            : "Il post è stato approvato dalla moderazione IA ed è visibile alla community.",
         });
-        return true;
+        return { success: true };
       }
-      return false;
+      return { success: false, reason: "Nessun dato restituito dal database." };
     } catch (err: any) {
       console.error("[SquadContext] Errore pubblicazione post:", err);
       toast({
@@ -1189,15 +1255,15 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         description: err.message || "Impossibile salvare il post su Supabase.",
         variant: "destructive",
       });
-      return false;
+      return { success: false, reason: err.message || "Impossibile salvare il post su Supabase." };
     }
   };
 
-  // Create Story in Supabase `stories` table and bucket `stories-media` / `social-media`
+  // Create Story in Supabase `stories` table with strict Gemini 2.5 Flash pre-moderation
   const createStory = async (
     fileOrParams: File | { file?: File; text?: string; bgGradient?: string },
     captionParam?: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; reason?: string }> => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
 
@@ -1207,7 +1273,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         title: "Accesso Richiesto",
         description: "Accedi o registrati per pubblicare una storia 24h.",
       });
-      return false;
+      return { success: false, reason: "Accesso richiesto." };
     }
 
     let file: File | undefined = undefined;
@@ -1229,7 +1295,24 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         description: "Scrivi un testo oppure carica una foto per la tua storia.",
         variant: "destructive",
       });
-      return false;
+      return { success: false, reason: "Contenuto mancante." };
+    }
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GOOGLE GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text: textContent.trim(),
+      imageFile: file,
+      contextType: "story",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[SquadContext] Storia bloccata da Gemini 2.5 Flash:", moderation.reason);
+      toast({
+        title: "Storia Bloccata dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return { success: false, reason: moderation.reason };
     }
 
     try {
@@ -1245,16 +1328,30 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-      const { data: storyRow, error: insertErr } = await supabase
+      const insertPayload: any = {
+        user_id: user.id,
+        media_url: mediaUrl || "",
+        caption: textContent || "",
+        expires_at: expiresAt,
+        moderation_status: "approved",
+      };
+
+      let { data: storyRow, error: insertErr } = await supabase
         .from("stories")
-        .insert({
-          user_id: user.id,
-          media_url: mediaUrl || "",
-          caption: textContent || "",
-          expires_at: expiresAt,
-        })
+        .insert(insertPayload)
         .select("*, profiles:stories_user_id_fkey(id, username, display_name, avatar_url)")
         .single();
+
+      if (insertErr && (insertErr.message?.includes("moderation_status") || insertErr.code === "42703")) {
+        delete insertPayload.moderation_status;
+        const retry = await supabase
+          .from("stories")
+          .insert(insertPayload)
+          .select("*, profiles:stories_user_id_fkey(id, username, display_name, avatar_url)")
+          .single();
+        storyRow = retry.data;
+        insertErr = retry.error;
+      }
 
       if (insertErr) {
         console.warn("[SquadContext] Errore inserimento riga stories:", insertErr);
@@ -1277,7 +1374,20 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       toast({
         title: "Storia 24h pubblicata! 🔥",
         description: file && textContent.trim()
-          ? "Foto e testo condivisi con successo!"
+          ? "Foto e testo approvati dalla moderazione IA e condivisi!"
+          : "Storia approvata dalla moderazione IA e condivisa con successo!",
+      });
+      return { success: true };
+    } catch (err: any) {
+      console.error("[SquadContext] Errore salvataggio storia:", err);
+      toast({
+        title: "Errore salvataggio storia",
+        description: err.message || "Impossibile completare la pubblicazione della storia.",
+        variant: "destructive",
+      });
+      return { success: false, reason: err.message || "Errore sconosciuto." };
+    }
+  };
           : file
           ? "Foto pubblicata con successo!"
           : "Storia di testo pubblicata con successo!",
@@ -1598,7 +1708,7 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  // Add comment to Supabase `comments` table
+  // Add comment to Supabase `comments` table with strict Gemini 2.5 Flash pre-moderation
   const addComment = async (postId: string, content: string): Promise<PostComment | null> => {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
@@ -1612,14 +1722,33 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return null;
     }
 
+    // 1. MODERAZIONE IA PREVENTIVA CON GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text: content.trim(),
+      contextType: "comment",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[SquadContext] Commento bloccato da Gemini 2.5 Flash:", moderation.reason);
+      toast({
+        title: "Commento Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase
+      const insertPayload: any = {
+        post_id: postId,
+        user_id: user.id,
+        content: content.trim(),
+        moderation_status: "approved",
+      };
+
+      let { data, error } = await supabase
         .from("comments")
-        .insert({
-          post_id: postId,
-          user_id: user.id,
-          content: content.trim(),
-        })
+        .insert(insertPayload)
         .select(`
           id,
           post_id,
@@ -1634,6 +1763,29 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           )
         `)
         .single();
+
+      if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+        delete insertPayload.moderation_status;
+        const retry = await supabase
+          .from("comments")
+          .insert(insertPayload)
+          .select(`
+            id,
+            post_id,
+            user_id,
+            content,
+            created_at,
+            profiles:user_id (
+              id,
+              username,
+              display_name,
+              avatar_url
+            )
+          `)
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
 

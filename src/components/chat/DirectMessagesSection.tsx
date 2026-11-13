@@ -25,6 +25,8 @@ import {
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import { moderateContentWithGemini } from "@/services/geminiModerationService";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 import {
   canUserManageClanDirectChat,
   getStoredClanDirectMessages,
@@ -89,6 +91,7 @@ export const DirectMessagesSection: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingThreads, setIsLoadingThreads] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [moderationError, setModerationError] = useState<string | null>(null);
 
   // In-list quick filter query
   const [threadFilter, setThreadFilter] = useState("");
@@ -477,14 +480,34 @@ export const DirectMessagesSection: React.FC = () => {
     }
   }, [searchFilterCategory]);
 
-  // 6. Send Message
+  // 6. Send Message with Gemini 2.5 Flash pre-moderation
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !selectedPartner || !currentUser) return;
 
     const content = inputText.trim();
-    setInputText("");
     setIsSending(true);
+    setModerationError(null);
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text: content,
+      contextType: "chat",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[DirectMessages] Messaggio bloccato da Gemini 2.5 Flash:", moderation.reason);
+      setModerationError(moderation.reason);
+      setIsSending(false);
+      toast({
+        title: "Messaggio Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setInputText("");
 
     try {
       if (activeTabMode === "clan" && clanData) {
@@ -510,6 +533,7 @@ export const DirectMessagesSection: React.FC = () => {
 
         setMessages((prev) => [...prev, sentMsg]);
         fetchClanThreads();
+        setModerationError(null);
         setTimeout(scrollToBottom, 50);
       } else if (selectedPartner.is_clan) {
         // Message sent TO A CLAN by the user
@@ -552,18 +576,54 @@ export const DirectMessagesSection: React.FC = () => {
         }
 
         fetchPersonalThreads();
+        setModerationError(null);
         setTimeout(scrollToBottom, 50);
       } else {
         // Standard User-to-User DM
-        const { data, error } = await supabase
+        const insertPayload: any = {
+          sender_id: currentUser.id,
+          receiver_id: selectedPartner.id,
+          content,
+          moderation_status: "approved",
+        };
+
+        let { data, error } = await supabase
           .from("direct_messages")
-          .insert({
-            sender_id: currentUser.id,
-            receiver_id: selectedPartner.id,
-            content,
-          })
+          .insert(insertPayload)
           .select()
           .single();
+
+        if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+          delete insertPayload.moderation_status;
+          const retry = await supabase
+            .from("direct_messages")
+            .insert(insertPayload)
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+
+        if (error) throw error;
+
+        if (data) {
+          setMessages((prev) => [...prev, data]);
+          fetchPersonalThreads();
+          setModerationError(null);
+          setTimeout(scrollToBottom, 50);
+        }
+      }
+    } catch (err: any) {
+      console.error("[DM] Errore invio messaggio:", err);
+      toast({
+        title: "Errore invio messaggio",
+        description: err.message || "Impossibile consegnare il messaggio.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
 
         if (error) throw error;
 
@@ -813,6 +873,17 @@ export const DirectMessagesSection: React.FC = () => {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Banner Errore Moderazione IA Gemini */}
+          {moderationError && (
+            <div className="px-3 pt-2">
+              <ModerationErrorBanner
+                reason={moderationError}
+                compact
+                onDismiss={() => setModerationError(null)}
+              />
+            </div>
+          )}
 
           {/* Input Bar */}
           <form onSubmit={handleSendMessage} className="p-2.5 bg-[#0d101f] border-t border-zinc-800 flex items-center gap-2">

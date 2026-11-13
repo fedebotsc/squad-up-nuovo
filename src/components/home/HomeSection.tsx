@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 
 const EMOJI_OPTIONS = ["🔥", "🎯", "👑", "💀", "👏", "🏆"];
 
@@ -68,6 +69,8 @@ export const HomeSection: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAsClan, setPublishAsClan] = useState(false);
+  const [postModerationError, setPostModerationError] = useState<string | null>(null);
+  const [commentModerationError, setCommentModerationError] = useState<Record<string, string>>({});
 
   const isClanAdminOrOwner = Boolean(
     currentUser &&
@@ -246,20 +249,24 @@ export const HomeSection: React.FC = () => {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPostContent.trim()) return;
+    if (!newPostContent.trim() && !selectedFile) return;
     setIsSubmitting(true);
-    const success = await createPost(
+    setPostModerationError(null);
+    const res = await createPost(
       newPostContent.trim(),
       selectedPostGame,
       selectedFile || undefined,
       publishAsClan && isClanAdminOrOwner
     );
     setIsSubmitting(false);
-    if (success) {
+    if (res.success) {
       setNewPostContent("");
       setSelectedFile(null);
       setIsComposing(false);
       setPublishAsClan(false);
+      setPostModerationError(null);
+    } else if (res.reason) {
+      setPostModerationError(res.reason);
     }
   };
 
@@ -478,12 +485,21 @@ export const HomeSection: React.FC = () => {
                   setIsComposing(false);
                   setSelectedFile(null);
                   setPublishAsClan(false);
+                  setPostModerationError(null);
                 }}
                 className="text-xs text-zinc-400 hover:text-white"
               >
                 Annulla
               </button>
             </div>
+
+            {/* Banner Errore Moderazione IA Gemini */}
+            {postModerationError && (
+              <ModerationErrorBanner
+                reason={postModerationError}
+                onDismiss={() => setPostModerationError(null)}
+              />
+            )}
 
             {/* Clan Authorship Selector (Admin / Owner) */}
             {isClanAdminOrOwner && clanData && (
