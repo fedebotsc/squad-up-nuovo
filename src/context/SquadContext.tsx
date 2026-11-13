@@ -1388,21 +1388,6 @@ export const SquadProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: false, reason: err.message || "Errore sconosciuto." };
     }
   };
-          : file
-          ? "Foto pubblicata con successo!"
-          : "Storia di testo pubblicata con successo!",
-      });
-      return true;
-    } catch (err: any) {
-      console.error("[SquadContext] Errore pubblicazione storia:", err);
-      toast({
-        title: "Errore pubblicazione",
-        description: err.message || "Impossibile salvare la storia.",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
 
   // Delete story from Supabase `stories` table
   const deleteStory = async (storyId: string): Promise<boolean> => {

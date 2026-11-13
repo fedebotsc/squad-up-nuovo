@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { moderateContentWithGemini } from "@/services/geminiModerationService";
+import { ModerationErrorBanner } from "@/components/moderation/ModerationErrorBanner";
 import { MatchScreenshotOcrModal, TournamentMatchItem } from "./MatchScreenshotOcrModal";
 import { TournamentRegistrationModal } from "./TournamentRegistrationModal";
 import { TournamentTeamChatView, TeamChatData } from "./TournamentTeamChatView";
@@ -80,6 +82,7 @@ export const MatchRoomTab: React.FC = () => {
   // General Room Chat state
   const [chatInput, setChatInput] = useState("");
   const [liveMessages, setLiveMessages] = useState<any[]>([]);
+  const [chatModerationError, setChatModerationError] = useState<string | null>(null);
 
   // Team Chats State
   const [teamChats, setTeamChats] = useState<TeamChatData[]>([]);
@@ -378,6 +381,25 @@ export const MatchRoomTab: React.FC = () => {
     }
 
     const text = chatInput.trim();
+    setChatModerationError(null);
+
+    // 1. MODERAZIONE IA PREVENTIVA CON GOOGLE GEMINI 2.5 FLASH
+    const moderation = await moderateContentWithGemini({
+      text,
+      contextType: "chat",
+    });
+
+    if (!moderation.safe) {
+      console.warn("[MatchRoom] Messaggio bloccato da Gemini 2.5 Flash:", moderation.reason);
+      setChatModerationError(moderation.reason);
+      toast({
+        title: "Messaggio Bloccato dalla Moderazione IA (Gemini)",
+        description: moderation.reason,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setChatInput("");
     sendMatchMessage(text);
 
@@ -389,12 +411,19 @@ export const MatchRoomTab: React.FC = () => {
         .limit(1);
 
       if (chats?.[0]?.id) {
-        await supabase.from("tournament_messages").insert({
+        const insertPayload: any = {
           match_chat_id: chats[0].id,
           sender_id: currentUser.id,
           message: text,
           is_screenshot: false,
-        });
+          moderation_status: "approved",
+        };
+
+        const { error } = await supabase.from("tournament_messages").insert(insertPayload);
+        if (error && (error.message?.includes("moderation_status") || error.code === "42703")) {
+          delete insertPayload.moderation_status;
+          await supabase.from("tournament_messages").insert(insertPayload);
+        }
       }
     } catch (err) {
       console.warn("[MatchRoom] Errore invio messaggio chat:", err);
@@ -1041,6 +1070,14 @@ export const MatchRoomTab: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {chatModerationError && (
+              <ModerationErrorBanner
+                reason={chatModerationError}
+                compact
+                onDismiss={() => setChatModerationError(null)}
+              />
+            )}
 
             <form onSubmit={handleSendGeneralMessage} className="flex gap-2 pt-1">
               <input

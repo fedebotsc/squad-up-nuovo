@@ -625,26 +625,6 @@ export const DirectMessagesSection: React.FC = () => {
     }
   };
 
-        if (error) throw error;
-
-        if (data) {
-          setMessages((prev) => [...prev, data]);
-          fetchPersonalThreads();
-          setTimeout(scrollToBottom, 50);
-        }
-      }
-    } catch (err: any) {
-      console.error("[DM] Errore invio messaggio:", err);
-      toast({
-        title: "Errore invio messaggio",
-        description: err.message || "Impossibile consegnare il messaggio.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
   // Not logged in view
   if (!currentUser) {
     return (

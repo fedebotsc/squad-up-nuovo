@@ -436,4 +436,20 @@ EXCEPTION
     NULL;
 END $$;
 
+-- ==============================================================================
+-- 9. MODERAZIONE IA AUTOMATICA (Google Gemini 2.5 Flash)
+-- Colonna moderation_status per approvazione preventiva dei contenuti
+-- ==============================================================================
+ALTER TABLE IF EXISTS public.posts ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.stories ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.comments ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.clan_messages ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.direct_messages ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.clan_direct_messages ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.tournament_chat_messages ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+ALTER TABLE IF EXISTS public.tournament_messages ADD COLUMN IF NOT EXISTS moderation_status TEXT DEFAULT 'approved';
+
+-- Indice rapido per query filtrate su moderation_status se necessario
+CREATE INDEX IF NOT EXISTS idx_posts_moderation_status ON public.posts(moderation_status);
+
 -- Fine Script
