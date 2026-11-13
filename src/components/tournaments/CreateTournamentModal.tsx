@@ -36,6 +36,7 @@ import { toast } from "@/components/ui/use-toast";
 import { uploadTournamentProof } from "@/services/tournamentVerificationService";
 import { initializeBracket, generateSampleTeamsForBracket, saveRegisteredTeams } from "@/services/tournamentBracketService";
 import { getChampionshipState } from "@/services/tournamentChampionshipService";
+import { SCoinShopModal } from "@/components/shop/SCoinShopModal";
 
 interface CreateTournamentModalProps {
   isOpen: boolean;
@@ -63,11 +64,16 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   const {
     currentUser,
     userProfile,
+    sCoinBalance,
+    refreshUserData,
     tournaments,
     setTournaments,
     setSelectedTournament,
     setTournamentSubTab,
   } = useSquad();
+
+  const TOURNAMENT_CREATION_FEE_SC = 100;
+  const [isShopModalOpen, setIsShopModalOpen] = useState(false);
 
   // Selected format among the 3 main options
   const [selectedFormat, setSelectedFormat] = useState<TournamentFormat>("single_elimination");
@@ -305,9 +311,87 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
       return;
     }
 
+    // STRICT CHECK: 100 SCoin required to create a tournament
+    if (sCoinBalance < TOURNAMENT_CREATION_FEE_SC) {
+      toast({
+        title: "Saldo SCoin Insufficiente",
+        description: `Per creare un torneo ufficiale sono richiesti ${TOURNAMENT_CREATION_FEE_SC} SCoin. Il tuo saldo attuale è di ${sCoinBalance} SC. L'acquisto di SCoin avviene con denaro reale.`,
+        variant: "destructive",
+      });
+      setIsShopModalOpen(true);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // 1. DEDUCT 100 SCOIN VIA RPC OR ATOMIC UPDATE
+      let feeDeducted = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc("deduct_tournament_creation_fee", {
+          p_user_id: currentUser.id,
+          p_amount: TOURNAMENT_CREATION_FEE_SC,
+          p_tournament_name: tournamentName.trim(),
+        });
+
+        if (!rpcErr && rpcRes?.success) {
+          feeDeducted = true;
+        } else if (rpcRes && rpcRes.success === false) {
+          throw new Error(rpcRes.error || "Saldo SCoin insufficiente per creare il torneo.");
+        }
+      } catch (rpcEx: any) {
+        if (rpcEx.message && rpcEx.message.includes("insufficiente")) {
+          throw rpcEx;
+        }
+        console.warn("[CreateTournament] RPC fallback to direct update:", rpcEx);
+      }
+
+      if (!feeDeducted) {
+        // Direct atomic balance check & deduction from profiles table
+        const { data: profData } = await supabase
+          .from("profiles")
+          .select("balance, coins, schoins")
+          .eq("id", currentUser.id)
+          .maybeSingle();
+
+        const currentDbBalance =
+          profData?.balance ?? profData?.coins ?? profData?.schoins ?? sCoinBalance ?? 0;
+
+        if (currentDbBalance < TOURNAMENT_CREATION_FEE_SC) {
+          throw new Error(
+            `Saldo SCoin insufficiente. Hai ${currentDbBalance} SCoin, ne occorrono ${TOURNAMENT_CREATION_FEE_SC} per pubblicare il torneo. Ricarica con denaro reale per procedere.`
+          );
+        }
+
+        const newBal = Math.max(0, currentDbBalance - TOURNAMENT_CREATION_FEE_SC);
+
+        const { error: updateProfErr } = await supabase
+          .from("profiles")
+          .update({
+            balance: newBal,
+            coins: newBal,
+            schoins: newBal,
+          })
+          .eq("id", currentUser.id);
+
+        if (updateProfErr) {
+          throw new Error("Errore durante la detrazione dei 100 SCoin dal profilo. Operazione annullata.");
+        }
+
+        // Record transaction in sc_transactions
+        await supabase.from("sc_transactions").insert({
+          user_id: currentUser.id,
+          amount: -TOURNAMENT_CREATION_FEE_SC,
+          transaction_type: "tournament_creation",
+          description: `Creazione Torneo Ufficiale: ${tournamentName.trim()}`,
+        });
+      }
+
+      // Refresh real-time user balance in UI
+      if (refreshUserData) {
+        await refreshUserData();
+      }
+
       let finalBannerUrl = bannerPreview || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80";
       if (bannerFile) {
         try {
@@ -443,7 +527,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
       toast({
         title: "Torneo Creato con Successo! 🏆",
-        description: `"${tournamentPayload.name}" è pronto. Inizio: ${formattedStartsAt24h}.`,
+        description: `"${tournamentPayload.name}" è pronto (-100 SCoin scalati dal saldo). Inizio: ${formattedStartsAt24h}.`,
       });
 
       if (onSuccess) onSuccess();
@@ -480,9 +564,15 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-black text-white tracking-wide">
-                Crea Nuovo Torneo
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-black text-white tracking-wide">
+                  Crea Nuovo Torneo
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
+                  <Coins className="w-3 h-3 text-amber-400" />
+                  -100 SC
+                </span>
+              </div>
               <p className="text-[10px] sm:text-[11px] text-zinc-400">
                 {selectedFormat === "leaderboard_championship"
                   ? "Configurazione torneo Classifica a Punteggio (Campionato per Game)"
@@ -491,12 +581,31 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsShopModalOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-extrabold transition-all cursor-pointer ${
+                sCoinBalance >= TOURNAMENT_CREATION_FEE_SC
+                  ? "bg-emerald-950/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50"
+                  : "bg-rose-950/60 border-rose-500/50 text-rose-300 hover:bg-rose-900/60"
+              }`}
+              title="Clicca per acquistare SCoin con denaro reale"
+            >
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span>{sCoinBalance.toLocaleString()} SC</span>
+              {sCoinBalance < TOURNAMENT_CREATION_FEE_SC && (
+                <span className="text-[9px] text-amber-400 underline font-black ml-0.5">Ricarica</span>
+              )}
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* 2 Main Tournament Format Selection (Eliminazione Diretta vs Classifica a Punteggio) */}
@@ -575,6 +684,46 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
         {/* STEP CONTENT BODY (Scrollable area) */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/50">
+          {/* Banner Avviso Saldo SCoin Insufficiente o Costo 100 SC */}
+          {sCoinBalance < TOURNAMENT_CREATION_FEE_SC ? (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/70 via-[#181224] to-amber-950/40 border border-rose-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-200 shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-rose-300">
+                      Saldo SCoin Insufficiente ({sCoinBalance}/100 SC)
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px] font-bold">
+                      Richiesti 100 SC
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 mt-0.5">
+                    Per pubblicare un torneo vengono scalati <strong>100 SCoin</strong>. L'acquisto di SCoin avviene con denaro reale.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShopModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs shrink-0 shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Coins className="w-4 h-4 text-black" />
+                <span>Acquista SCoin</span>
+              </button>
+            </div>
+          ) : (
+            <div className="px-3 py-2 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+              <div className="flex items-center gap-2">
+                <Coins className="w-4 h-4 text-amber-400" />
+                <span>Costo pubblicazione torneo: <strong>100 SCoin</strong> (saranno scalati al salvataggio finale)</span>
+              </div>
+              <span className="text-[11px] font-bold text-zinc-400">Tuo saldo: {sCoinBalance.toLocaleString()} SC</span>
+            </div>
+          )}
+
           {/* STEP 1: Nome Torneo & Modalità Gioco */}
           {currentStep === 1 && (
             <div className="space-y-4 animate-fade-in">
@@ -1480,6 +1629,15 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               <span>Continua</span>
               <ChevronRight className="w-4 h-4" />
             </button>
+          ) : sCoinBalance < TOURNAMENT_CREATION_FEE_SC ? (
+            <button
+              type="button"
+              onClick={() => setIsShopModalOpen(true)}
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all cursor-pointer"
+            >
+              <Coins className="w-4 h-4 text-amber-200" />
+              <span>Saldo Insufficiente (Acquista 100 SC)</span>
+            </button>
           ) : (
             <button
               type="button"
@@ -1495,13 +1653,19 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               ) : (
                 <>
                   <Trophy className="w-4 h-4 text-amber-300" />
-                  <span>Crea Torneo</span>
+                  <span>Crea Torneo (-100 SC)</span>
                 </>
               )}
             </button>
           )}
         </div>
       </div>
+
+      {/* Modal Acquisto SCoin con Denaro Reale */}
+      <SCoinShopModal
+        isOpen={isShopModalOpen}
+        onClose={() => setIsShopModalOpen(false)}
+      />
     </div>
   );
 };

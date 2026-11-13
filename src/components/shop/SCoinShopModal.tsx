@@ -161,6 +161,12 @@ export const SCoinShopModal: React.FC<SCoinShopModalProps> = ({
           <p className="text-[11px] text-zinc-400">
             Saldo attuale: <strong className="text-amber-300">{sCoinBalance} SCoin</strong>
           </p>
+          <div className="mt-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-200 text-left flex items-start gap-1.5">
+            <span className="text-amber-400 font-bold shrink-0">💳</span>
+            <span>
+              L'acquisto di SCoin avviene con <strong>denaro reale (€)</strong>. Puoi selezionare il pacchetto desiderato.
+            </span>
+          </div>
         </div>
 
         {/* Package list */}

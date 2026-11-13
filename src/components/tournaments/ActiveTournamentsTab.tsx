@@ -85,6 +85,9 @@ export const ActiveTournamentsTab: React.FC = () => {
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Crea Torneo</span>
+          <span className="hidden sm:inline-block px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-black border border-amber-500/30">
+            100 SC
+          </span>
         </button>
       </div>
 
