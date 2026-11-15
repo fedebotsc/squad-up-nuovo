@@ -19,6 +19,7 @@ import {
   Check,
   AlertTriangle,
   User,
+  Info,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,6 +77,11 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
       : maxKdLimit
       ? "max_only"
       : "open";
+
+  const tournamentCategory: string = rawTourn.game_mode || tournament.game || rawTourn.category || "Multiplayer";
+  const isMultiplayerCategory =
+    tournamentCategory.toLowerCase().includes("multi") ||
+    tournamentCategory.toLowerCase().includes("multigiocatore");
 
   const [teamName, setTeamName] = useState(() => {
     return userProfile.clanTag
@@ -156,11 +162,16 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
     );
 
     try {
-      const analysis = await verifyMemberKdScreenshotWithAI(file, member.activisionId || "Player", {
-        min_kd: minKdLimit,
-        max_kd: maxKdLimit,
-        kd_mode: kdMode,
-      });
+      const analysis = await verifyMemberKdScreenshotWithAI(
+        file,
+        member.activisionId || "Player",
+        {
+          min_kd: minKdLimit,
+          max_kd: maxKdLimit,
+          kd_mode: kdMode,
+        },
+        tournamentCategory
+      );
 
       setMembers((prev) =>
         prev.map((m) =>
@@ -214,11 +225,16 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
     );
 
     try {
-      const analysis = await verifyMemberKdScreenshotWithAI(member.file, member.activisionId || "Player", {
-        min_kd: minKdLimit,
-        max_kd: maxKdLimit,
-        kd_mode: kdMode,
-      });
+      const analysis = await verifyMemberKdScreenshotWithAI(
+        member.file,
+        member.activisionId || "Player",
+        {
+          min_kd: minKdLimit,
+          max_kd: maxKdLimit,
+          kd_mode: kdMode,
+        },
+        tournamentCategory
+      );
 
       setMembers((prev) =>
         prev.map((m) =>
@@ -460,6 +476,21 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
 
           {/* Members List */}
           <div className="space-y-3 pt-2 border-t border-zinc-800">
+            {isMultiplayerCategory && (
+              <div className="p-3 rounded-2xl bg-purple-950/30 border border-purple-500/30 text-purple-200 text-xs flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 leading-relaxed">
+                  <span className="font-bold text-white block">Schermata CARRIERA Multigiocatore:</span>
+                  <p className="text-[11px] text-zinc-300">
+                    Invia la schermata del menu <strong>CARRIERA</strong>: il nome Activision del giocatore deve essere visibile in basso nel riquadro <strong>PROFILO</strong> (o nella classifica amici), mentre il KD è indicato a sinistra alla voce <strong>Rapporto U/M</strong> (Uccisioni/Morti).
+                  </p>
+                  <p className="text-[10px] text-amber-300/90 font-medium">
+                    ⚠️ Se il nome nello screenshot non coincide con quello inserito, il giocatore verrà automaticamente rifiutato.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
                 Componenti Squadra ({teamSize}) & Screenshot KD
