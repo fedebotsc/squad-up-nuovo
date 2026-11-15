@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   User,
+  UserCheck,
   Shield,
   Eye,
   RefreshCw,
@@ -94,6 +95,8 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
     isUniversalAdmin ||
     (currentUser?.id && rawTourn.owner_id === currentUser.id) ||
     (Array.isArray(rawTourn.co_organizers) && rawTourn.co_organizers.includes(currentUser?.id));
+
+  const isAiReferee = rawTourn.referee_mode !== "manual" && rawTourn.ai_referee_enabled !== false;
 
   const isMyTeamChat = currentUser?.id === chat.user_id;
 
@@ -478,20 +481,28 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
   };
 
   /**
-   * 3. REGISTRAZIONE AUTOMATICA RISULTATO NEL DATABASE E AGGIORNAMENTO CLASSIFICA
+   * 3. REGISTRAZIONE RISULTATO NEL DATABASE E AGGIORNAMENTO CLASSIFICA
    * Invia il resoconto automatico in chat e salva i punti nella classifica della lobby.
+   * Supporta sia l'arbitraggio IA sia la valutazione manuale a cura dello staff.
    */
   const handleConfirmAndCommitScore = async () => {
-    if (!postGameAnalysis) {
+    if (isAiReferee && !postGameAnalysis) {
       toast({
-        title: "Invio Bloccato da Supabase",
+        title: "Arbitraggio IA Richiesto",
         description: "Devi prima completare l'arbitraggio dello screenshot con Google Gemini 2.5 Flash con esito positivo.",
         variant: "destructive",
       });
       return;
     }
 
-    if (!placementFile && !killsFile && !postGameAnalysis) return;
+    if (!isAiReferee && (!editPlacement || editPlacement < 1)) {
+      toast({
+        title: "Piazzamento Richiesto",
+        description: "Inserisci la posizione finale raggiunta (#1, #2, ecc.) per calcolare il punteggio.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsSubmittingPostGame(true);
 
@@ -506,15 +517,19 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         killsUrl = await uploadTournamentProof(killsFile, "kills");
       }
 
-      const scoringSettings = rawTourn.leaderboard_settings || {
+      const scoringSettings = rawTourn.leaderboard_settings || rawTourn.scoring_settings || {
         kill_points: 1,
         placement_points: { "1": 10, "2": 7, "3": 5, "4": 4, "5": 3, top10: 1 },
       };
 
       const finalRank = postGameAnalysis?.placement || editPlacement || 1;
-      const finalKills = postGameAnalysis?.kills || editKills || 0;
+      const finalKills = postGameAnalysis?.kills ?? (typeof editKills === "number" ? editKills : 0);
 
       const calc = calculateTournamentScore(finalRank, finalKills, scoringSettings);
+
+      const summaryText = isAiReferee
+        ? (isChampionship ? `[Game ${selectedGameNumber}] ${calc.summaryMessage}` : calc.summaryMessage)
+        : `[Game ${selectedGameNumber}] Valutazione Manuale: #${finalRank} (${calc.placementPoints} pt) + ${finalKills} Kill (${calc.killPoints} pt) = Totale ${calc.totalPoints} PT`;
 
       await commitPostGameScoreToDatabase({
         chatId: chat.id,
@@ -528,8 +543,10 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
         placementPoints: calc.placementPoints,
         killPoints: calc.killPoints,
         totalPoints: calc.totalPoints,
-        summaryMessage: isChampionship ? `[Game ${selectedGameNumber}] ${calc.summaryMessage}` : calc.summaryMessage,
-        playerBreakdownText: postGameAnalysis?.player_breakdown_text,
+        summaryMessage: summaryText,
+        playerBreakdownText: isAiReferee
+          ? postGameAnalysis?.player_breakdown_text
+          : "Punteggio inserito e convalidato manualmente a cura dello staff.",
         players: postGameAnalysis?.players,
         placementUrl,
         killsUrl,
@@ -551,9 +568,9 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
             placementProofUrl: placementUrl,
             killsProofUrl: killsUrl,
             submittedAt: new Date().toISOString(),
-            verifiedByAi: true,
-            breakdownText: postGameAnalysis?.player_breakdown_text,
-            summaryMessage: calc.summaryMessage,
+            verifiedByAi: isAiReferee,
+            breakdownText: isAiReferee ? postGameAnalysis?.player_breakdown_text : "Calcolato manualmente dallo staff.",
+            summaryMessage: summaryText,
           });
         } catch (champErr) {
           console.warn("[TeamChat] Error saving championship game:", champErr);
@@ -561,8 +578,10 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
       }
 
       toast({
-        title: isChampionship ? `Risultato Game ${selectedGameNumber} Registrato! 🏆` : "Punteggio Registrato con Successo! 🏆",
-        description: `${calc.summaryMessage}. Classifica aggiornata.`,
+        title: isAiReferee
+          ? (isChampionship ? `Risultato Game ${selectedGameNumber} Registrato! 🏆` : "Punteggio Registrato con IA! 🏆")
+          : (isChampionship ? `Punteggio Manuale Game ${selectedGameNumber} Salvato! 📋` : "Punteggio Manuale Salvato! 📋"),
+        description: `Posizione #${finalRank} • ${finalKills} Kill ➔ +${calc.totalPoints} Punti salvati in classifica.`,
       });
 
       setShowPostGameForm(false);
@@ -899,89 +918,132 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
             </div>
           </div>
 
-          {/* AI Pre-scan Button */}
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800">
-            <button
-              type="button"
-              disabled={isAnalyzingPostGame || (!placementFile && !killsFile)}
-              onClick={handleAnalyzePostGameWithAI}
-              className="py-1.5 px-3 rounded-xl bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              {isAnalyzingPostGame ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-              ) : (
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              )}
-              <span>Analizza Foto & Calcola Punti con IA</span>
-            </button>
+          {isAiReferee ? (
+            <>
+              {/* AI Pre-scan Button */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800">
+                <button
+                  type="button"
+                  disabled={isAnalyzingPostGame || (!placementFile && !killsFile)}
+                  onClick={handleAnalyzePostGameWithAI}
+                  className="py-1.5 px-3 rounded-xl bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  {isAnalyzingPostGame ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  )}
+                  <span>Analizza Foto &amp; Calcola Punti con IA</span>
+                </button>
 
-            {postGameAnalysis && (
-              <span className="text-[10px] text-emerald-300 font-extrabold flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                <span>Calcolati: +{postGameAnalysis.total_points} PT Totali</span>
-              </span>
-            )}
-          </div>
-
-          {/* Live Breakdown Result Card */}
-          {postGameAnalysis && (
-            <div className="p-3.5 rounded-2xl bg-purple-950/50 border border-purple-500/50 space-y-2.5 animate-fade-in text-xs">
-              <div className="flex items-center justify-between text-purple-200">
-                <span className="font-extrabold flex items-center gap-1.5 text-cyan-300">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Arbitro IA: Risultati Estratti (Warzone)</span>
-                </span>
-                <span className="font-black text-amber-300 text-sm px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                  +{postGameAnalysis.total_points} PT Totali
-                </span>
+                {postGameAnalysis && (
+                  <span className="text-[10px] text-emerald-300 font-extrabold flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    <span>Calcolati: +{postGameAnalysis.total_points} PT Totali</span>
+                  </span>
+                )}
               </div>
 
-              {/* Roster Breakdown (Uccisioni Effettive per giocatore) */}
-              {postGameAnalysis.players && postGameAnalysis.players.length > 0 && (
-                <div className="bg-black/50 p-2.5 rounded-xl border border-zinc-800 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 pb-1 border-b border-zinc-800/80">
-                    <span>Membro Squadra</span>
-                    <span className="text-amber-400 font-black">Colonna "Uccisioni"</span>
-                  </div>
-                  {postGameAnalysis.players.map((p, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between text-[11px] py-0.5"
-                    >
-                      <span className="font-semibold text-zinc-200 truncate max-w-[200px]">
-                        {p.clan_tag ? (
-                          <strong className="text-cyan-400 mr-1">{p.clan_tag}</strong>
-                        ) : null}
-                        {p.player_name}
-                      </span>
-                      <span className="font-black text-amber-300 bg-amber-950/60 px-2 py-0.2 rounded border border-amber-500/30">
-                        {p.kills} Uccisioni
-                      </span>
-                    </div>
-                  ))}
-
-                  <div className="pt-1.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-zinc-300">⚔️ Somma Uccisioni Effettive:</span>
-                    <span className="text-amber-300 font-extrabold">
-                      {postGameAnalysis.kills} Uccisioni (escluse Eliminazioni)
+              {/* Live Breakdown Result Card */}
+              {postGameAnalysis && (
+                <div className="p-3.5 rounded-2xl bg-purple-950/50 border border-purple-500/50 space-y-2.5 animate-fade-in text-xs">
+                  <div className="flex items-center justify-between text-purple-200">
+                    <span className="font-extrabold flex items-center gap-1.5 text-cyan-300">
+                      <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Arbitro IA: Risultati Estratti (Warzone)</span>
                     </span>
+                    <span className="font-black text-amber-300 text-sm px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                      +{postGameAnalysis.total_points} PT Totali
+                    </span>
+                  </div>
+
+                  {/* Roster Breakdown (Uccisioni Effettive per giocatore) */}
+                  {postGameAnalysis.players && postGameAnalysis.players.length > 0 && (
+                    <div className="bg-black/50 p-2.5 rounded-xl border border-zinc-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 pb-1 border-b border-zinc-800/80">
+                        <span>Membro Squadra</span>
+                        <span className="text-amber-400 font-black">Colonna "Uccisioni"</span>
+                      </div>
+                      {postGameAnalysis.players.map((p, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-[11px] py-0.5"
+                        >
+                          <span className="font-semibold text-zinc-200 truncate max-w-[200px]">
+                            {p.clan_tag ? (
+                              <strong className="text-cyan-400 mr-1">{p.clan_tag}</strong>
+                            ) : null}
+                            {p.player_name}
+                          </span>
+                          <span className="font-black text-amber-300 bg-amber-950/60 px-2 py-0.2 rounded border border-amber-500/30">
+                            {p.kills} Uccisioni
+                          </span>
+                        </div>
+                      ))}
+
+                      <div className="pt-1.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px] font-bold">
+                        <span className="text-zinc-300">⚔️ Somma Uccisioni Effettive:</span>
+                        <span className="text-amber-300 font-extrabold">
+                          {postGameAnalysis.kills} Uccisioni (escluse Eliminazioni)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary message */}
+                  <p className="text-[11px] font-semibold text-zinc-200 bg-zinc-900/80 p-2 rounded-xl font-mono border border-zinc-800">
+                    {postGameAnalysis.summary_message}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
+                      <span className="text-zinc-400">Piazzamento:</span>
+                      <span className="font-bold text-white">#{postGameAnalysis.placement} ({postGameAnalysis.placement_points} pt)</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
+                      <span className="text-zinc-400">Punti Uccisioni:</span>
+                      <span className="font-bold text-purple-300">+{postGameAnalysis.kill_points} pt ({postGameAnalysis.kills} x {rawTourn.leaderboard_settings?.kill_points || 1}pt)</span>
+                    </div>
                   </div>
                 </div>
               )}
-
-              {/* Summary message */}
-              <p className="text-[11px] font-semibold text-zinc-200 bg-zinc-900/80 p-2 rounded-xl font-mono border border-zinc-800">
-                {postGameAnalysis.summary_message}
+            </>
+          ) : (
+            /* Manual Post-Game Score Entry for Captain & Staff */
+            <div className="p-3 rounded-2xl bg-zinc-950/90 border border-cyan-800/40 space-y-2.5 animate-fade-in text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold flex items-center gap-1.5 text-cyan-300 text-xs">
+                  <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Valutazione Manuale: Inserimento Punteggi</span>
+                </span>
+                <span className="text-[10px] font-bold text-amber-300 px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/30">
+                  Staff &amp; Capitani
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                Inserisci la posizione finale e le kill effettive verificate dagli screenshot per calcolare il punteggio del team.
               </p>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
-                  <span className="text-zinc-400">Piazzamento:</span>
-                  <span className="font-bold text-white">#{postGameAnalysis.placement} ({postGameAnalysis.placement_points} pt)</span>
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-400 font-semibold">Piazzamento (#1..50)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={editPlacement}
+                    onChange={(e) => setEditPlacement(parseInt(e.target.value) || 1)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                  />
                 </div>
-                <div className="flex items-center justify-between bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/80">
-                  <span className="text-zinc-400">Punti Uccisioni:</span>
-                  <span className="font-bold text-purple-300">+{postGameAnalysis.kill_points} pt ({postGameAnalysis.kills} x {rawTourn.leaderboard_settings?.kill_points || 1}pt)</span>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-400 font-semibold">Kill Totali di Squadra</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editKills}
+                    onChange={(e) => setEditKills(parseInt(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                  />
                 </div>
               </div>
             </div>
@@ -990,7 +1052,7 @@ export const TournamentTeamChatView: React.FC<TournamentTeamChatViewProps> = ({
           {/* Confirm & Save Button */}
           <button
             type="button"
-            disabled={isSubmittingPostGame || (!placementFile && !killsFile && !postGameAnalysis)}
+            disabled={isSubmittingPostGame || (isAiReferee && (!placementFile && !killsFile && !postGameAnalysis))}
             onClick={handleConfirmAndCommitScore}
             className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-cyan-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/40 transition-all cursor-pointer"
           >

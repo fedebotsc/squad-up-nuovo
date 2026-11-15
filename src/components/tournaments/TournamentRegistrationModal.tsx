@@ -127,6 +127,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                   kd_ratio: 0,
                   is_authentic_game_screenshot: true,
                   activision_id_matched: true,
+                  confidence: 100,
                   reason: "Screenshot salvato per la valutazione manuale dello staff.",
                 },
               }
@@ -318,7 +319,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
         });
       }
 
-      const initialStatus: "approved" | "pending_review" = isAiReferee ? "approved" : "pending_review";
+      const initialStatus: "approved" | "pending_approval" = isAiReferee ? "approved" : "pending_approval";
 
       const newTeam: RegisteredTeam = {
         id: `reg_${tournament.id}_${currentUser.id}_${Date.now()}`,

@@ -193,6 +193,18 @@ export const ActiveTournamentsTab: React.FC = () => {
                           Verifica KD
                         </span>
                       )}
+
+                      {rawTourn.referee_mode === "manual" ? (
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 uppercase flex items-center gap-1">
+                          <Users className="w-2.5 h-2.5 text-cyan-400" />
+                          Arbitro Manuale Staff
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 uppercase flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-purple-400" />
+                          Arbitro IA Vision
+                        </span>
+                      )}
                     </div>
 
                     <h4 className="text-sm font-bold text-white tracking-wide truncate">

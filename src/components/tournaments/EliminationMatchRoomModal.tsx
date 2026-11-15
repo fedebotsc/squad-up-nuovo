@@ -20,6 +20,7 @@ import {
   FileCheck,
   Flame,
   Award,
+  Check,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { toast } from "@/components/ui/use-toast";
@@ -960,9 +961,6 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                         <span>Calcola &amp; Salva Punti Squadra 2</span>
                       </button>
                     </div>
-                  )}
-                </div>
-              </div>
                   )}
                 </div>
               </div>
