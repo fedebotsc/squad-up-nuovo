@@ -36,6 +36,9 @@ export const TournamentRegistrationsReview: React.FC<TournamentRegistrationsRevi
 }) => {
   const { currentUser } = useSquad();
   const tournamentId = tournament?.id || "default_tourn";
+  const rawTourn = tournament?.raw || tournament || {};
+  const isAiReferee = rawTourn.referee_mode !== "manual" && rawTourn.ai_referee_enabled !== false;
+
   const [teams, setTeams] = useState<RegisteredTeam[]>([]);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
@@ -81,21 +84,46 @@ export const TournamentRegistrationsReview: React.FC<TournamentRegistrationsRevi
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md flex items-center justify-between">
+      <div className="bg-[#121628]/95 border border-purple-900/40 rounded-2xl p-4 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div>
           <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-cyan-400" />
-            <span>Revisione Iscrizioni & Verifica KD ({teams.length})</span>
+            <span>Revisione Iscrizioni &amp; Screenshot KD ({teams.length})</span>
           </h4>
           <p className="text-[10px] text-zinc-400">
-            Controllo Activision ID, screenshot KD con IA Vision e gestione approvazioni
+            {isAiReferee
+              ? "Verifica automatica Activision ID e KD tramite Google Gemini 2.5 Flash"
+              : "Valutazione manuale a cura dell'organizzatore e dei co-organizzatori"}
           </p>
         </div>
 
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/40 text-purple-300">
-          Dashboard Organizzatore
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            isAiReferee
+              ? "bg-purple-950 border-purple-500/40 text-purple-300"
+              : "bg-cyan-950 border-cyan-500/40 text-cyan-300"
+          }`}>
+            {isAiReferee ? "Arbitro IA Vision" : "Valutazione Manuale"}
+          </span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300">
+            Staff Torneo
+          </span>
+        </div>
       </div>
+
+      {!isAiReferee && (
+        <div className="p-3.5 rounded-2xl bg-cyan-950/30 border border-cyan-500/30 text-xs text-cyan-200 flex items-start gap-2.5">
+          <User className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-cyan-300">
+              Controllo Manuale Screenshot Richiesto:
+            </div>
+            <p className="text-[11px] text-zinc-300 leading-relaxed">
+              Questo torneo è configurato per la <strong>Valutazione Manuale</strong>. Tu e i tuoi co-organizzatori dovete esaminare gli screenshot caricati per ciascun giocatore (cliccando l'icona <Eye className="w-3 h-3 inline text-cyan-400" />) e cliccare <strong>"Approva"</strong> per ammettere la squadra al tabellone o <strong>"Rifiuta"</strong> se non è conforme.
+            </p>
+          </div>
+        </div>
+      )}
 
       {teams.length === 0 ? (
         <div className="p-8 text-center bg-[#121628]/90 border border-purple-900/30 rounded-2xl text-xs text-zinc-400 space-y-2">

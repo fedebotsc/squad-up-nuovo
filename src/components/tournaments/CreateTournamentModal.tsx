@@ -29,6 +29,8 @@ import {
   Image as ImageIcon,
   Check,
   Loader2,
+  Bot,
+  ShieldCheck,
 } from "lucide-react";
 import { useSquad } from "@/context/SquadContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,9 +83,10 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   // Step tracking for Eliminazione Diretta configuration (Steps 1 to 7)
   const [currentStep, setCurrentStep] = useState<number>(1);
 
-  // STEP 1: Nome Torneo & Categoria
+  // STEP 1: Nome Torneo, Categoria & Metodo Arbitraggio
   const [tournamentName, setTournamentName] = useState("");
   const [gameMode, setGameMode] = useState<"Warzone Battle Royale" | "Warzone Ritorno" | "Multiplayer">("Warzone Battle Royale");
+  const [refereeMode, setRefereeMode] = useState<"ai" | "manual">("ai");
 
   // STEP 2: Data e Ora di inizio (STRICT 24H FORMAT)
   const [startDateDay, setStartDateDay] = useState(() => {
@@ -449,6 +452,8 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         min_kd_limit: kdRule === "min_only" || kdRule === "range" ? minKd : null,
         max_kd_limit: kdRule === "max_only" || kdRule === "range" ? maxKd : null,
         team_size: teamSize,
+        referee_mode: refereeMode,
+        ai_referee_enabled: refereeMode === "ai",
         scoring_settings: {
           scoring_mode: scoringMode,
           kill_points: killPoints,
@@ -515,9 +520,13 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         startsAt: formattedStartsAt24h,
         mode: `${teamSize === 1 ? "Solo" : teamSize === 2 ? "Duo" : teamSize === 3 ? "Trio" : "Squad"} (${teamSize}p)${selectedFormat === "leaderboard_championship" ? ` • ${totalGames} Game` : ""}`,
         description: rulesText,
+        referee_mode: refereeMode,
+        ai_referee_enabled: refereeMode === "ai",
         raw: {
           ...tournamentPayload,
           id: createdTournamentId,
+          referee_mode: refereeMode,
+          ai_referee_enabled: refereeMode === "ai",
         },
       };
 
@@ -760,14 +769,83 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 </select>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-purple-950/30 border border-purple-500/30 text-xs text-zinc-300 space-y-1">
-                <div className="font-bold text-purple-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Arbitraggio Automatico IA Vision</span>
+              {/* Metodo di Arbitraggio & Valutazione Screenshot */}
+              <div className="space-y-2 pt-2 border-t border-purple-900/40">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <span>Metodo di Arbitraggio & Valutazione Screenshot *</span>
+                  </label>
+                  <span className="text-[10px] text-purple-400 font-semibold">
+                    {refereeMode === "ai" ? "IA Vision Attiva" : "Controllo Manuale Staff"}
+                  </span>
                 </div>
-                <p className="text-[11px] text-zinc-400 leading-relaxed">
-                  Il tabellone a eliminazione diretta gestirà automaticamente lo scontro tra le squadre accoppiate. I partecipanti caricheranno screenshot di piazzamento e la tabella uccisioni.
-                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Option 1: AI Vision */}
+                  <button
+                    type="button"
+                    onClick={() => setRefereeMode("ai")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                      refereeMode === "ai"
+                        ? "bg-purple-950/80 border-purple-500 shadow-lg ring-1 ring-purple-500/50"
+                        : "bg-zinc-900/70 border-zinc-800 hover:border-zinc-700 opacity-80"
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="w-7 h-7 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300">
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                        </div>
+                        <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-900/90 text-purple-200 border border-purple-500/40">
+                          Consigliato • IA
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-black text-white flex items-center gap-1">
+                        <span>Arbitraggio con IA Vision</span>
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 leading-snug">
+                        L'IA analizza istantaneamente gli screen KD per accettare le squadre ed estrae kill e piazzamento dai risultati di fine partita calcolando i punti automaticamente.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-purple-900/40 flex items-center gap-1 text-[10px] font-bold text-cyan-300">
+                      <Bot className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span>Zero attesa • Scarta assist in automatico</span>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Valutazione Manuale */}
+                  <button
+                    type="button"
+                    onClick={() => setRefereeMode("manual")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                      refereeMode === "manual"
+                        ? "bg-cyan-950/70 border-cyan-500 shadow-lg ring-1 ring-cyan-500/50"
+                        : "bg-zinc-900/70 border-zinc-800 hover:border-zinc-700 opacity-80"
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="w-7 h-7 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300">
+                          <Users className="w-4 h-4 text-cyan-300" />
+                        </div>
+                        <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-900/90 text-cyan-200 border border-cyan-500/40">
+                          Staff Torneo
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-black text-white flex items-center gap-1">
+                        <span>Valutazione Manuale Staff</span>
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 leading-snug">
+                        Tu e i co-organizzatori esaminate manualmente gli screen KD per approvare o rifiutare le squadre e inserite/convalidate i punti e piazzamenti dopo i match.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center gap-1 text-[10px] font-bold text-amber-300">
+                      <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>Controllo manuale organizzatore &amp; co-org</span>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1470,9 +1548,21 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <span>7. CO-ORGANIZZATORI (MAX 2 UTENTI REALI CON PERMESSI)</span>
               </div>
 
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                I co-organizzatori assegnati avranno automaticamente i permessi per revisionare le iscrizioni, convalidare screenshot e gestire le stanze match.
-              </p>
+              {refereeMode === "manual" ? (
+                <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/40 text-xs text-cyan-200 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-cyan-300 block">Arbitraggio Manuale Attivo per questo Torneo:</span>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      Hai selezionato la <strong>Valutazione Manuale</strong>: tu e i co-organizzatori assegnati avrete pieni permessi per valutare gli screenshot KD delle squadre per accettarle e inserire o convalidare manualmente i punti delle partite.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  I co-organizzatori assegnati avranno automaticamente i permessi per supervisionare le iscrizioni, convalidare screenshot e gestire le stanze match con supporto dell'IA Vision.
+                </p>
+              )}
 
               {/* Selected Co-organizers Badges */}
               <div className="space-y-1.5">

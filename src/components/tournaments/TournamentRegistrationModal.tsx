@@ -64,6 +64,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
 
   const rawTourn = tournament.raw || tournament;
   const teamSize: number = rawTourn.team_size || 3;
+  const isAiReferee = rawTourn.referee_mode !== "manual" && rawTourn.ai_referee_enabled !== false;
   const requireKd: boolean = Boolean(rawTourn.require_kd_verification);
   const minKdLimit = rawTourn.min_kd_limit ? Number(rawTourn.min_kd_limit) : null;
   const maxKdLimit = rawTourn.max_kd_limit ? Number(rawTourn.max_kd_limit) : null;
@@ -110,6 +111,34 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
   const handleMemberScreenshot = async (idx: number, file: File) => {
     const preview = URL.createObjectURL(file);
     const member = members[idx];
+
+    // If Tournament is in Manual Referee mode, save screenshot for organizer review without blocking with AI OCR
+    if (!isAiReferee) {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.index === idx
+            ? {
+                ...m,
+                file,
+                previewUrl: preview,
+                isVerifying: false,
+                result: {
+                  approved: true,
+                  kd_ratio: 0,
+                  is_authentic_game_screenshot: true,
+                  activision_id_matched: true,
+                  reason: "Screenshot salvato per la valutazione manuale dello staff.",
+                },
+              }
+            : m
+        )
+      );
+      toast({
+        title: `Screenshot Membro #${idx + 1} Caricato! 📸`,
+        description: "Salvato per la revisione manuale dell'organizzatore o co-organizzatori.",
+      });
+      return;
+    }
 
     setMembers((prev) =>
       prev.map((m) =>
@@ -171,6 +200,14 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
     const member = members[idx];
     if (!member.file) return;
 
+    if (!isAiReferee) {
+      toast({
+        title: "Arbitraggio Manuale Attivo",
+        description: "Lo screenshot è già registrato e verrà esaminato dallo staff.",
+      });
+      return;
+    }
+
     setMembers((prev) =>
       prev.map((m) => (m.index === idx ? { ...m, isVerifying: true } : m))
     );
@@ -225,8 +262,8 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
         setErrorMsg(`Carica lo screenshot del KD per il Giocatore #${i + 1} (dove sia visibile anche il nome Activision).`);
         return;
       }
-      // Anti-Fake security check
-      if (members[i].result && members[i].result?.is_authentic_game_screenshot === false) {
+      // Anti-Fake security check (only for AI mode)
+      if (isAiReferee && members[i].result && members[i].result?.is_authentic_game_screenshot === false) {
         setErrorMsg(
           `Immagine non valida per Giocatore #${i + 1}: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.`
         );
@@ -234,19 +271,21 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
       }
     }
 
-    // Check if any member failed KD or Activision match
-    const failedMember = members.find((m) => m.result && !m.result.approved);
-    if (requireKd && failedMember) {
-      if (failedMember.result?.is_authentic_game_screenshot === false) {
-        setErrorMsg(
-          `Immagine non valida per Giocatore #${failedMember.index + 1}: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.`
-        );
-      } else {
-        setErrorMsg(
-          `Attenzione: Il Giocatore #${failedMember.index + 1} (${failedMember.activisionId}) non ha superato la verifica IA: ${failedMember.result?.reason}`
-        );
+    // Check if any member failed KD or Activision match in AI mode
+    if (isAiReferee && requireKd) {
+      const failedMember = members.find((m) => m.result && !m.result.approved);
+      if (failedMember) {
+        if (failedMember.result?.is_authentic_game_screenshot === false) {
+          setErrorMsg(
+            `Immagine non valida per Giocatore #${failedMember.index + 1}: L'IA ha rilevato che la foto caricata non è uno screenshot delle statistiche di Call of Duty. Si prega di caricare lo screenshot corretto.`
+          );
+        } else {
+          setErrorMsg(
+            `Attenzione: Il Giocatore #${failedMember.index + 1} (${failedMember.activisionId}) non ha superato la verifica IA: ${failedMember.result?.reason}`
+          );
+        }
+        return;
       }
-      return;
     }
 
     setIsSubmitting(true);
@@ -272,10 +311,14 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
           detectedKd: m.result?.kd_ratio || 1.8,
           isActivisionMatch: m.result?.is_activision_match ?? true,
           isKdCompliant: m.result?.approved ?? true,
-          aiStatus: m.result ? (m.result.approved ? "approved" : "rejected") : "approved",
-          aiReason: m.result?.reason || "Verificato con successo da IA Vision.",
+          aiStatus: isAiReferee ? (m.result?.approved ? "approved" : "rejected") : "approved",
+          aiReason: isAiReferee
+            ? (m.result?.reason || "Verificato con successo da IA Vision.")
+            : "In attesa di valutazione manuale dello staff torneo.",
         });
       }
+
+      const initialStatus: "approved" | "pending_review" = isAiReferee ? "approved" : "pending_review";
 
       const newTeam: RegisteredTeam = {
         id: `reg_${tournament.id}_${currentUser.id}_${Date.now()}`,
@@ -284,7 +327,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
         captainUserId: currentUser.id,
         captainName: userProfile.name || "Capitano",
         members: processedMembers,
-        status: "approved", // auto approved by IA Vision
+        status: initialStatus,
         createdAt: new Date().toISOString(),
       };
 
@@ -299,7 +342,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
           user_id: currentUser.id,
           team_name: cleanTeamName,
           activision_ids: members.map((m) => m.activisionId).join(", "),
-          approval_status: "approved",
+          approval_status: initialStatus,
           kd_ratio: processedMembers[0]?.detectedKd || null,
         });
 
@@ -307,15 +350,17 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
           tournament_id: tournament.id,
           team_name: cleanTeamName,
           user_id: currentUser.id,
-          status: "approved",
+          status: initialStatus,
         });
       } catch (dbErr) {
         console.warn("[Registration] Supabase insert fallback:", dbErr);
       }
 
       toast({
-        title: "Iscrizione Squadra Convalidata! 🎯⚡",
-        description: `La squadra "${cleanTeamName}" con ${teamSize} componenti è stata approvata dall'IA Vision.`,
+        title: isAiReferee ? "Iscrizione Squadra Convalidata! 🎯⚡" : "Iscrizione Registrata! 📋",
+        description: isAiReferee
+          ? `La squadra "${cleanTeamName}" con ${teamSize} componenti è stata approvata dall'IA Vision.`
+          : `La squadra "${cleanTeamName}" è stata registrata. L'organizzatore o i co-organizzatori valuteranno manualmente gli screenshot per accettare la squadra.`,
       });
 
       refreshUserData();
@@ -339,8 +384,15 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
               <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-xs sm:text-sm font-extrabold text-white truncate">
-                Iscrizione Squadra &amp; Verifica IA Vision
+              <h3 className="text-xs sm:text-sm font-extrabold text-white truncate flex items-center gap-1.5">
+                <span>Iscrizione Squadra</span>
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                  isAiReferee
+                    ? "bg-purple-950 text-purple-300 border-purple-500/40"
+                    : "bg-cyan-950 text-cyan-300 border-cyan-500/40"
+                }`}>
+                  {isAiReferee ? "Arbitro IA Vision" : "Valutazione Manuale"}
+                </span>
               </h3>
               <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
                 {tournament.title} • {teamSize} {teamSize === 1 ? "Giocatore" : "Giocatori per Squadra"}
@@ -372,8 +424,12 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
             </span>
           </div>
 
-          <span className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 shrink-0">
-            Arbitro IA Attivo
+          <span className={`text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full border shrink-0 ${
+            isAiReferee
+              ? "bg-cyan-950 border-cyan-500/40 text-cyan-300"
+              : "bg-amber-950 border-amber-500/40 text-amber-300"
+          }`}>
+            {isAiReferee ? "Arbitro IA Attivo" : "Valutazione Staff"}
           </span>
         </div>
 
@@ -442,12 +498,19 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                     ) : hasResult ? (
                       <span
                         className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 border ${
-                          isApproved
+                          !isAiReferee
+                            ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                            : isApproved
                             ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                             : "bg-rose-500/20 text-rose-300 border-rose-500/40"
                         }`}
                       >
-                        {isApproved ? (
+                        {!isAiReferee ? (
+                          <>
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>Screenshot per Staff</span>
+                          </>
+                        ) : isApproved ? (
                           <>
                             <CheckCircle2 className="w-2.5 h-2.5" />
                             <span>Approvato IA</span>
@@ -525,10 +588,20 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
                     </div>
                   </div>
 
-                  {/* IA Vision Verification Card */}
+                  {/* IA Vision or Manual Verification Card */}
                   {hasResult && member.result && (
                     <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] space-y-1.5 animate-fade-in">
-                      {!member.result.approved ? (
+                      {!isAiReferee ? (
+                        <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/40 text-cyan-200 flex items-center justify-between">
+                          <span className="font-semibold flex items-center gap-1.5 text-xs">
+                            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                            <span>Screenshot salvato per la valutazione manuale dello staff</span>
+                          </span>
+                          <span className="text-[10px] font-bold text-amber-300 uppercase px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/30">
+                            In Revisione
+                          </span>
+                        </div>
+                      ) : !member.result.approved ? (
                         <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/50 space-y-1">
                           <div className="flex items-center gap-1.5 text-rose-300 font-bold">
                             <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />

@@ -57,6 +57,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   if (!isOpen || !match) return null;
 
   const rawTourn = tournament?.raw || tournament || {};
+  const isAiReferee = rawTourn.referee_mode !== "manual" && rawTourn.ai_referee_enabled !== false;
   const isOrganizer =
     isUniversalAdmin ||
     (currentUser?.id && rawTourn.owner_id === currentUser.id) ||
@@ -74,7 +75,6 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [team1KillsPreview, setTeam1KillsPreview] = useState<string | null>(null);
   const [isVerifyingTeam1, setIsVerifyingTeam1] = useState(false);
   const [team1Analysis, setTeam1Analysis] = useState<PostGameVerificationResult | null>(null);
-
   const [team1Error, setTeam1Error] = useState<string | null>(null);
 
   // Team 2 uploads
@@ -86,6 +86,12 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [team2Analysis, setTeam2Analysis] = useState<PostGameVerificationResult | null>(null);
   const [team2Error, setTeam2Error] = useState<string | null>(null);
 
+  // Manual scoring state for manual referee mode
+  const [manualTeam1Placement, setManualTeam1Placement] = useState<number>(1);
+  const [manualTeam1Kills, setManualTeam1Kills] = useState<number>(match.team1Score || 0);
+  const [manualTeam2Placement, setManualTeam2Placement] = useState<number>(2);
+  const [manualTeam2Kills, setManualTeam2Kills] = useState<number>(match.team2Score || 0);
+
   // Organizer Override state
   const [overrideWinnerTeamId, setOverrideWinnerTeamId] = useState<string>(
     match.winnerTeamId || match.team1?.id || ""
@@ -94,6 +100,55 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
   const [overrideScoreTeam2, setOverrideScoreTeam2] = useState<number>(match.team2Score || 0);
   const [overrideReason, setOverrideReason] = useState("");
   const [isApplyingOverride, setIsApplyingOverride] = useState(false);
+
+  // Manual score calculation handler for Organizer & Co-organizers
+  const handleSaveManualTeamScore = (teamSlot: "team1" | "team2") => {
+    const targetTeam = teamSlot === "team1" ? match.team1 : match.team2;
+    if (!targetTeam) return;
+
+    const placement = teamSlot === "team1" ? manualTeam1Placement : manualTeam2Placement;
+    const kills = teamSlot === "team1" ? manualTeam1Kills : manualTeam2Kills;
+
+    const scoringSettings = rawTourn.scoring_settings || {
+      kill_points: 1,
+      scoring_mode: "fixed",
+      placement_points: { "1": 15, "2": 10, "3": 7, "4": 5, "5": 3 },
+    };
+
+    const killPts = kills * (scoringSettings.kill_points || 1);
+    const placementMap = scoringSettings.placement_points || {};
+    const placementPts = Number(placementMap[String(placement)] ?? (placement <= 5 ? 3 : 1));
+    const total = killPts + placementPts;
+
+    if (teamSlot === "team1") {
+      setOverrideScoreTeam1(total);
+    } else {
+      setOverrideScoreTeam2(total);
+    }
+
+    try {
+      const bracketState = getBracketState(match.tournamentId);
+      for (const round of bracketState.rounds) {
+        for (const m of round.matches) {
+          if (m.id === match.id) {
+            if (teamSlot === "team1") {
+              m.team1Score = total;
+            } else {
+              m.team2Score = total;
+            }
+          }
+        }
+      }
+      saveBracketState(match.tournamentId, bracketState);
+      onMatchUpdated();
+      toast({
+        title: `Punteggio ${targetTeam.teamName} Registrato! ✅`,
+        description: `Posizione #${placement} • ${kills} Kill = ${total} Punti totali convalidati manualmente dallo staff.`,
+      });
+    } catch (err) {
+      console.warn("Errore salvataggio manuale:", err);
+    }
+  };
 
   // Analyze team proofs with strict IA Vision & Anti-Fake filter
   const handleAnalyzeTeam = async (teamSlot: "team1" | "team2") => {
@@ -207,8 +262,8 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
 
   // Submit and lock round when both teams have uploaded or when ready
   const handleConfirmAndAdvance = () => {
-    const score1 = team1Analysis ? team1Analysis.total_points : match.team1Score;
-    const score2 = team2Analysis ? team2Analysis.total_points : match.team2Score;
+    const score1 = team1Analysis ? team1Analysis.total_points : (match.team1Score || overrideScoreTeam1);
+    const score2 = team2Analysis ? team2Analysis.total_points : (match.team2Score || overrideScoreTeam2);
 
     if (!match.team1 || !match.team2) {
       toast({
@@ -219,22 +274,24 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
       return;
     }
 
-    if (!team1Analysis && !match.team1Submission) {
-      toast({
-        title: "Prove mancanti Squadra 1",
-        description: `La squadra "${match.team1.teamName}" deve caricare e far verificare le proprie foto.`,
-        variant: "destructive",
-      });
-      return;
-    }
+    if (isAiReferee) {
+      if (!team1Analysis && !match.team1Submission) {
+        toast({
+          title: "Prove mancanti Squadra 1",
+          description: `La squadra "${match.team1.teamName}" deve caricare e far verificare le proprie foto con l'IA.`,
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (!team2Analysis && !match.team2Submission) {
-      toast({
-        title: "Prove mancanti Squadra 2",
-        description: `La squadra "${match.team2.teamName}" deve caricare e far verificare le proprie foto.`,
-        variant: "destructive",
-      });
-      return;
+      if (!team2Analysis && !match.team2Submission) {
+        toast({
+          title: "Prove mancanti Squadra 2",
+          description: `La squadra "${match.team2.teamName}" deve caricare e far verificare le proprie foto con l'IA.`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     const winner = score1 >= score2 ? match.team1 : match.team2;
@@ -272,7 +329,29 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                   explanation: team1Analysis.explanation || "",
                 },
               }
-            : m.team1Submission;
+            : m.team1Submission || {
+                teamId: match.team1.id,
+                teamName: match.team1.teamName,
+                placement: manualTeam1Placement,
+                verifiedKills: manualTeam1Kills,
+                discardedEliminations: 0,
+                playerDetails: match.team1.members.map((mem) => ({
+                  playerName: mem.activisionId,
+                  actualKills: manualTeam1Kills,
+                  rawEliminations: manualTeam1Kills,
+                  assistsExcluded: 0,
+                })),
+                placementScore: 0,
+                killsScore: 0,
+                totalScore: score1,
+                submittedAt: new Date().toISOString(),
+                aiVerificationDetails: {
+                  strictlyUsedUccisioni: false,
+                  discardedEliminationsColumn: false,
+                  playersMatched: true,
+                  explanation: "Punteggio convalidato manualmente dallo staff dell'organizzatore.",
+                },
+              };
 
           m.team2Submission = team2Analysis
             ? {
@@ -298,7 +377,29 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                   explanation: team2Analysis.explanation || "",
                 },
               }
-            : m.team2Submission;
+            : m.team2Submission || {
+                teamId: match.team2.id,
+                teamName: match.team2.teamName,
+                placement: manualTeam2Placement,
+                verifiedKills: manualTeam2Kills,
+                discardedEliminations: 0,
+                playerDetails: match.team2.members.map((mem) => ({
+                  playerName: mem.activisionId,
+                  actualKills: manualTeam2Kills,
+                  rawEliminations: manualTeam2Kills,
+                  assistsExcluded: 0,
+                })),
+                placementScore: 0,
+                killsScore: 0,
+                totalScore: score2,
+                submittedAt: new Date().toISOString(),
+                aiVerificationDetails: {
+                  strictlyUsedUccisioni: false,
+                  discardedEliminationsColumn: false,
+                  playersMatched: true,
+                  explanation: "Punteggio convalidato manualmente dallo staff dell'organizzatore.",
+                },
+              };
         }
       }
     }
@@ -520,7 +621,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
             }`}
           >
             <UploadCloud className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Prove &amp; Arbitraggio IA</span>
+            <span>{isAiReferee ? "Prove & Arbitraggio IA" : "Prove & Valutazione Manuale"}</span>
           </button>
 
           <button
@@ -552,21 +653,35 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
 
         {/* Modal Body */}
         <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))] scrollbar-thin">
-          {/* TAB 1: PROOFS & STRICT IA VISION */}
+          {/* TAB 1: PROOFS & ARBITRAGE (IA VISION OR MANUAL) */}
           {activeTab === "proofs" && (
             <div className="space-y-4 animate-fade-in">
-              {/* Strict IA Rule Banner */}
-              <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-500/40 text-xs text-zinc-300 flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="font-extrabold text-amber-300">
-                    Regola Rigorosa IA Vision per le Kill:
+              {/* Referee Mode Banner */}
+              {isAiReferee ? (
+                <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-500/40 text-xs text-zinc-300 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-extrabold text-amber-300">
+                      Regola Rigorosa IA Vision per le Kill:
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      L'IA Vision estrae e calcola solo ed esclusivamente i dati della colonna <strong className="text-white">"UCCISIONI"</strong> per ciascun giocatore registrato. La colonna <strong className="text-rose-400">"Eliminazioni" viene RIGOROSAMENTE SCARTATA</strong> poiché include anche gli assist.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-zinc-300 leading-relaxed">
-                    L'IA Vision estrae e calcola solo ed esclusivamente i dati della colonna <strong className="text-white">"UCCISIONI"</strong> per ciascun giocatore registrato. La colonna <strong className="text-rose-400">"Eliminazioni" viene RIGOROSAMENTE SCARTATA</strong> poiché include anche gli assist.
-                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/40 text-xs text-zinc-300 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-extrabold text-cyan-300">
+                      Modalità Valutazione Manuale (Organizzatore &amp; Co-organizzatori):
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      I capitani caricano gli screenshot come prova visiva del match. Tu e i tuoi co-organizzatori potete esaminare le immagini, inserire direttamente piazzamento e kill per calcolare e convalidare i punteggi ufficiali delle due squadre.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Both Teams Upload Sections */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -576,9 +691,9 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                     <span className="text-xs font-black text-white">
                       1. {match.team1?.teamName || "Squadra 1"}
                     </span>
-                    {team1Analysis && (
+                    {(team1Analysis || match.team1Score > 0) && (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                        Calcolato: {team1Analysis.total_points} pt
+                        Punti: {team1Analysis?.total_points ?? match.team1Score} pt
                       </span>
                     )}
                   </div>
@@ -621,46 +736,90 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={isVerifyingTeam1 || !team1PlacementFile || !team1KillsFile}
-                    onClick={() => handleAnalyzeTeam("team1")}
-                    className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    {isVerifyingTeam1 ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Analisi IA Vision Uccisioni...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>Verifica Prove {match.team1?.teamName}</span>
-                      </>
-                    )}
-                  </button>
+                  {/* Actions: AI Vision or Manual Staff Inputs */}
+                  {isAiReferee ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={isVerifyingTeam1 || !team1PlacementFile || !team1KillsFile}
+                        onClick={() => handleAnalyzeTeam("team1")}
+                        className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {isVerifyingTeam1 ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Analisi IA Vision Uccisioni...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Verifica Prove {match.team1?.teamName} con IA</span>
+                          </>
+                        )}
+                      </button>
 
-                  {team1Error && (
-                    <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
-                      <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
-                        <p className="leading-snug">{team1Error}</p>
-                      </div>
-                    </div>
-                  )}
+                      {team1Error && (
+                        <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
+                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
+                            <p className="leading-snug">{team1Error}</p>
+                          </div>
+                        </div>
+                      )}
 
-                  {team1Analysis && (
-                    <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">
-                      <div className="text-zinc-300 font-bold">
-                        Posizione #{team1Analysis.placement} • {team1Analysis.kills} Kills effettive
+                      {team1Analysis && (
+                        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">
+                          <div className="text-zinc-300 font-bold">
+                            Posizione #{team1Analysis.placement} • {team1Analysis.kills} Kills effettive
+                          </div>
+                          <div className="text-rose-400 text-[10px]">
+                            ⛔ Scartate {team1Analysis.discarded_eliminations} eliminazioni (assist)
+                          </div>
+                          <p className="text-[10px] text-zinc-400 whitespace-pre-line leading-relaxed">
+                            {team1Analysis.player_breakdown_text}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Manual Score Entry Panel for Team 1 */
+                    <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-cyan-900/40 space-y-2.5 animate-fade-in">
+                      <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">
+                        Inserimento Punteggio Manuale:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-400">Piazzamento (#)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={manualTeam1Placement}
+                            onChange={(e) => setManualTeam1Placement(parseInt(e.target.value) || 1)}
+                            className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-400">Kill Effettive Team</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={manualTeam1Kills}
+                            onChange={(e) => setManualTeam1Kills(parseInt(e.target.value) || 0)}
+                            className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                          />
+                        </div>
                       </div>
-                      <div className="text-rose-400 text-[10px]">
-                        ⛔ Scartate {team1Analysis.discarded_eliminations} eliminazioni (assist)
-                      </div>
-                      <p className="text-[10px] text-zinc-400 whitespace-pre-line leading-relaxed">
-                        {team1Analysis.player_breakdown_text}
-                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveManualTeamScore("team1")}
+                        className="w-full py-1.5 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Calcola &amp; Salva Punti Squadra 1</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -671,9 +830,9 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                     <span className="text-xs font-black text-white">
                       2. {match.team2?.teamName || "Squadra 2"}
                     </span>
-                    {team2Analysis && (
+                    {(team2Analysis || match.team2Score > 0) && (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                        Calcolato: {team2Analysis.total_points} pt
+                        Punti: {team2Analysis?.total_points ?? match.team2Score} pt
                       </span>
                     )}
                   </div>
@@ -716,47 +875,94 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={isVerifyingTeam2 || !team2PlacementFile || !team2KillsFile}
-                    onClick={() => handleAnalyzeTeam("team2")}
-                    className="w-full py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    {isVerifyingTeam2 ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Analisi IA Vision Uccisioni...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>Verifica Prove {match.team2?.teamName}</span>
-                      </>
-                    )}
-                  </button>
+                  {/* Actions: AI Vision or Manual Staff Inputs */}
+                  {isAiReferee ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={isVerifyingTeam2 || !team2PlacementFile || !team2KillsFile}
+                        onClick={() => handleAnalyzeTeam("team2")}
+                        className="w-full py-2 px-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {isVerifyingTeam2 ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Analisi IA Vision Uccisioni...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Verifica Prove {match.team2?.teamName} con IA</span>
+                          </>
+                        )}
+                      </button>
 
-                  {team2Error && (
-                    <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
-                      <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
-                        <p className="leading-snug">{team2Error}</p>
+                      {team2Error && (
+                        <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-[11px] text-rose-200 flex items-start gap-2 animate-fade-in">
+                          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <span className="font-bold text-rose-300 block">Rifiuto Anti-Fake IA:</span>
+                            <p className="leading-snug">{team2Error}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {team2Analysis && (
+                        <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">
+                          <div className="text-zinc-300 font-bold">
+                            Posizione #{team2Analysis.placement} • {team2Analysis.kills} Kills effettive
+                          </div>
+                          <div className="text-rose-400 text-[10px]">
+                            ⛔ Scartate {team2Analysis.discarded_eliminations} eliminazioni (assist)
+                          </div>
+                          <p className="text-[10px] text-zinc-400 whitespace-pre-line leading-relaxed">
+                            {team2Analysis.player_breakdown_text}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Manual Score Entry Panel for Team 2 */
+                    <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-cyan-900/40 space-y-2.5 animate-fade-in">
+                      <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">
+                        Inserimento Punteggio Manuale:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-400">Piazzamento (#)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={manualTeam2Placement}
+                            onChange={(e) => setManualTeam2Placement(parseInt(e.target.value) || 1)}
+                            className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-400">Kill Effettive Team</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={manualTeam2Kills}
+                            onChange={(e) => setManualTeam2Kills(parseInt(e.target.value) || 0)}
+                            className="w-full px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-white font-mono font-bold text-xs outline-none"
+                          />
+                        </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSaveManualTeamScore("team2")}
+                        className="w-full py-1.5 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Calcola &amp; Salva Punti Squadra 2</span>
+                      </button>
                     </div>
                   )}
-
-                  {team2Analysis && (
-                    <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-[11px] space-y-1">
-                      <div className="text-zinc-300 font-bold">
-                        Posizione #{team2Analysis.placement} • {team2Analysis.kills} Kills effettive
-                      </div>
-                      <div className="text-rose-400 text-[10px]">
-                        ⛔ Scartate {team2Analysis.discarded_eliminations} eliminazioni (assist)
-                      </div>
-                      <p className="text-[10px] text-zinc-400 whitespace-pre-line leading-relaxed">
-                        {team2Analysis.player_breakdown_text}
-                      </p>
-                    </div>
+                </div>
+              </div>
                   )}
                 </div>
               </div>

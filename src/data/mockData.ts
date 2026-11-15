@@ -75,6 +75,9 @@ export interface Tournament {
   startsAt: string;
   mode: string;
   description: string;
+  referee_mode?: "ai" | "manual";
+  ai_referee_enabled?: boolean;
+  raw?: any;
 }
 
 export interface MatchChatMessage {
