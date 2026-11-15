@@ -230,8 +230,8 @@ export const CreateClanModal: React.FC<CreateClanModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="w-full max-w-md bg-[#0f1324] border border-purple-500/40 rounded-3xl p-5 shadow-2xl space-y-4 my-auto">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+      <div className="w-full max-w-md bg-[#0f1324] border border-purple-500/40 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4 my-auto max-h-[92dvh] overflow-y-auto">
         <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center text-cyan-300">

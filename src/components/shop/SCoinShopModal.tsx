@@ -138,8 +138,8 @@ export const SCoinShopModal: React.FC<SCoinShopModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-amber-500/40 p-5 shadow-[0_0_35px_rgba(245,158,11,0.25)] overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-amber-500/40 p-4 sm:p-5 shadow-[0_0_35px_rgba(245,158,11,0.25)] overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Glow */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-gradient-to-r from-amber-500/30 to-purple-600/30 blur-2xl pointer-events-none" />
 

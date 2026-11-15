@@ -432,10 +432,10 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl overflow-hidden my-auto">
+    <div className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-fade-in">
+      <div className="relative w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[92dvh] bg-[#0f1322] border-0 sm:border border-purple-900/60 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         {/* Match Header */}
-        <div className="p-4 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
+        <div className="shrink-0 p-3.5 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-purple-950 border border-purple-500/40 text-purple-300 uppercase">
@@ -510,22 +510,22 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
         </div>
 
         {/* Subtabs Bar */}
-        <div className="flex border-b border-purple-950/60 bg-[#0d101d] px-4 pt-2">
+        <div className="shrink-0 flex overflow-x-auto border-b border-purple-950/60 bg-[#0d101d] px-2 sm:px-4 pt-1 sm:pt-2 scrollbar-none">
           <button
             onClick={() => setActiveTab("proofs")}
-            className={`py-2 px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-2 px-3 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
               activeTab === "proofs"
                 ? "border-purple-500 text-white"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <UploadCloud className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Prove & Arbitraggio IA</span>
+            <span>Prove &amp; Arbitraggio IA</span>
           </button>
 
           <button
             onClick={() => setActiveTab("chat")}
-            className={`py-2 px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+            className={`py-2 px-3 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
               activeTab === "chat"
                 ? "border-purple-500 text-white"
                 : "border-transparent text-zinc-400 hover:text-zinc-200"
@@ -538,7 +538,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
           {isOrganizer && (
             <button
               onClick={() => setActiveTab("override")}
-              className={`py-2 px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all ${
+              className={`py-2 px-3 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
                 activeTab === "override"
                   ? "border-amber-500 text-amber-300"
                   : "border-transparent text-zinc-400 hover:text-amber-300"
@@ -551,7 +551,7 @@ export const EliminationMatchRoomModal: React.FC<EliminationMatchRoomModalProps>
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-5 max-h-[64vh] overflow-y-auto space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-4 pb-[max(1rem,env(safe-area-inset-bottom))] scrollbar-thin">
           {/* TAB 1: PROOFS & STRICT IA VISION */}
           {activeTab === "proofs" && (
             <div className="space-y-4 animate-fade-in">

@@ -17,14 +17,14 @@ export const TournamentsSection: React.FC = () => {
   return (
     <div className="pb-24 pt-2 w-full max-w-5xl mx-auto px-2 sm:px-4 space-y-4 animate-fade-in">
       {/* Top AI Bar */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-300">
-          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-          <span>SquadUP Esport • Arbitraggio OCR &amp; Tornei IA</span>
+      <div className="flex items-center justify-between px-1 flex-wrap gap-1.5">
+        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-zinc-300 min-w-0">
+          <Sparkles className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+          <span className="truncate">SquadUP Esport • Arbitraggio OCR &amp; Tornei IA</span>
         </div>
 
-        <span className="text-[10px] font-mono text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/30">
-          IA di Sistema Attiva
+        <span className="text-[9px] sm:text-[10px] font-mono text-cyan-300 px-2 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 shrink-0">
+          IA Attiva
         </span>
       </div>
 

@@ -212,8 +212,8 @@ export const LobbyManagementModal: React.FC<LobbyManagementModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[#0f1324] border border-cyan-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl my-6 max-h-[90vh] overflow-y-auto space-y-4">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="relative w-full max-w-2xl bg-[#0f1324] border border-cyan-500/40 rounded-3xl p-4 sm:p-6 shadow-2xl my-auto max-h-[90dvh] overflow-y-auto space-y-4">
         {/* Close Button */}
         <button
           onClick={onClose}

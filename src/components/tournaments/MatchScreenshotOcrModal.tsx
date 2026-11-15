@@ -347,8 +347,8 @@ export const MatchScreenshotOcrModal: React.FC<MatchScreenshotOcrModalProps> = (
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-        <div className="relative w-full max-w-lg rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 sm:p-6 shadow-[0_0_40px_rgba(139,92,246,0.3)] overflow-hidden max-h-[92vh] flex flex-col">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+        <div className="relative w-full max-w-lg rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 sm:p-6 shadow-[0_0_40px_rgba(139,92,246,0.3)] overflow-hidden max-h-[92dvh] flex flex-col">
           {/* Top Close */}
           <button
             onClick={onClose}

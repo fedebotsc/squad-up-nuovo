@@ -240,7 +240,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-sm rounded-3xl bg-[#0f1322] border border-purple-500/40 p-4 shadow-[0_0_35px_rgba(139,92,246,0.25)] overflow-hidden max-h-[85vh] flex flex-col mt-12 sm:mt-16">
         {/* Subtle Top Ambient Glow */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-gradient-to-r from-purple-600/30 via-cyan-500/30 to-amber-500/20 blur-2xl pointer-events-none" />

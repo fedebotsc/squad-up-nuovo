@@ -555,25 +555,25 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-fade-in">
-      <div className="relative w-full max-w-xl h-[92vh] max-h-[760px] bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-fade-in">
+      <div className="relative w-full max-w-xl h-[100dvh] sm:h-[90dvh] sm:max-h-[780px] bg-[#0f1322] border-0 sm:border border-purple-900/60 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header Bar (shrink-0) */}
-        <div className="shrink-0 flex items-center justify-between p-3.5 sm:p-4 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
+        <div className="shrink-0 flex items-center justify-between p-3 sm:p-4 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/40 via-[#121628] to-[#121628]">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400 shrink-0">
               <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm sm:text-base font-black text-white tracking-wide">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h3 className="text-xs sm:text-base font-black text-white tracking-wide truncate">
                   Crea Nuovo Torneo
                 </h3>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
-                  <Coins className="w-3 h-3 text-amber-400" />
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] sm:text-[10px] font-black shrink-0">
+                  <Coins className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400" />
                   -100 SC
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-400">
+              <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate hidden sm:block">
                 {selectedFormat === "leaderboard_championship"
                   ? "Configurazione torneo Classifica a Punteggio (Campionato per Game)"
                   : "Configurazione torneo competitivo ad Eliminazione Diretta"}
@@ -581,19 +581,19 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsShopModalOpen(true)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-extrabold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl border text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer ${
                 sCoinBalance >= TOURNAMENT_CREATION_FEE_SC
                   ? "bg-emerald-950/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50"
                   : "bg-rose-950/60 border-rose-500/50 text-rose-300 hover:bg-rose-900/60"
               }`}
               title="Clicca per acquistare SCoin con denaro reale"
             >
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
-              <span>{sCoinBalance.toLocaleString()} SC</span>
+              <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+              <span>{sCoinBalance > 99999 ? `${(sCoinBalance / 1000).toFixed(0)}k` : sCoinBalance.toLocaleString()} SC</span>
               {sCoinBalance < TOURNAMENT_CREATION_FEE_SC && (
                 <span className="text-[9px] text-amber-400 underline font-black ml-0.5">Ricarica</span>
               )}
@@ -601,7 +601,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="p-1 sm:p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -609,61 +609,61 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         </div>
 
         {/* 2 Main Tournament Format Selection (Eliminazione Diretta vs Classifica a Punteggio) */}
-        <div className="shrink-0 px-3.5 sm:px-4 py-2 border-b border-purple-950/60 bg-zinc-950/40">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+        <div className="shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-purple-950/60 bg-zinc-950/40">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
               Tipologia di Torneo
             </span>
-            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+            <span className="text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30 truncate max-w-[160px] sm:max-w-none">
               {selectedFormat === "leaderboard_championship"
-                ? "Classifica a Punteggio (Campionato)"
+                ? "Classifica a Punteggio"
                 : "Eliminazione Diretta"}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
             {/* 1: Eliminazione Diretta */}
             <button
               type="button"
               onClick={() => setSelectedFormat("single_elimination")}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2 sm:p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 selectedFormat === "single_elimination"
                   ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/40 text-white"
                   : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <Swords className={`w-4 h-4 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
-                <span className="text-xs font-bold text-white truncate">Eliminazione Diretta</span>
+              <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5">
+                <Swords className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${selectedFormat === "single_elimination" ? "text-purple-400" : "text-zinc-500"}`} />
+                <span className="text-[11px] sm:text-xs font-bold text-white truncate">Eliminazione Diretta</span>
               </div>
-              <p className="text-[10px] text-zinc-400 truncate">Quarti, Semifinali e Finalissima a tabellone</p>
+              <p className="text-[9px] sm:text-[10px] text-zinc-400 truncate hidden min-[380px]:block">Tabellone e Scontri</p>
             </button>
 
             {/* 2: Classifica a Punteggio (Campionato) */}
             <button
               type="button"
               onClick={() => setSelectedFormat("leaderboard_championship")}
-              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2 sm:p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                 selectedFormat === "leaderboard_championship"
                   ? "bg-purple-950/80 border-purple-500 shadow-md ring-2 ring-purple-500/40 text-white"
                   : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <Trophy className={`w-4 h-4 ${selectedFormat === "leaderboard_championship" ? "text-amber-400" : "text-zinc-500"}`} />
-                <span className="text-xs font-bold text-white truncate">Classifica a Punteggio</span>
+              <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5">
+                <Trophy className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${selectedFormat === "leaderboard_championship" ? "text-amber-400" : "text-zinc-500"}`} />
+                <span className="text-[11px] sm:text-xs font-bold text-white truncate">Classifica a Punti</span>
               </div>
-              <p className="text-[10px] text-zinc-400 truncate">Campionato a Game cumulati con IA Vision</p>
+              <p className="text-[9px] sm:text-[10px] text-zinc-400 truncate hidden min-[380px]:block">Campionato a Game</p>
             </button>
           </div>
         </div>
 
         {/* Step Progress Bar (shrink-0) */}
-        <div className="shrink-0 px-3.5 sm:px-4 pt-2 pb-1.5 border-b border-purple-950/40 bg-[#0d101d]">
+        <div className="shrink-0 px-3 sm:px-4 pt-1.5 sm:pt-2 pb-1 sm:pb-1.5 border-b border-purple-950/40 bg-[#0d101d]">
           <div className="flex items-center justify-between text-xs mb-1">
-            <span className="font-extrabold text-purple-400 text-[11px]">
+            <span className="font-extrabold text-purple-400 text-[10px] sm:text-[11px]">
               Passaggio {currentStep} di 7
             </span>
-            <span className="font-semibold text-zinc-300 text-[11px]">
+            <span className="font-semibold text-zinc-300 text-[10px] sm:text-[11px] truncate max-w-[180px] sm:max-w-none text-right">
               {stepLabels[currentStep - 1]}
             </span>
           </div>
@@ -683,7 +683,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         </div>
 
         {/* STEP CONTENT BODY (Scrollable area) */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin scrollbar-thumb-purple-900/50">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 scrollbar-thin scrollbar-thumb-purple-900/50">
           {/* Banner Avviso Saldo SCoin Insufficiente o Costo 100 SC */}
           {sCoinBalance < TOURNAMENT_CREATION_FEE_SC ? (
             <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/70 via-[#181224] to-amber-950/40 border border-rose-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-200 shadow-lg">
@@ -936,7 +936,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
                 <label className="text-xs font-semibold text-zinc-300 block">
                   Parametri KD (Kills / Deaths) Ammessi
                 </label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { id: "open", label: "Aperto a Tutti", sub: "Nessun limite" },
                     { id: "range", label: "Fascia KD (Min/Max)", sub: "Es. 1.2 - 2.5" },
@@ -1606,12 +1606,12 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
         </div>
 
         {/* Footer Navigation Buttons (Always visible & pinned with shrink-0) */}
-        <div className="shrink-0 p-3 sm:p-4 border-t border-purple-950/80 bg-[#0d101d] flex items-center justify-between gap-3 shadow-2xl z-20">
+        <div className="shrink-0 p-3 sm:p-4 border-t border-purple-950/80 bg-[#0d101d] flex items-center justify-between gap-2.5 shadow-2xl z-20 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={handlePrevStep}
-              className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="min-h-[42px] px-3.5 sm:px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Indietro</span>
@@ -1624,7 +1624,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-lg shadow-purple-900/30 transition-all cursor-pointer"
+              className="min-h-[42px] px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-lg shadow-purple-900/40 transition-all cursor-pointer active:scale-95"
             >
               <span>Continua</span>
               <ChevronRight className="w-4 h-4" />
@@ -1633,7 +1633,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
             <button
               type="button"
               onClick={() => setIsShopModalOpen(true)}
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all cursor-pointer"
+              className="min-h-[42px] px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-lg shadow-rose-950/50 transition-all cursor-pointer active:scale-95"
             >
               <Coins className="w-4 h-4 text-amber-200" />
               <span>Saldo Insufficiente (Acquista 100 SC)</span>
@@ -1643,7 +1643,7 @@ export const CreateTournamentModal: React.FC<CreateTournamentModalProps> = ({
               type="button"
               disabled={isSubmitting}
               onClick={handleCreateTournament}
-              className="px-6 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all cursor-pointer disabled:opacity-50"
+              className="min-h-[42px] px-4 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all cursor-pointer disabled:opacity-50 active:scale-95"
             >
               {isSubmitting ? (
                 <>

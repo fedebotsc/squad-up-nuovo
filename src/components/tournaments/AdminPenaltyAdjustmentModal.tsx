@@ -112,7 +112,7 @@ export const AdminPenaltyAdjustmentModal: React.FC<AdminPenaltyAdjustmentModalPr
   const previewNewTotal = Math.round((team.totalPoints + pointsDelta) * 10) / 10;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div className="relative w-full max-w-md bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl overflow-hidden my-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/50 via-[#121628] to-[#121628]">

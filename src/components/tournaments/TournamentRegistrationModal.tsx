@@ -330,19 +330,19 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#0f1322] border border-purple-900/60 rounded-3xl shadow-2xl overflow-hidden my-auto">
+    <div className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md overflow-hidden animate-fade-in">
+      <div className="relative w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[90dvh] bg-[#0f1322] border-0 sm:border border-purple-900/60 rounded-none sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/50 via-[#121628] to-[#121628]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-              <Users className="w-5 h-5" />
+        <div className="shrink-0 flex items-center justify-between p-3.5 sm:p-5 border-b border-purple-950/80 bg-gradient-to-r from-purple-950/50 via-[#121628] to-[#121628]">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400 shrink-0">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h3 className="text-sm font-extrabold text-white">
-                Iscrizione Squadra & Verifica IA Vision
+            <div className="min-w-0">
+              <h3 className="text-xs sm:text-sm font-extrabold text-white truncate">
+                Iscrizione Squadra &amp; Verifica IA Vision
               </h3>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
                 {tournament.title} • {teamSize} {teamSize === 1 ? "Giocatore" : "Giocatori per Squadra"}
               </p>
             </div>
@@ -350,18 +350,18 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Requirements Banner */}
-        <div className="p-3.5 bg-zinc-950/70 border-b border-purple-950/50 flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-1.5 text-zinc-300">
-            <Target className="w-4 h-4 text-amber-400" />
-            <span className="font-bold">Regole KD:</span>
-            <span className="text-zinc-400">
+        <div className="shrink-0 p-2.5 sm:p-3.5 bg-zinc-950/70 border-b border-purple-950/50 flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-zinc-300 min-w-0 truncate">
+            <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="font-bold shrink-0">Regole KD:</span>
+            <span className="text-zinc-400 truncate">
               {kdMode === "open"
                 ? "Aperto a qualsiasi KD"
                 : kdMode === "min_only"
@@ -372,13 +372,14 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
             </span>
           </div>
 
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+          <span className="text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 shrink-0">
             Arbitro IA Attivo
           </span>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 max-h-[64vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 scrollbar-thin">
           {errorMsg && (
             <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -577,12 +578,14 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
             })}
           </div>
 
-          {/* Action buttons */}
-          <div className="pt-2 flex items-center justify-end gap-2">
+          </div>
+
+          {/* Action buttons (pinned at bottom with safe area) */}
+          <div className="shrink-0 p-3 sm:p-4 border-t border-purple-950/80 bg-[#0d101d] flex items-center justify-end gap-2 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
             <button
               type="button"
               onClick={onClose}
-              className="py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold"
+              className="min-h-[42px] py-2 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer transition-colors"
             >
               Annulla
             </button>
@@ -590,7 +593,7 @@ export const TournamentRegistrationModal: React.FC<TournamentRegistrationModalPr
             <button
               type="submit"
               disabled={isSubmitting}
-              className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-purple-900/40 disabled:opacity-50 cursor-pointer"
+              className="min-h-[42px] py-2.5 px-5 sm:px-6 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-purple-900/40 disabled:opacity-50 cursor-pointer active:scale-95 transition-all"
             >
               {isSubmitting ? (
                 <>

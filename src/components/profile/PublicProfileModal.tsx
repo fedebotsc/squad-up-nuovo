@@ -292,8 +292,8 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const effectiveFrameOverlay = customFrameUrl || frameObj?.frameUrl;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="bg-[#0e1224] border border-purple-900/50 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col my-auto max-h-[92vh]">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="bg-[#0e1224] border border-purple-900/50 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col my-auto max-h-[92dvh]">
         {/* Header bar with Close button */}
         <div className="p-3.5 border-b border-purple-900/30 flex items-center justify-between bg-[#12162a]/90 z-20">
           <div className="flex items-center gap-2">
