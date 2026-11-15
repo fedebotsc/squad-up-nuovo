@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useSquad } from "@/context/SquadContext";
-import { Coins, Flame, Volume2, UserPlus, Send, Search, Bell, X } from "lucide-react";
+import { Coins, Flame, Volume2, UserPlus, Search, Bell, X } from "lucide-react";
 import { GlobalSearchModal } from "@/components/search/GlobalSearchModal";
 import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
 import { AVATAR_FRAMES } from "@/components/profile/cosmeticsData";
@@ -14,7 +14,6 @@ export const TopHeader: React.FC = () => {
     userProfile,
     openAuthModal,
     unreadNotificationsCount,
-    unreadMessagesCount,
   } = useSquad();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -106,20 +105,6 @@ export const TopHeader: React.FC = () => {
             {unreadNotificationsCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[14px] sm:min-w-[16px] h-3.5 sm:h-4 px-0.5 sm:px-1 rounded-full bg-rose-500 text-white text-[8px] sm:text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#0b0e17] shadow-sm">
                 {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Direct Messages Shortcut with Unread Badge */}
-          <button
-            onClick={() => setActiveTab("messages")}
-            title="Messaggi Diretti"
-            className="p-1.5 sm:p-2 rounded-full bg-zinc-900/90 hover:bg-purple-950/70 border border-purple-900/40 text-zinc-300 hover:text-cyan-300 transition-colors cursor-pointer shadow-sm relative group shrink-0"
-          >
-            <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 rotate-12 text-zinc-400 group-hover:text-cyan-400 transition-colors" />
-            {unreadMessagesCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] sm:min-w-[16px] h-3.5 sm:h-4 px-0.5 sm:px-1 rounded-full bg-rose-500 text-white text-[8px] sm:text-[9px] font-black flex items-center justify-center animate-pulse border-2 border-[#0b0e17] shadow-[0_0_8px_rgba(244,63,94,0.6)]">
-                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
               </span>
             )}
           </button>

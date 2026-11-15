@@ -11,7 +11,14 @@ interface TabItem {
 }
 
 export const BottomNavbar: React.FC = () => {
-  const { activeTab, setActiveTab, activeVoiceRoomId, isMuted, unreadClanCount } = useSquad();
+  const {
+    activeTab,
+    setActiveTab,
+    activeVoiceRoomId,
+    isMuted,
+    unreadClanCount,
+    unreadMessagesCount,
+  } = useSquad();
 
   const tabs: TabItem[] = [
     {
@@ -30,6 +37,12 @@ export const BottomNavbar: React.FC = () => {
       label: "Cerca Team",
       icon: Users,
       dotAlert: Boolean(activeVoiceRoomId && !isMuted),
+    },
+    {
+      id: "messages",
+      label: "Direct",
+      icon: MessageCircle,
+      badge: unreadMessagesCount > 0 ? (unreadMessagesCount > 9 ? "9+" : `${unreadMessagesCount}`) : undefined,
     },
     {
       id: "clan",
@@ -72,19 +85,19 @@ export const BottomNavbar: React.FC = () => {
             >
               {/* Active neon highlight indicator */}
               {isActive && (
-                <div className="absolute top-0 w-8 h-1 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full shadow-[0_0_10px_#8b5cf6]" />
+                <div className="absolute top-0 w-6 sm:w-8 h-1 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full shadow-[0_0_10px_#8b5cf6]" />
               )}
 
               <div className="relative flex items-center justify-center">
                 <Icon
-                  className={`w-5 h-5 transition-transform duration-150 shrink-0 ${
+                  className={`w-4.5 h-4.5 sm:w-5 sm:h-5 transition-transform duration-150 shrink-0 ${
                     isActive ? "scale-110 drop-shadow-[0_0_8px_rgba(139,92,246,0.6)]" : ""
                   }`}
                 />
 
-                {/* Badge (e.g. LIVE tournament) */}
+                {/* Badge (e.g. LIVE tournament or unread messages) */}
                 {tab.badge && (
-                  <span className="absolute -top-1.5 -right-2 text-[8px] font-bold px-1 py-0.2 bg-gradient-to-r from-rose-600 to-red-500 text-white rounded-full leading-tight uppercase animate-pulse">
+                  <span className="absolute -top-1 -right-2 text-[8px] font-black px-1 min-w-[14px] h-3.5 bg-gradient-to-r from-rose-600 to-red-500 text-white rounded-full flex items-center justify-center leading-none uppercase animate-pulse shadow-sm">
                     {tab.badge}
                   </span>
                 )}
@@ -98,7 +111,7 @@ export const BottomNavbar: React.FC = () => {
                 )}
               </div>
 
-              <span className="text-[10px] sm:text-[11px] mt-1 tracking-tight truncate max-w-full px-0.5 text-center">
+              <span className="text-[9px] sm:text-[11px] mt-0.5 sm:mt-1 tracking-tight truncate max-w-full px-0.5 text-center">
                 {tab.label}
               </span>
             </button>
